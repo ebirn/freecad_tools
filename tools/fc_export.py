@@ -218,6 +218,11 @@ def load_config():
     if not os.path.exists(CONFIG_FILE):
         logger.error(f"Config file '{CONFIG_FILE}' not found.")
         sys.exit(1)
+
+    # Get the directory where the config file is located for path resolution
+    config_dir = os.path.dirname(os.path.abspath(CONFIG_FILE))
+    logger.debug(f"Config directory: {config_dir}")
+
     with open(CONFIG_FILE) as f:
         content = f.read()
         logger.debug(f"Config file content:\n{content}")
@@ -229,6 +234,37 @@ def load_config():
     result = config.get("export", [])
     logger.debug(f"Export list type: {type(result)}, length: {len(result) if isinstance(result, list) else 'N/A'}")
     logger.debug(f"Export list: {result}")
+
+    # Resolve relative paths in config items relative to config file directory
+    for item in result:
+        # Resolve source path
+        if "source" in item and item["source"]:
+            source = item["source"]
+            if not os.path.isabs(source):
+                item["source"] = os.path.join(config_dir, source)
+                logger.debug(f"Resolved source to: {item['source']}")
+
+        # Resolve output path
+        if "output" in item and item["output"]:
+            output = item["output"]
+            if not os.path.isabs(output):
+                item["output"] = os.path.join(config_dir, output)
+                logger.debug(f"Resolved output to: {item['output']}")
+
+        # Resolve template path
+        if "template" in item and item["template"]:
+            template = item["template"]
+            if not os.path.isabs(template):
+                item["template"] = os.path.join(config_dir, template)
+                logger.debug(f"Resolved template to: {item['template']}")
+
+        # Resolve stl_output_dir path
+        if "stl_output_dir" in item and item["stl_output_dir"]:
+            stl_dir = item["stl_output_dir"]
+            if not os.path.isabs(stl_dir):
+                item["stl_output_dir"] = os.path.join(config_dir, stl_dir)
+                logger.debug(f"Resolved stl_output_dir to: {item['stl_output_dir']}")
+
     return result
 
 
