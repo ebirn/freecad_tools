@@ -9,9 +9,16 @@ import tempfile
 import yaml
 
 # Configure logging to both console and file
+# Allow overriding log level via environment variable
+log_level_name = os.environ.get("FREECAD_TOOLS_LOG_LEVEL", "INFO")
+try:
+    log_level = getattr(logging, log_level_name.upper())
+except AttributeError:
+    log_level = logging.INFO
+
 log_file = "fc_export.log"
 logging.basicConfig(
-    level=logging.INFO,
+    level=log_level,
     format="%(name)s - %(levelname)s - %(message)s",
     handlers=[logging.FileHandler(log_file), logging.StreamHandler(sys.stderr)],
 )
@@ -288,7 +295,7 @@ def load_config():
             if field in item and item[field]:
                 resolved = resolve_relative_path(item[field], base_dir)
                 if resolved != item[field]:
-                    logger.info(f"Resolved {field} '{item[field]}' to: {resolved}")
+                    logger.debug(f"Resolved {field} '{item[field]}' to: {resolved}")
                 item[field] = resolved
 
     return result
@@ -463,7 +470,7 @@ def export_bodies_to_3mf_with_template(
 
         # Ensure output_path is absolute before passing to subprocess
         abs_output_path = os.path.abspath(output_path)
-        logger.info(f"Output path (absolute): {abs_output_path}")
+        logger.debug(f"Output path (absolute): {abs_output_path}")
 
         # Call lib3mf via subprocess to create 3MF
         logger.info(f"Creating 3MF with {len(stl_files)} embedded meshes via lib3mf")
@@ -491,13 +498,13 @@ def export_bodies_to_3mf_with_template(
         lib3mf_python = os.environ.get("FREECAD_TOOLS_LIB3MF_PYTHON")
         if lib3mf_python:
             python_executable = lib3mf_python
-            logger.info(f"Using lib3mf Python from environment: {python_executable}")
+            logger.debug(f"Using lib3mf Python from environment: {python_executable}")
         else:
             # Fallback: try venv or sys.executable
             venv_python = os.path.join(os.path.dirname(script_dir), ".venv", "bin", "python3")
             venv_python = os.path.abspath(venv_python)
             python_executable = venv_python if os.path.exists(venv_python) else sys.executable
-            logger.info(f"Using fallback Python: {python_executable}")
+            logger.debug(f"Using fallback Python: {python_executable}")
 
         logger.debug(f"Calling lib3mf: {python_executable} {lib3mf_script} create-from-json {config_file}")
 
@@ -509,9 +516,9 @@ def export_bodies_to_3mf_with_template(
 
         # Log subprocess output
         if result.stdout:
-            logger.info(f"lib3mf STDOUT:\n{result.stdout}")
+            logger.debug(f"lib3mf STDOUT:\n{result.stdout}")
         if result.stderr:
-            logger.info(f"lib3mf STDERR:\n{result.stderr}")
+            logger.debug(f"lib3mf STDERR:\n{result.stderr}")
 
         if result.returncode != 0:
             logger.error(f"lib3mf subprocess failed with exit code {result.returncode}")
@@ -535,9 +542,9 @@ def export_bodies_to_3mf_with_template(
 
 def main():
     logger.info("=" * 60)
-    logger.info(f"Current working directory: {os.getcwd()}")
-    logger.info(f"PROJECT_ROOT: {PROJECT_ROOT}")
-    logger.info(f"CONFIG_FILE: {CONFIG_FILE}")
+    logger.debug(f"Current working directory: {os.getcwd()}")
+    logger.debug(f"PROJECT_ROOT: {PROJECT_ROOT}")
+    logger.debug(f"CONFIG_FILE: {CONFIG_FILE}")
     logger.debug("Starting main()")
     exports = load_config()
     logger.debug(f"Loaded {len(exports)} exports")

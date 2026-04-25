@@ -26,7 +26,14 @@ import sys
 from pathlib import Path
 
 # Configure basic logging
-logging.basicConfig(level=logging.DEBUG, format="%(levelname)s: %(message)s")
+# Allow overriding log level via environment variable
+log_level_name = os.environ.get("FREECAD_TOOLS_LOG_LEVEL", "INFO")
+try:
+    log_level = getattr(logging, log_level_name.upper())
+except AttributeError:
+    log_level = logging.INFO
+
+logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 # Determine the script directory
@@ -58,8 +65,8 @@ elif os.path.exists("export_config.yml"):
     CONFIG_FILE = Path("export_config.yml").resolve()  # Also make absolute
     # Config is in current directory, PROJECT_ROOT is already set
 
-logger.info(f"PROJECT_ROOT: {PROJECT_ROOT}")
-logger.info(f"CONFIG_FILE: {CONFIG_FILE}")
+logger.debug(f"PROJECT_ROOT: {PROJECT_ROOT}")
+logger.debug(f"CONFIG_FILE: {CONFIG_FILE}")
 
 # Build arguments for fc_export.py
 fc_args = [sys.executable, str(FC_EXPORT_SCRIPT)]
