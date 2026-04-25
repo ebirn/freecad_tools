@@ -242,6 +242,84 @@ The embedded metadata can be viewed in PrusaSlicer:
 1. Open the 3MF file in PrusaSlicer
 2. Look for metadata in the object properties or file information
 
+### Template Metadata Merging
+
+If you have a 3MF template file with pre-configured metadata (e.g., printer settings from PrusaSlicer), you can preserve and merge that metadata with your export metadata.
+
+**Why Use Templates?**
+- Preserve PrusaSlicer printer settings and configurations
+- Maintain consistent metadata across multiple exports
+- Avoid re-entering the same settings for each export
+
+**Creating a Template:**
+1. Open your printer's recommended 3MF file in PrusaSlicer
+2. Configure all your desired printer settings
+3. Export/save as a 3MF file (e.g., `template_print_settings.3mf`)
+4. Keep this file in your project directory
+
+**Using Templates in Your Config:**
+
+```yaml
+export:
+  - name: Moxon_OE1EBG
+    source: Moxon_OE1EBG.FCStd
+    bodies:
+      - Feed001
+      - Cover001
+    output: prints/Moxon_OE1EBG.3mf
+    template: template_print_settings.3mf
+    metadata:
+      Project: "Moxon_OE1EBG"
+      Author: "John Doe"
+      Version: "1.0"
+```
+
+**How Metadata Merging Works:**
+
+When you specify both a template and metadata in your config:
+1. The template 3MF file is read to extract all its metadata
+2. Your export metadata is merged with the template metadata
+3. **Export metadata takes precedence**: If both have the same key, export value is used
+4. The final merged metadata is embedded in the output 3MF
+
+**Metadata Precedence Example:**
+
+Template file has:
+```
+PrinterName: "Prusa i3 MK3S+"
+MaterialProfile: "PLA Default"
+QualityLevel: "Standard"
+```
+
+Your config has:
+```yaml
+metadata:
+  Project: "MyProject"
+  QualityLevel: "Draft"
+```
+
+**Result** in the output 3MF:
+```
+PrinterName: "Prusa i3 MK3S+"      (from template, not in export config)
+MaterialProfile: "PLA Default"      (from template, not in export config)
+QualityLevel: "Draft"               (export overrides template)
+Project: "MyProject"                (from export config, not in template)
+```
+
+**Template Resolution:**
+
+The export tool looks for templates in this order:
+1. If `template:` path is absolute, use it directly
+2. If relative, look in the current directory
+3. Check the project's `.freecad_tools/` directory
+4. Use default template from freecad_tools examples (if available)
+
+**Pro Tips:**
+- Keep one template per printer setup (e.g., `template_prusa_mk3s.3mf`, `template_bambu_p1.3mf`)
+- Update your template when you change printer settings
+- Use descriptive names so you remember which printer they're for
+- Test with a single body export first to verify settings transfer correctly
+
 ## Git Integration
 
 ### Automatic Git Metadata

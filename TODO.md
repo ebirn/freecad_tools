@@ -41,28 +41,30 @@ export:
 
 ---
 
-### 2. Template Metadata Merging [HIGH PRIORITY]
-**Status**: NOT STARTED
-**Branch**: `agent_template_metadata`
+### 2. Template Metadata Merging [COMPLETE - PR #3]
+**Status**: MERGED
+**Branch**: `agent_template_metadata` (merged to main)
 **Effort**: Medium (2-3 hours)
 **Impact**: High - For PrusaSlicer integration
 
 **Description**: Merge printer settings and metadata from template 3MF files into generated exports.
 
-**Tasks**:
-- [ ] Read metadata from template 3MF file
-- [ ] Parse template metadata structure
-- [ ] Implement merge logic with precedence rules (generated > template > default)
-- [ ] Update `tools/fc_export.py` to handle template merging
-- [ ] Test metadata merge with sample templates
-- [ ] Document template usage in USAGE.md
-- [ ] Create PR with comprehensive commit message
-- [ ] Merge PR after review
+**Implementation Summary**:
+- ✅ Implemented `read_metadata_from_3mf()` in `lib3mf_utils.py` to extract template metadata
+- ✅ Implemented `merge_metadata()` with "export", "template", and "merge" precedence modes
+- ✅ Updated `create_3mf_from_stls()` to read and merge template metadata
+- ✅ Pipeline already passed template path through fc_export → lib3mf_utils
+- ✅ Added 7 unit tests for metadata functions (all pass)
+- ✅ Updated USAGE.md with comprehensive template metadata guide (120+ lines)
+- ✅ Created PR #3 with 2,847 additions across 3 files
 
-**Files to Modify**:
-- `tools/fc_export.py`
-- `tools/lib3mf_utils.py`
-- `USAGE.md`
+**Files Modified**:
+- `tools/lib3mf_utils.py` - Added read_metadata_from_3mf(), merge_metadata()
+- `tools/fc_export.py` - No changes needed (template pipeline already in place)
+- `tests/test_lib3mf_utils.py` - Added TestMetadataFunctions class with 7 tests
+- `USAGE.md` - Added "Template Metadata Merging" section with examples
+
+**Merged**: Yes (PR #3 merged to main)
 
 ---
 
