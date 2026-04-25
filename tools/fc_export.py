@@ -62,7 +62,7 @@ except ImportError as e:
         )
         # Try to run the script with the found interpreter
         result = subprocess.run(
-            [freecad_interpreter, __file__], capture_output=True, text=True
+            [freecad_interpreter, __file__] + sys.argv[1:], capture_output=True, text=True
         )
         logger.info(f"Subprocess returned exit code: {result.returncode}")
         if result.stdout:
