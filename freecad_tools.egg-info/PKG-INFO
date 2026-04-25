@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: freecad-tools
+Version: 0.1.0
+Requires-Python: >=3.10
+License-File: LICENSE
+Requires-Dist: PyYAML
+Requires-Dist: lib3mf==2.5.0
+Provides-Extra: dev
+Requires-Dist: ruff==0.15.12; extra == "dev"
+Requires-Dist: yamllint==1.38.0; extra == "dev"
+Requires-Dist: pylint==4.0.5; extra == "dev"
+Requires-Dist: pytest>=7.0; extra == "dev"
+Dynamic: license-file
