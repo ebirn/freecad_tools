@@ -1,7 +1,7 @@
 -   id: freecad-export
     name: FreeCAD 3MF Export
     entry: hooks/freecad-export
-    language: system
+    language: script
     stages: [pre-push]
     always_run: true
     pass_filenames: false
@@ -10,7 +10,7 @@
 -   id: freecad-export-manual
     name: FreeCAD 3MF Export (Manual)
     entry: hooks/freecad-export-manual
-    language: system
+    language: script
     stages: [manual]
     always_run: true
     pass_filenames: false
