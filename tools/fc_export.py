@@ -416,16 +416,19 @@ def export_bodies_to_3mf_with_template(
         with open(config_file, "w") as f:
             json.dump(lib3mf_config, f)
 
-        # Call lib3mf_utils.py via subprocess using venv Python
-        # .venv is in parent directory (freecad_tools), not in export/
+        # Call lib3mf_utils.py via subprocess using the current Python interpreter
+        # (when run via pre-commit hook, use the hook's Python; otherwise use venv Python if available)
         script_dir = os.path.dirname(__file__)
-        venv_python = os.path.join(os.path.dirname(script_dir), ".venv", "bin", "python3")
         lib3mf_script = os.path.join(script_dir, "lib3mf_utils.py")
 
-        logger.debug(f"Calling lib3mf: {venv_python} {lib3mf_script} create-from-json {config_file}")
+        # Try to use venv Python first, fall back to sys.executable
+        venv_python = os.path.join(os.path.dirname(script_dir), ".venv", "bin", "python3")
+        python_executable = venv_python if os.path.exists(venv_python) else sys.executable
+
+        logger.debug(f"Calling lib3mf: {python_executable} {lib3mf_script} create-from-json {config_file}")
 
         result = subprocess.run(
-            [venv_python, lib3mf_script, "create-from-json", config_file],
+            [python_executable, lib3mf_script, "create-from-json", config_file],
             capture_output=True,
             text=True,
         )
