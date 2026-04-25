@@ -390,35 +390,139 @@ unzip -l prints/example.3mf | grep model
 uv pip install -e ".[dev]"
 ```
 
-### Available Tools
+### Pre-Commit Hooks Setup
 
-#### Linting & Code Quality
-- **pylint** - Python code analysis and style checking
-  - Run: `pylint tools/*.py`
-  - Catches logical errors, naming issues, complexity problems
-  - Config: Can add `.pylintrc` if needed
+This project uses **pre-commit** framework for automated code quality checks on every commit.
 
-- **yamllint** - YAML file validation
-  - Run: `yamllint .pre-commit-hooks.yaml templates/*.yml`
-  - Ensures valid YAML syntax in configs and templates
-  - Config: Can add `.yamllint` for custom rules
+#### Installation & Setup
+```bash
+# Install pre-commit framework
+pip install pre-commit
 
-- **black** - Python code formatter
-  - Run: `black tools/`
-  - Enforces consistent code style (PEP 8)
-  - Non-negotiable formatting (use before committing)
+# Install hooks into git
+pre-commit install
+pre-commit install --hook-stage pre-push  # Install push-stage hooks
 
-- **isort** - Python import sorter
-  - Run: `isort tools/`
-  - Organizes imports alphabetically and by type
-  - Improves readability and consistency
+# Test hooks on all files
+pre-commit run --all-files
 
-### Recommended Pre-Commit Setup
-Consider adding to `.pre-commit-hooks.yaml` (future enhancement):
-- pylint for Python files
-- yamllint for YAML files
-- black for formatting enforcement
-- isort for import ordering
+# Update hook versions to latest
+pre-commit autoupdate
+```
+
+#### What Hooks Run When
+
+**On every `git commit` (pre-commit stage - FAST ~100ms):**
+- **gitleaks** - Detect secrets/API keys before commit
+- **Ruff lint** - Fast Python linting with auto-fix
+- **Ruff format** - Python code formatting (replaces Black)
+- **yamllint** - YAML syntax validation
+- **Generic hooks** - Trailing whitespace, file endings, large files
+
+**On `git push` (pre-push stage - SLOWER ~5-10s):**
+- **pylint** - Deep Python code analysis (errors/failures only)
+
+#### Hook Overview
+
+| Hook | Purpose | Speed | Auto-fixes | Stage |
+|------|---------|-------|-----------|-------|
+| gitleaks | Detect secrets | Fast | ❌ | commit |
+| Ruff lint | Lint & basic fixes | Fast | ✅ | commit |
+| Ruff format | Code formatting | Fast | ✅ | commit |
+| yamllint | YAML validation | Fast | ❌ | commit |
+| Trailing-ws | Remove trailing spaces | Fast | ✅ | commit |
+| End-of-file | Add newline at end | Fast | ✅ | commit |
+| pylint | Deep analysis | Slow | ❌ | push |
+
+#### Configuration Files
+
+- **`.pre-commit-config.yaml`** - Defines all hooks and versions
+- **`.yamllint`** - YAML linting rules (max line length 120, 2-space indent)
+- **`pyproject.toml`** - Ruff and pylint configurations
+
+### Manual Tool Usage
+
+Tools can also be run directly without pre-commit:
+
+#### Ruff (Python linting + formatting)
+```bash
+# Lint only (show errors)
+ruff check tools/
+
+# Lint and auto-fix
+ruff check --fix tools/
+
+# Format code
+ruff format tools/
+
+# Lint specific file
+ruff check tools/fc_export.py
+```
+
+#### Pylint (Deep analysis)
+```bash
+# Run pylint manually
+pylint tools/*.py
+
+# Check for errors/failures only
+pylint --disable=all --enable=E,F tools/
+```
+
+#### yamllint (YAML validation)
+```bash
+# Check YAML files
+yamllint .pre-commit-hooks.yaml
+
+# Check with strict mode
+yamllint --strict .freecad_tools/export.yml
+```
+
+### Tool Configuration
+
+**Ruff** (`pyproject.toml`)
+- Line length: 120 characters
+- Python version: 3.7+
+- Rules: Includes E, F, I (imports), N (naming), W, UP, B (bugbear), C4 (comprehensions)
+
+**Pylint** (`pyproject.toml`)
+- Deep semantic analysis for errors/failures
+- Runs on pre-push (slower, provides detailed feedback)
+- Checks for logic errors, undefined variables, unused imports
+
+**yamllint** (`.yamllint`)
+- Max line length: 120 (warning at 120)
+- Indent: 2 spaces
+- No document-start marker required
+- No trailing spaces allowed
+
+### Skipping Hooks (Use Sparingly)
+
+To skip a specific hook for one commit:
+```bash
+# Skip pre-commit hooks
+git commit --no-verify
+
+# Skip pre-push hooks
+git push --no-verify
+```
+
+⚠️ **Warning**: Use `--no-verify` only in exceptional cases. It defeats the purpose of automated checks.
+
+### Available Tools (for reference)
+
+- **Ruff** - Modern, fast Python linter + formatter (consolidated tool)
+  - 100x faster than traditional tools
+  - Replaces Black + isort + Flake8
+  - Latest version: 0.11.7
+  
+- **Pylint** - Deep Python code analysis
+  - Catches complex logical errors
+  - Runs only on pre-push to avoid slowing down commits
+  - Latest version: 3.0.5
+
+- **yamllint** - YAML syntax and style validation
+  - Strict configuration to catch common YAML mistakes
+  - Validates all `.yaml` and `.yml` files
 
 ### Documentation Access via Context7
 When researching or implementing features, use the Context7 documentation tool:
@@ -428,6 +532,8 @@ When researching or implementing features, use the Context7 documentation tool:
   - `PyYAML` - YAML parsing and serialization
   - `lib3mf` - 3MF file format creation and manipulation
   - `FreeCAD` - 3D CAD modeling (external tool, not in pip)
+  - `Ruff` - Fast Python linter and formatter
+  - `Pylint` - Deep Python code analysis
 - **Example**: If implementing new YAML config features, query PyYAML docs for safe parsing practices
 
 ---

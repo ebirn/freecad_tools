@@ -1,0 +1,86 @@
+default_stages: [commit]
+fail_fast: true
+minimum_pre_commit_version: "2.13.0"
+
+repos:
+  # Security & secret detection
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.22.1
+    hooks:
+      - id: gitleaks
+        stages: [commit]
+
+  # Fast Python linting, formatting, and import sorting (Ruff)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.7
+    hooks:
+      - id: ruff
+        name: Ruff lint
+        description: Lint Python files and fix errors automatically
+        args: [--fix]
+        types_or: [python, pyi]
+        stages: [commit]
+      
+      - id: ruff-format
+        name: Ruff format
+        description: Format Python files
+        types_or: [python, pyi]
+        stages: [commit]
+
+  # YAML validation
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        name: Lint YAML files
+        description: Check YAML syntax and style
+        args: [--strict, -c=.yamllint]
+        types: [yaml]
+        stages: [commit]
+
+  # Generic pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+        description: Trim trailing whitespace
+        stages: [commit]
+      
+      - id: end-of-file-fixer
+        name: Fix end of file
+        description: Ensure files end with a newline
+        stages: [commit]
+      
+      - id: check-yaml
+        name: Check YAML syntax
+        description: Check YAML files for syntax errors
+        stages: [commit]
+      
+      - id: check-json
+        name: Check JSON syntax
+        description: Check JSON files for syntax errors
+        stages: [commit]
+      
+      - id: check-added-large-files
+        name: Check for large files
+        description: Prevent giant files from being committed
+        args: [--maxkb=1000]
+        stages: [commit]
+
+  # Slower deep analysis (pre-push stage)
+  - repo: https://github.com/pylint-dev/pylint
+    rev: pylint-3.0.5
+    hooks:
+      - id: pylint
+        name: Pylint deep analysis
+        description: Deep Python code analysis (runs on pre-push)
+        additional_dependencies: [pylint]
+        args: [
+          --disable=all,
+          --enable=E,F,                    # Errors and fatal errors only
+          --max-line-length=120,
+          --good-names=i,j,k,ex,_,logger,
+        ]
+        types: [python]
+        stages: [push]
