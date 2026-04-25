@@ -3,8 +3,8 @@
 # Called via: pre-commit run --hook-stage manual freecad-export-manual
 # Entry point is relative to freecad_tools repo root
 
-# Get freecad_tools repo root (where this script is located)
-TOOLS_ROOT="$(cd "$(dirname "$0")" && pwd)"
+# Get freecad_tools repo root (parent of hooks directory)
+TOOLS_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Get the project root (where .git is)
 PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
