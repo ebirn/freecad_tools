@@ -38,7 +38,7 @@ CONFIG_FILE = None
 
 # Check command-line argument first
 if len(sys.argv) > 1:
-    CONFIG_FILE = Path(sys.argv[1])
+    CONFIG_FILE = Path(sys.argv[1]).resolve()  # Convert to absolute path
     if not CONFIG_FILE.exists():
         print(f"Error: Config file not found: {CONFIG_FILE}", file=sys.stderr)
         sys.exit(1)
@@ -47,7 +47,7 @@ if len(sys.argv) > 1:
 
 # If no config argument, look in current directory
 elif os.path.exists('export_config.yml'):
-    CONFIG_FILE = Path('export_config.yml')
+    CONFIG_FILE = Path('export_config.yml').resolve()  # Also make absolute
     # Config is in current directory, keep it
 
 # Build arguments for fc_export.py
