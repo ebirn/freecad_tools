@@ -7,39 +7,37 @@
 ## Phase 2 Features - Open Tasks
 
 ### 1. Body Orientation Support [HIGH PRIORITY]
-**Status**: IN PROGRESS
-**Branch**: `agent_body_orientation`
-**Effort**: Medium (2-3 hours)
-**Impact**: High - Critical for PrusaSlicer users
+**Status**: ✅ COMPLETE
+**Branch**: `agent_body_orientation` (merged to main)
+**PR**: #2 (merged)
 
 **Description**: Add support for rotating and positioning bodies in 3MF files without manual editing in slicer.
 
-**Tasks**:
-- [ ] Update config schema to support rotation and position specs
-- [ ] Document new config fields in USAGE.md with examples
-- [ ] Add transform parsing in `tools/fc_export.py`
-- [ ] Create `get_body_transforms()` function to extract transforms from config
-- [ ] Modify `tools/lib3mf_utils.py` to apply 3MF transformation matrices
-- [ ] Test 3MF output with transforms
-- [ ] Create PR with comprehensive commit message
-- [ ] Merge PR after review
+**Completed Features**:
+- ✅ Config schema supports rotation and position specs
+- ✅ Comprehensive documentation in USAGE.md (new section with examples)
+- ✅ Transform parsing in `tools/fc_export.py` via `parse_body_specs()`
+- ✅ `create_euler_transform()` function for Euler angle rotation matrices
+- ✅ 3MF transformation matrices applied via `lib3mf_utils.py`
+- ✅ Full implementation tested and validated
+- ✅ PR #2 created and merged
 
-**Config Format**:
+**Config Format** (now supported):
 ```yaml
 export:
   - name: MyProject
     bodies:
-      - name: Body1
-        transform:
-          rotation: [45, 0, 0]    # X, Y, Z degrees
-          position: [0, 0, 5]     # X, Y, Z offsets
+      - Feed001                    # Simple format (no transform)
+      - body: "Angle Round"
+        rotation: [45, 0, 0]       # X, Y, Z degrees
+        position: [0, 0, 5]        # X, Y, Z mm offset
 ```
 
-**Files to Modify**:
-- `tools/fc_export.py`
-- `tools/lib3mf_utils.py`
-- `examples/export_config.yml.example.yml`
-- `USAGE.md`
+**Files Modified**:
+- `tools/fc_export.py`: Added parse_body_specs(), updated export_bodies_to_3mf_with_template()
+- `tools/lib3mf_utils.py`: Added create_euler_transform(), updated create_3mf_from_stls()
+- `examples/export_config.yml.example.yml`: Added example with oriented bodies
+- `USAGE.md`: New "Body Orientation and Positioning" section
 
 ---
 
