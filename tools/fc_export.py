@@ -524,7 +524,15 @@ def export_bodies_to_3mf_with_template(
             logger.error(f"lib3mf subprocess failed with exit code {result.returncode}")
             return False
 
-        logger.info(f"Successfully created 3MF: {abs_output_path}")
+        # Verify the 3MF file was actually created
+        if not os.path.exists(abs_output_path):
+            logger.error(f"3MF file was not created at {abs_output_path}")
+            logger.error("lib3mf reported success but file does not exist - this is a critical issue")
+            return False
+
+        # Get file stats for logging
+        file_size = os.path.getsize(abs_output_path)
+        logger.info(f"Successfully created 3MF: {abs_output_path} ({file_size} bytes)")
         return True
 
     except Exception as e:
@@ -614,6 +622,16 @@ def main():
             logger.debug(f"Closed document {doc_name}")
             if not success:
                 sys.exit(1)
+
+            # Final validation: ensure output file exists
+            output_abs = os.path.abspath(output)
+            if not os.path.exists(output_abs):
+                logger.error(f"Export reported success but output file does not exist: {output_abs}")
+                logger.error("This is a critical issue - the export process completed but produced no file")
+                sys.exit(1)
+
+            file_size = os.path.getsize(output_abs)
+            logger.info(f"Output file verified: {output_abs} ({file_size} bytes)")
         except Exception as e:
             logger.exception(f"Exception during processing: {e}")
             sys.exit(1)
