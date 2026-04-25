@@ -11,6 +11,43 @@ This project bridges FreeCAD (a powerful 3D CAD tool) with modern 3D printing wo
 
 ---
 
+## Commit & Push Guidelines
+
+### Always Ask Before Committing
+- **NEVER commit and push without explicit user approval**
+- Present the changes and ask "Ready to commit?" or similar
+- Wait for user confirmation before running `git commit`
+- Wait for user confirmation before running `git push`
+
+### Commit Message Format
+All commit messages must follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) specification:
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+```
+
+**Types:**
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation only
+- `style`: Code style (formatting, no logic change)
+- `refactor`: Code refactoring
+- `test`: Adding or updating tests
+- `chore`: Build, tooling, dependencies
+
+**Examples:**
+```
+feat(hooks): add pre-commit integration for reusable export
+
+fix(hooks): use stages instead of types for git hook events
+
+docs(readme): add usage section for pre-commit workflow
+```
+
+---
+
 ## Project Structure
 
 ```
@@ -18,19 +55,25 @@ freecad_tools/
 ├── AGENTS.md                          # This file - agent guidance
 ├── README.md                          # User-facing documentation
 ├── pyproject.toml                     # Python dependencies & project config
+├── uv.lock                            # Locked dependencies
+├── .envrc                             # Environment config (direnv)
+├── .pre-commit-hooks.yaml             # pre-commit hook definitions
 ├── .venv/                             # Virtual environment (created by uv)
-│
-├── export/                            # 3MF Export Tools
-│   ├── README.md                      # Export tool documentation
-│   ├── export.py                      # Main unified entry point (CLI)
-│   ├── fc_export.py                   # FreeCAD integration layer
-│   ├── lib3mf_utils.py                # 3MF creation (runs in venv)
-│   └── export_config.yml.example      # Config template
-│
-└── macros/                            # FreeCAD Macros
-    ├── README.md                      # Macros documentation
-    ├── generate_variant_configs.py    # Generate variant parameter configs
-    └── variant_array_assignment.py    # Manage array-based variants
+├── hooks/                             # pre-commit hook scripts
+│   ├── freecad-export                 # Auto-run on git push
+│   └── freecad-export-manual          # Manual trigger
+├── macros/                            # FreeCAD macros
+│   ├── generate_variant_configs.py    # Generate variant parameter configs
+│   └── variant_array_assignment.py    # Manage array-based variants
+├── templates/                         # Templates for projects
+│   ├── pre-commit-config.yaml.example # pre-commit config template
+│   ├── export.yml.example             # Export config template
+│   └── template_print_settings.3mf   # PrusaSlicer settings template
+├── tests/                             # Test suite
+└── tools/                             # Python tools
+    ├── export.py                      # CLI entry point
+    ├── fc_export.py                   # FreeCAD integration layer
+    └── lib3mf_utils.py                # 3MF creation (runs in venv)
 ```
 
 ---
