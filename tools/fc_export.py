@@ -24,8 +24,13 @@ logger.debug(f"Current directory: {os.getcwd()}")
 
 # Default config file - can be overridden by command-line argument or auto-discovery
 CONFIG_FILE = None
+PROJECT_ROOT = None
 
-# Check if CONFIG_FILE was passed via environment variable from parent process
+# Check if PROJECT_ROOT and CONFIG_FILE were passed via environment variables from parent process
+if "FREECAD_TOOLS_PROJECT_ROOT" in os.environ:
+    PROJECT_ROOT = os.environ["FREECAD_TOOLS_PROJECT_ROOT"]
+    logger.info(f"PROJECT_ROOT restored from environment: {PROJECT_ROOT}")
+
 if "FREECAD_TOOLS_CONFIG" in os.environ:
     CONFIG_FILE = os.environ["FREECAD_TOOLS_CONFIG"]
     logger.info(f"CONFIG_FILE restored from environment: {CONFIG_FILE}")
@@ -80,11 +85,14 @@ except ImportError as e:
     if freecad_interpreter:
         logger.info(f"Re-executing script with FreeCAD interpreter: {freecad_interpreter}")
 
-        # Pass CONFIG_FILE to subprocess via environment variable
+        # Pass CONFIG_FILE and PROJECT_ROOT to subprocess via environment variables
         env = os.environ.copy()
         if CONFIG_FILE:
             env["FREECAD_TOOLS_CONFIG"] = CONFIG_FILE
             logger.debug(f"Passing CONFIG_FILE via environment: {CONFIG_FILE}")
+        if PROJECT_ROOT:
+            env["FREECAD_TOOLS_PROJECT_ROOT"] = PROJECT_ROOT
+            logger.debug(f"Passing PROJECT_ROOT via environment: {PROJECT_ROOT}")
 
         # Run the script with the found interpreter
         result = subprocess.run([freecad_interpreter, __file__], env=env, capture_output=True, text=True)
@@ -216,7 +224,7 @@ def resolve_relative_path(path, base_dir):
 
 
 def load_config():
-    global CONFIG_FILE
+    global CONFIG_FILE, PROJECT_ROOT
 
     # If CONFIG_FILE not set by command-line, determine default
     if not CONFIG_FILE:
@@ -239,16 +247,25 @@ def load_config():
         sys.exit(1)
 
     # Get the project root directory for path resolution
-    # If config is in .freecad_tools/, resolve paths relative to parent (project root)
-    # If config is in root (legacy), resolve relative to current directory
-    config_path = os.path.abspath(CONFIG_FILE)
-    config_dir = os.path.dirname(config_path)
-    if os.path.basename(config_dir) == ".freecad_tools":
-        # Config is in .freecad_tools/, use parent directory as base
-        base_dir = os.path.dirname(config_dir)
+    # Use PROJECT_ROOT from environment if available (passed by export.py)
+    # Otherwise, detect it from config file location
+    if PROJECT_ROOT:
+        base_dir = PROJECT_ROOT
+        logger.info(f"Using PROJECT_ROOT from environment: {base_dir}")
     else:
-        # Config is in project root (legacy), use its directory as base
-        base_dir = config_dir
+        # Detect project root based on config file location
+        # If config is in .freecad_tools/, resolve paths relative to parent (project root)
+        # If config is in root (legacy), resolve relative to current directory
+        config_path = os.path.abspath(CONFIG_FILE)
+        config_dir = os.path.dirname(config_path)
+        if os.path.basename(config_dir) == ".freecad_tools":
+            # Config is in .freecad_tools/, use parent directory as base
+            base_dir = os.path.dirname(config_dir)
+        else:
+            # Config is in project root (legacy), use its directory as base
+            base_dir = config_dir
+        logger.info(f"Detected project root from config location: {base_dir}")
+
     logger.debug(f"Base directory for path resolution: {base_dir}")
 
     with open(CONFIG_FILE) as f:
@@ -271,7 +288,7 @@ def load_config():
             if field in item and item[field]:
                 resolved = resolve_relative_path(item[field], base_dir)
                 if resolved != item[field]:
-                    logger.debug(f"Resolved {field} to: {resolved}")
+                    logger.info(f"Resolved {field} '{item[field]}' to: {resolved}")
                 item[field] = resolved
 
     return result
@@ -444,12 +461,16 @@ def export_bodies_to_3mf_with_template(
             logger.error("No valid bodies to export to 3MF")
             return False
 
+        # Ensure output_path is absolute before passing to subprocess
+        abs_output_path = os.path.abspath(output_path)
+        logger.info(f"Output path (absolute): {abs_output_path}")
+
         # Call lib3mf via subprocess to create 3MF
         logger.info(f"Creating 3MF with {len(stl_files)} embedded meshes via lib3mf")
 
         # Build config for lib3mf subprocess
         lib3mf_config = {
-            "output_path": output_path,
+            "output_path": abs_output_path,
             "stl_files": [{"label": label, "path": path} for label, path in stl_files],
         }
 
@@ -461,14 +482,22 @@ def export_bodies_to_3mf_with_template(
         with open(config_file, "w") as f:
             json.dump(lib3mf_config, f)
 
-        # Call lib3mf_utils.py via subprocess using the current Python interpreter
-        # (when run via pre-commit hook, use the hook's Python; otherwise use venv Python if available)
+        # Call lib3mf_utils.py via subprocess using a Python with lib3mf installed
+        # First check if lib3mf Python was passed via environment (original Python before FreeCAD takeover)
         script_dir = os.path.dirname(__file__)
         lib3mf_script = os.path.join(script_dir, "lib3mf_utils.py")
 
-        # Try to use venv Python first, fall back to sys.executable
-        venv_python = os.path.join(os.path.dirname(script_dir), ".venv", "bin", "python3")
-        python_executable = venv_python if os.path.exists(venv_python) else sys.executable
+        # Try to use the lib3mf Python passed from export.py (original Python with lib3mf)
+        lib3mf_python = os.environ.get("FREECAD_TOOLS_LIB3MF_PYTHON")
+        if lib3mf_python:
+            python_executable = lib3mf_python
+            logger.info(f"Using lib3mf Python from environment: {python_executable}")
+        else:
+            # Fallback: try venv or sys.executable
+            venv_python = os.path.join(os.path.dirname(script_dir), ".venv", "bin", "python3")
+            venv_python = os.path.abspath(venv_python)
+            python_executable = venv_python if os.path.exists(venv_python) else sys.executable
+            logger.info(f"Using fallback Python: {python_executable}")
 
         logger.debug(f"Calling lib3mf: {python_executable} {lib3mf_script} create-from-json {config_file}")
 
@@ -480,15 +509,15 @@ def export_bodies_to_3mf_with_template(
 
         # Log subprocess output
         if result.stdout:
-            logger.debug(f"lib3mf STDOUT:\n{result.stdout}")
+            logger.info(f"lib3mf STDOUT:\n{result.stdout}")
         if result.stderr:
-            logger.debug(f"lib3mf STDERR:\n{result.stderr}")
+            logger.info(f"lib3mf STDERR:\n{result.stderr}")
 
         if result.returncode != 0:
             logger.error(f"lib3mf subprocess failed with exit code {result.returncode}")
             return False
 
-        logger.info(f"Successfully created 3MF: {output_path}")
+        logger.info(f"Successfully created 3MF: {abs_output_path}")
         return True
 
     except Exception as e:
@@ -505,6 +534,10 @@ def export_bodies_to_3mf_with_template(
 
 
 def main():
+    logger.info("=" * 60)
+    logger.info(f"Current working directory: {os.getcwd()}")
+    logger.info(f"PROJECT_ROOT: {PROJECT_ROOT}")
+    logger.info(f"CONFIG_FILE: {CONFIG_FILE}")
     logger.debug("Starting main()")
     exports = load_config()
     logger.debug(f"Loaded {len(exports)} exports")
