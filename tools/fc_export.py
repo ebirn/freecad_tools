@@ -16,15 +16,34 @@ logger.info("=" * 60)
 logger.debug("Script starting")
 logger.debug(f"Python version: {sys.version}")
 logger.debug(f"Current directory: {os.getcwd()}")
-logger.debug(f"Script path: {__file__}")
 
 import yaml
-
-logger.debug("YAML imported")
-
 import subprocess
 
-logger.debug("Subprocess imported")
+# Default config file - can be overridden by command-line argument or auto-discovery
+CONFIG_FILE = None
+
+# Check if CONFIG_FILE was passed via environment variable from parent process
+if "FREECAD_TOOLS_CONFIG" in os.environ:
+    CONFIG_FILE = os.environ["FREECAD_TOOLS_CONFIG"]
+    logger.info(f"CONFIG_FILE restored from environment: {CONFIG_FILE}")
+# Otherwise, try to set CONFIG_FILE via command-line or auto-discovery
+elif len(sys.argv) > 1:
+    CONFIG_FILE = sys.argv[1]
+    logger.debug(f"CONFIG_FILE from command-line argument: {CONFIG_FILE}")
+else:
+    # Auto-discover config file
+    project_config = ".freecad_tools/export.yml"
+    legacy_config = "export_config.yml"
+    
+    if os.path.exists(project_config):
+        CONFIG_FILE = project_config
+        logger.info(f"Auto-discovered per-project config: {CONFIG_FILE}")
+    elif os.path.exists(legacy_config):
+        CONFIG_FILE = legacy_config
+        logger.info(f"Auto-discovered legacy config: {CONFIG_FILE}")
+    else:
+        logger.warning(f"Config not found. Will try to auto-discover in subprocess.")
 
 freecad_found = False
 try:
@@ -60,16 +79,23 @@ except ImportError as e:
         logger.info(
             f"Re-executing script with FreeCAD interpreter: {freecad_interpreter}"
         )
-        # Try to run the script with the found interpreter
+        
+        # Pass CONFIG_FILE to subprocess via environment variable
+        env = os.environ.copy()
+        if CONFIG_FILE:
+            env["FREECAD_TOOLS_CONFIG"] = CONFIG_FILE
+            logger.debug(f"Passing CONFIG_FILE via environment: {CONFIG_FILE}")
+        
+        # Run the script with the found interpreter
         result = subprocess.run(
-            [freecad_interpreter, __file__] + sys.argv[1:], capture_output=True, text=True
+            [freecad_interpreter, __file__], env=env, capture_output=True, text=True
         )
         logger.info(f"Subprocess returned exit code: {result.returncode}")
         if result.stdout:
             logger.info(f"Subprocess STDOUT:\n{result.stdout}")
         if result.stderr:
             logger.info(f"Subprocess STDERR:\n{result.stderr}")
-        # Exit with the subprocess result code - don't continue
+        # Exit with the subprocess result code
         sys.exit(result.returncode)
     else:
         logger.error("FreeCAD interpreter not found. Checked paths:")
@@ -88,9 +114,6 @@ if not freecad_found:
     sys.exit(1)
 
 logger.debug("FreeCAD modules successfully available, proceeding with main()")
-
-# Default config file - can be overridden by command-line argument
-CONFIG_FILE = None
 
 
 def resolve_template_path(template_name):
@@ -191,8 +214,7 @@ def load_config():
             logger.error("Config file not found. Tried '.freecad_tools/export.yml' and 'export_config.yml'")
             sys.exit(1)
     
-    logger.info(f"DEBUG: CONFIG_FILE={CONFIG_FILE}, cwd={os.getcwd()}")
-    logger.debug(f"Looking for config file: {CONFIG_FILE}")
+    logger.debug(f"Loading config from: {CONFIG_FILE}")
     if not os.path.exists(CONFIG_FILE):
         logger.error(f"Config file '{CONFIG_FILE}' not found.")
         sys.exit(1)
@@ -523,27 +545,13 @@ def main():
 
 
 if __name__ == "__main__":
-    # Check for config file argument
-    if len(sys.argv) > 1:
-        CONFIG_FILE = sys.argv[1]
-        logger.debug(f"Config file from command-line argument: {CONFIG_FILE}")
-    
     try:
-        logger.debug("Executing main via __main__ guard")
         main()
-        logger.debug("Main returned successfully")
     except Exception as e:
         logger.exception(f"Exception in main: {e}")
         sys.exit(1)
-    logger.debug("Script end")
 else:
-    # If not executed as main (e.g., by freecadcmd), still run main()
-    # Check for config file argument
-    if len(sys.argv) > 1:
-        CONFIG_FILE = sys.argv[1]
-        logger.debug(f"Config file from command-line argument: {CONFIG_FILE}")
-    
-    logger.debug("Script invoked as module, executing main() directly")
+    # When run via freecadcmd, __name__ is not '__main__', but we still want to run main()
     try:
         main()
     except Exception as e:

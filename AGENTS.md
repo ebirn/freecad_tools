@@ -336,6 +336,55 @@ export:
 
 ---
 
+## Development Tools & Workflows
+
+### Installing Dev Dependencies
+```bash
+uv pip install -e ".[dev]"
+```
+
+### Available Tools
+
+#### Linting & Code Quality
+- **pylint** - Python code analysis and style checking
+  - Run: `pylint tools/*.py`
+  - Catches logical errors, naming issues, complexity problems
+  - Config: Can add `.pylintrc` if needed
+
+- **yamllint** - YAML file validation
+  - Run: `yamllint .pre-commit-hooks.yaml templates/*.yml`
+  - Ensures valid YAML syntax in configs and templates
+  - Config: Can add `.yamllint` for custom rules
+
+- **black** - Python code formatter
+  - Run: `black tools/`
+  - Enforces consistent code style (PEP 8)
+  - Non-negotiable formatting (use before committing)
+
+- **isort** - Python import sorter
+  - Run: `isort tools/`
+  - Organizes imports alphabetically and by type
+  - Improves readability and consistency
+
+### Recommended Pre-Commit Setup
+Consider adding to `.pre-commit-hooks.yaml` (future enhancement):
+- pylint for Python files
+- yamllint for YAML files
+- black for formatting enforcement
+- isort for import ordering
+
+### Documentation Access via Context7
+When researching or implementing features, use the Context7 documentation tool:
+- **Purpose**: Access up-to-date docs for libraries used in the project
+- **Usage**: Call `mcp-server-context7_resolve-library-id` first to get the library ID, then `mcp-server-context7_query-docs` to fetch specific documentation
+- **Libraries in this project**:
+  - `PyYAML` - YAML parsing and serialization
+  - `lib3mf` - 3MF file format creation and manipulation
+  - `FreeCAD` - 3D CAD modeling (external tool, not in pip)
+- **Example**: If implementing new YAML config features, query PyYAML docs for safe parsing practices
+
+---
+
 ## Contact & Questions
 
 When working on this project:
