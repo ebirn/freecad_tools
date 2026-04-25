@@ -1,4 +1,5 @@
 __pycache__
 */__pycache__
 examples/example_cad.*.FCBak
+*.log
 .DS_Store

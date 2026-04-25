@@ -367,6 +367,73 @@ Recommendation: Start without position in properties mode. Orientation is the ke
 
 ---
 
+### 9. GitHub Actions CI Workflow [HIGH PRIORITY]
+**Status**: NOT STARTED
+**Branch**: `agent_github_ci`
+**Effort**: Low (1-2 hours)
+**Impact**: High - Automated quality gate for all PRs and pushes
+
+**Description**: Add a GitHub Actions workflow that mirrors the pre-commit hook checks and runs the test suite on every push and PR.
+
+**Jobs**:
+
+1. **Lint** (fast, ~30s):
+   - Ruff lint (`ruff check tools/ tests/ macros/`)
+   - Ruff format check (`ruff format --check tools/ tests/ macros/`)
+   - yamllint on all YAML files
+   - Pylint errors/failures only (`pylint --disable=all --enable=E,F tools/`)
+
+2. **Test** (medium, ~1-2min):
+   - Install dependencies via `uv pip install -e ".[dev]"`
+   - Run unit tests (no FreeCAD): `pytest tests/test_git_utils.py tests/test_lib3mf_utils.py tests/test_export_config.py -v`
+
+3. **Optional: Integration test** (slow, only if FreeCAD available):
+   - Skip by default (FreeCAD not available in standard runners)
+   - Could use a Docker image with FreeCAD for full pipeline test later
+
+**Tasks**:
+- [ ] Create `.github/workflows/ci.yml`
+- [ ] Configure triggers: push to main, all PRs
+- [ ] Set up Python environment with uv
+- [ ] Run lint checks (ruff, yamllint, pylint)
+- [ ] Run unit test suite
+- [ ] Add branch protection rule recommendation to README.md
+- [ ] Test workflow on a PR
+
+**Workflow Skeleton**:
+```yaml
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv pip install ruff yamllint pylint --system
+      - run: ruff check tools/ tests/ macros/
+      - run: ruff format --check tools/ tests/ macros/
+      - run: yamllint .pre-commit-hooks.yaml .yamllint
+      - run: pylint --disable=all --enable=E,F tools/*.py
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv venv && uv pip install -e ".[dev]"
+      - run: uv run pytest tests/test_git_utils.py tests/test_lib3mf_utils.py tests/test_export_config.py -v
+```
+
+**Files to Create**:
+- `.github/workflows/ci.yml`
+
+---
+
 ## Phase 1 Features - Completed ✅
 
 ### Completed in Previous Session
