@@ -1,38 +1,19 @@
 name: CI
-
 on:
   push:
-    branches:
-      - main
-      - "copilot/**"
+    branches: [main, "copilot/**"]
   pull_request:
-
 jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-
-      - name: Install dependencies
-        run: uv sync --extra dev
-
-      - name: Ruff lint
-        run: uv run ruff check tools/ tests/ macros/
-
-      - name: Ruff format check
-        run: uv run ruff format --check tools/ tests/ macros/
-
-      - name: yamllint
-        # Only check YAML files (not .yamllint itself or TOML files)
-        run: uv run yamllint -c .yamllint .pre-commit-hooks.yaml .pre-commit-config.yaml
-
-      - name: Pylint (errors and failures only)
-        run: uv run pylint --disable=all --enable=E,F tools/*.py
-
-      # Integration tests (test_3mf.py, test_export.py) require FreeCAD and are skipped here
-      - name: Unit tests
-        run: uv run pytest tests/test_git_utils.py tests/test_lib3mf_utils.py tests/test_export_config.py -v
+      - run: uv sync --extra dev
+      - run: uv run ruff check tools/ tests/ macros/
+      - run: uv run ruff format --check tools/ tests/ macros/
+      - run: uv run yamllint -c .yamllint .pre-commit-hooks.yaml .pre-commit-config.yaml
+      - run: uv run pylint --disable=all --enable=E,F tools/*.py
+      - run: uv run pytest tests/test_git_utils.py tests/test_lib3mf_utils.py tests/test_export_config.py -v
