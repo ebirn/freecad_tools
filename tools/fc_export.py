@@ -8,6 +8,18 @@ import tempfile
 
 import yaml
 
+# Import git utilities
+try:
+    # Try to import from same directory
+    import git_utils
+except ImportError:
+    # Try from parent directory
+    sys.path.insert(0, os.path.dirname(__file__))
+    try:
+        import git_utils
+    except ImportError:
+        git_utils = None
+
 # Configure logging to both console and file
 # Allow overriding log level via environment variable
 log_level_name = os.environ.get("FREECAD_TOOLS_LOG_LEVEL", "INFO")
@@ -230,6 +242,50 @@ def resolve_relative_path(path, base_dir):
     return os.path.join(base_dir, path)
 
 
+def get_export_metadata(config_item, base_dir):
+    """
+    Extract metadata from config item and environment.
+
+    Args:
+        config_item: Export configuration item dict
+        base_dir: Base directory for resolving relative paths
+
+    Returns:
+        Dictionary of metadata key-value pairs
+    """
+    metadata = {}
+
+    # Add explicitly specified metadata from config
+    export_metadata = config_item.get("metadata", {})
+    if export_metadata:
+        metadata.update(export_metadata)
+
+    # Add git metadata if available and not already specified
+    if git_utils and git_utils.is_git_repo(base_dir):
+        try:
+            git_meta = git_utils.get_git_metadata(cwd=base_dir)
+
+            # Add git metadata with defaults
+            if "GitCommit" not in metadata and git_meta.get("commit_short"):
+                metadata["GitCommit"] = git_meta["commit_short"]
+            if "GitCommitFull" not in metadata and git_meta.get("commit_hash"):
+                metadata["GitCommitFull"] = git_meta["commit_hash"]
+            if "GitBranch" not in metadata and git_meta.get("branch"):
+                metadata["GitBranch"] = git_meta["branch"]
+            if "GitTags" not in metadata and git_meta.get("tags"):
+                metadata["GitTags"] = git_meta["tags"]
+            if "GitRemote" not in metadata and git_meta.get("remote_url"):
+                metadata["GitRemote"] = git_meta["remote_url"]
+
+            logger.info(f"Added git metadata: {list(git_meta.keys())}")
+        except Exception as e:
+            logger.debug(f"Failed to get git metadata: {e}")
+    else:
+        logger.debug("Not in a git repository or git_utils not available")
+
+    return metadata
+
+
 def load_config():
     global CONFIG_FILE, PROJECT_ROOT
 
@@ -381,7 +437,14 @@ def export_full_doc(doc, output_path):
 
 
 def export_bodies_to_3mf_with_template(
-    doc, bodies, output_path, template_path=None, keep_stl=False, stl_output_dir=None, export_name=""
+    doc,
+    bodies,
+    output_path,
+    template_path=None,
+    keep_stl=False,
+    stl_output_dir=None,
+    export_name="",
+    metadata=None,
 ):
     """
     Export bodies to 3MF format using lib3mf (via subprocess).
@@ -395,6 +458,7 @@ def export_bodies_to_3mf_with_template(
         keep_stl: If True, keep generated STL files in stl_output_dir
         stl_output_dir: Directory to place STL files (defaults to temp if keep_stl=False)
         export_name: Export item name (used to prefix STL files)
+        metadata: Optional dictionary of metadata to embed in the 3MF file
     """
     logger.debug(f"Exporting bodies to 3MF with template: {template_path}")
 
@@ -483,6 +547,11 @@ def export_bodies_to_3mf_with_template(
 
         if template_path and os.path.exists(template_path):
             lib3mf_config["template_path"] = template_path
+
+        # Add metadata if provided
+        if metadata:
+            lib3mf_config["metadata"] = metadata
+            logger.debug(f"Added metadata to lib3mf config: {list(metadata.keys())}")
 
         # Write config to temp JSON file
         config_file = os.path.join(stl_dir, "_lib3mf_config.json")
@@ -605,11 +674,21 @@ def main():
                 # Try to resolve template path (uses config value or falls back to default)
                 resolved_template = resolve_template_path(template)
 
+                # Extract metadata from config item and environment
+                export_metadata = get_export_metadata(item, PROJECT_ROOT or os.getcwd())
+
                 # Use template-based export if template is available
                 if resolved_template:
                     logger.info(f"Using template: {resolved_template}")
                     success = export_bodies_to_3mf_with_template(
-                        doc, bodies, output, resolved_template, keep_stl, stl_output_dir, export_name
+                        doc,
+                        bodies,
+                        output,
+                        resolved_template,
+                        keep_stl,
+                        stl_output_dir,
+                        export_name,
+                        metadata=export_metadata,
                     )
                 else:
                     # Fallback to STL export if no template available

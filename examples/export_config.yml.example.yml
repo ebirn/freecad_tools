@@ -1,4 +1,5 @@
 export:
+  # Basic export example
   - name: Moxon_OE1EBG
     source: Moxon_OE1EBG.FCStd
     # Can specify bodies by Name (Body) or Label (Feed001, Cover001, etc) - more user-friendly
@@ -15,3 +16,20 @@ export:
     keep_stl: true
     # Directory to store STL files (only used if keep_stl is true)
     stl_output_dir: prints/stl
+    # Optional: metadata to embed in the 3MF file
+    metadata:
+      Project: "Moxon_OE1EBG"
+      Version: "1.0"
+      Author: "John Doe"
+      # Git metadata is automatically added if available (GitCommit, GitBranch, etc)
+
+  # Advanced example: Export only marked bodies
+  - name: SelectiveExport
+    source: AnotherDesign.FCStd
+    # To use automatic body selection, mark bodies with the ExportTo3MF custom property set to True
+    # If bodies list is empty, all bodies marked with ExportTo3MF=True will be exported
+    bodies: []
+    output: prints/SelectiveExport.3mf
+    metadata:
+      Project: "AnotherDesign"
+      Version: "2.1"

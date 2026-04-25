@@ -110,8 +110,32 @@ def convert_stl_to_lib3mf_mesh(stl_file_path: str, mesh_object) -> None:
         raise
 
 
+def add_metadata_to_model(model, metadata: Optional[dict] = None) -> None:
+    """
+    Add metadata to a 3MF model.
+
+    Args:
+        model: lib3mf model object
+        metadata: Dictionary of metadata key-value pairs
+    """
+    if not metadata:
+        return
+
+    try:
+        metadata_group = model.GetMetaDataGroup()
+        for key, value in metadata.items():
+            if value is not None:
+                logger.debug(f"Adding metadata: {key} = {value}")
+                metadata_group.AddMetaData(key, str(value))
+    except Exception as e:
+        logger.warning(f"Failed to add metadata to model: {e}")
+
+
 def create_3mf_from_stls(
-    stl_files: List[Tuple[str, str]], output_path: str, template_path: Optional[str] = None
+    stl_files: List[Tuple[str, str]],
+    output_path: str,
+    template_path: Optional[str] = None,
+    metadata: Optional[dict] = None,
 ) -> bool:
     """
     Create a 3MF file with embedded meshes from STL files using lib3mf.
@@ -120,6 +144,8 @@ def create_3mf_from_stls(
         stl_files: List of (body_label, stl_file_path) tuples
         output_path: Output 3MF file path
         template_path: Optional template 3MF file to copy metadata from
+        metadata: Optional metadata dictionary to embed in the 3MF file
+                 (keys like "Project", "Author", "Version", "GitCommit", "GitBranch", etc.)
 
     Returns:
         True on success, False on failure
@@ -144,6 +170,10 @@ def create_3mf_from_stls(
 
             # Add to build (place on print bed with identity transform)
             model.AddBuildItem(mesh_obj, wrapper.GetIdentityTransform())
+
+        # Add metadata if provided
+        if metadata:
+            add_metadata_to_model(model, metadata)
 
         # Write to file
         logger.info(f"Writing 3MF to {output_path}")
@@ -172,7 +202,14 @@ def create_from_json_config(config_path: str) -> bool:
             {"label": "Body1", "path": "path/to/body1.stl"},
             {"label": "Body2", "path": "path/to/body2.stl"}
         ],
-        "template_path": "path/to/template.3mf" (optional)
+        "template_path": "path/to/template.3mf" (optional),
+        "metadata": {
+            "Project": "MyProject",
+            "Author": "John Doe",
+            "Version": "1.0",
+            "GitCommit": "abc1234",
+            "GitBranch": "main"
+        } (optional)
     }
 
     Args:
@@ -188,6 +225,7 @@ def create_from_json_config(config_path: str) -> bool:
         output_path = config.get("output_path")
         stl_files_config = config.get("stl_files", [])
         template_path = config.get("template_path")
+        metadata = config.get("metadata")
 
         if not output_path:
             logger.error("output_path not specified in config")
@@ -201,7 +239,7 @@ def create_from_json_config(config_path: str) -> bool:
         stl_files = [(item["label"], item["path"]) for item in stl_files_config]
 
         logger.info(f"Loading config from {config_path}")
-        return create_3mf_from_stls(stl_files, output_path, template_path)
+        return create_3mf_from_stls(stl_files, output_path, template_path, metadata)
 
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON in {config_path}: {e}")
