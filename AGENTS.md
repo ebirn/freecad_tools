@@ -287,6 +287,118 @@ export:
 5. **Quality Metrics**: Report mesh stats (vertex count, triangle count, file size)
 6. **Template Creator Tool**: GUI to generate templates from existing prints
 
+*Last Updated: April 25, 2026*
+*Agents Note: This project is actively maintained. Check git log for recent changes.*
+
+---
+
+## For Agents: Branching Strategy & PR Management
+
+### Feature Branch Naming Convention
+
+All feature branches created by agents must follow this naming pattern:
+
+```
+agent_<feature_name>
+```
+
+**Examples:**
+```
+agent_body_orientation       # For body rotation/positioning features
+agent_template_metadata      # For template metadata merging
+agent_batch_processing       # For batch export improvements
+agent_quality_metrics        # For mesh quality reporting
+```
+
+**Rules:**
+- Prefix with `agent_` (required)
+- Use lowercase with underscores
+- Keep names descriptive but concise
+- One feature per branch
+
+### Pull Request Workflow
+
+When creating a PR:
+
+1. **Request Code Review from Copilot**
+   ```bash
+   gh pr edit <pr_number> --add-reviewer copilot
+   ```
+
+2. **Monitor PR Status**
+   - Check for automated checks (pre-commit hooks, linting)
+   - Monitor for Copilot review comments
+   - Address any issues raised in review
+
+3. **When PR is Merged**
+   - Switch back to main branch: `git checkout main`
+   - Update main: `git pull origin main`
+   - Delete feature branch: `git branch -d agent_<feature_name>`
+   - Verify changes: `git log --oneline -5`
+
+4. **Continue Development**
+   - If starting new feature, create new `agent_<feature_name>` branch
+   - Keep separate branches for each major feature
+   - Do NOT reuse feature branches for different features
+
+### Example Workflow
+
+```bash
+# 1. Create feature branch from main
+git checkout main
+git pull origin main
+git checkout -b agent_body_orientation
+
+# 2. Make changes and commit
+# ... implement feature ...
+git add -A
+git commit -m "feat: add body orientation support in 3MF exports"
+
+# 3. Push and create PR
+git push -u origin agent_body_orientation
+gh pr create --title "feat: add body orientation support" --body "..."
+
+# 4. Request review
+gh pr edit 2 --add-reviewer copilot
+
+# 5. Wait for approval and merge
+# ... address review comments if any ...
+gh pr merge --auto  # Enable auto-merge if approved
+
+# 6. After merge, clean up
+git checkout main
+git pull origin main
+git branch -d agent_body_orientation
+```
+
+### Current Open Features (from TODO.md)
+
+These features are not yet implemented and are good candidates for new `agent_` branches:
+
+1. **Body Duplication with Orientation**
+   - Branch: `agent_body_orientation`
+   - Support rotation/position specs in config
+   - Embed orientation transforms in 3MF
+
+2. **Template Metadata Merging**
+   - Branch: `agent_template_metadata`
+   - Merge template metadata with generated 3MF
+   - Preserve printer settings from templates
+
+3. **Multi-Document Support**
+   - Branch: `agent_multi_document`
+   - Export from multiple FCStd files in one config
+
+4. **Batch Processing**
+   - Branch: `agent_batch_processing`
+   - Queue multiple export jobs
+   - Process in parallel
+
+5. **Quality Metrics**
+   - Branch: `agent_quality_metrics`
+   - Report mesh stats (vertices, triangles, file size)
+   - Validate output structure
+
 ---
 
 ## For Agents: How to Continue Development
@@ -304,9 +416,16 @@ export:
 - **Mesh counting**: Parse 3D/3dmodel.model XML for vertex/triangle stats
 
 ### Testing
-1. **Unit tests**: Add to `tests/` directory (not yet created)
-2. **Integration tests**: Test full pipeline with sample FCStd files in `examples/`
-3. **Regression tests**: Ensure 3MF output remains valid across changes
+See [TESTING.md](TESTING.md) for the complete testing strategy, including:
+- Test organization and categories
+- Running tests (unit vs integration)
+- Writing new tests
+- Troubleshooting
+
+Quick reference:
+1. **Unit tests**: `python -m pytest tests/test_git_utils.py tests/test_lib3mf_utils.py -v`
+2. **Integration tests**: Run from `examples/` directory with FreeCAD
+3. **Regression**: Validate 3MF output structure
 
 ### Code Organization
 - All Python code uses logging module (not print statements)
