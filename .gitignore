@@ -3,3 +3,5 @@ __pycache__
 examples/example_cad.*.FCBak
 *.log
 .DS_Store
+*.egg-info/
+.venv/
