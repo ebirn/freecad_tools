@@ -607,11 +607,13 @@ def main():
 
                 # Use template-based export if template is available
                 if resolved_template:
+                    logger.info(f"Using template: {resolved_template}")
                     success = export_bodies_to_3mf_with_template(
                         doc, bodies, output, resolved_template, keep_stl, stl_output_dir, export_name
                     )
                 else:
                     # Fallback to STL export if no template available
+                    logger.info("No template specified or available, exporting bodies to 3MF without template")
                     success = export_bodies(doc, bodies, output)
             else:
                 logger.info("Exporting full document")
