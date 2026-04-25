@@ -191,6 +191,7 @@ def load_config():
             logger.error("Config file not found. Tried '.freecad_tools/export.yml' and 'export_config.yml'")
             sys.exit(1)
     
+    logger.info(f"DEBUG: CONFIG_FILE={CONFIG_FILE}, cwd={os.getcwd()}")
     logger.debug(f"Looking for config file: {CONFIG_FILE}")
     if not os.path.exists(CONFIG_FILE):
         logger.error(f"Config file '{CONFIG_FILE}' not found.")
