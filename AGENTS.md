@@ -1,4 +1,6 @@
-# FreeCAD Tools - Project Documentation for Agents
+# FreeCAD Tools - Agent Documentation
+
+> **Bootstrap Prompt**: _"Read AGENTS.md and TODO.md, then continue work on the next open task."_
 
 **IMPORTANT**: This file provides process guidance, architecture overview, and development context. **Task tracking is in TODO.md - NOT in this file.** Refer to TODO.md for open tasks and feature status.
 
@@ -48,6 +50,19 @@ fix(hooks): use stages instead of types for git hook events
 
 docs(readme): add usage section for pre-commit workflow
 ```
+
+---
+
+## Test-Driven Development (TDD) for Bug Fixes
+
+When a bug or error is reported or detected (except trivial ones), follow this process:
+
+1. **Write a failing test first** - Create a test case that reproduces the error
+2. **Verify the test fails** - Run the test to confirm it captures the bug
+3. **Fix the code** - Develop against the failing test until it passes
+4. **Verify all tests pass** - Run the full test suite to ensure no regressions
+
+This ensures every non-trivial bug fix is backed by a regression test, preventing the same issue from recurring.
 
 ---
 
@@ -418,11 +433,7 @@ These features are not yet implemented and are good candidates for new `agent_` 
 - **Mesh counting**: Parse 3D/3dmodel.model XML for vertex/triangle stats
 
 ### Testing
-See [TESTING.md](TESTING.md) for the complete testing strategy, including:
-- Test organization and categories
-- Running tests (unit vs integration)
-- Writing new tests
-- Troubleshooting
+See the testing section below for the complete testing strategy.
 
 Quick reference:
 1. **Unit tests**: `python -m pytest tests/test_git_utils.py tests/test_lib3mf_utils.py -v`
@@ -657,6 +668,122 @@ When researching or implementing features, use the Context7 documentation tool:
   - `Ruff` - Fast Python linter and formatter
   - `Pylint` - Deep Python code analysis
 - **Example**: If implementing new YAML config features, query PyYAML docs for safe parsing practices
+
+---
+
+## Testing Strategy
+
+### Test Organization
+
+```
+tests/
+├── __init__.py              # Package marker
+├── conftest.py              # Shared fixtures (examples_dir, sample files)
+├── test_3mf.py              # 3MF file validation (standalone)
+├── test_export.py           # FreeCAD document inspection (requires FreeCAD)
+├── test_export_config.py    # Config parsing, body specs, path resolution
+├── test_yaml.py             # YAML config parsing (requires config)
+├── test_git_utils.py        # Git utilities (unit tests)
+└── test_lib3mf_utils.py     # 3MF creation utilities (unit tests)
+```
+
+### Test Categories
+
+**Unit Tests (no external dependencies)** - Run anywhere:
+- `test_git_utils.py` - Git metadata extraction
+- `test_lib3mf_utils.py` - STL parsing, metadata functions
+- `test_export_config.py` - Config parsing, body specs, path resolution, metadata
+
+```bash
+python -m pytest tests/test_git_utils.py tests/test_lib3mf_utils.py tests/test_export_config.py -v
+```
+
+**Integration Tests (requires FreeCAD + lib3mf)**:
+- `test_export.py` - Opens example.FCStd, inspects objects
+- `test_3mf.py` - Validates generated 3MF files
+
+```bash
+python tools/export.py
+python -m pytest tests/test_3mf.py -v
+```
+
+### Test Data
+
+| File | Location | Purpose |
+|------|----------|---------|
+| `example.FCStd` | `examples/` | Sample FreeCAD document |
+| `example.3mf` | `examples/` | Reference 3MF output |
+| `default.3mf` | `examples/` | Template 3MF with metadata |
+| `export_config.yml.example.yml` | `examples/` | Comprehensive config example |
+| `template_print_settings.3mf` | `templates/` | Printer settings template |
+
+Shared fixtures in `tests/conftest.py` provide paths to all test data.
+
+### Writing New Tests
+
+Use Given-When-Then pattern:
+```python
+import pytest
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))
+
+class TestModuleName:
+    def test_function_with_given_then_expected(self):
+        # Given
+        input_data = "test_value"
+        # When
+        result = function_to_test(input_data)
+        # Then
+        assert result == expected_value
+```
+
+### Running All Tests
+
+```bash
+# Quick (no FreeCAD required)
+python -m pytest tests/test_git_utils.py tests/test_lib3mf_utils.py tests/test_export_config.py -v
+
+# Full (requires FreeCAD)
+cd examples && python ../tools/export.py && python -m pytest ../tests/ -v
+
+# CI order: lint → unit → integration
+ruff check tools/ tests/
+ruff format --check tools/ tests/
+python -m pytest tests/test_git_utils.py tests/test_lib3mf_utils.py -v
+```
+
+### Coverage Gaps (known)
+
+- Full export pipeline end-to-end (requires FreeCAD)
+- Real body extraction from FCStd (requires FreeCAD)
+- Template metadata merging with actual 3MF files (integration)
+- Git integration tests (require .git directory)
+
+---
+
+## Documentation & File Management Rules
+
+### Allowed Markdown Files
+
+This project uses exactly **four** markdown files. Do NOT create additional `.md` files.
+
+| File | Purpose | Audience |
+|------|---------|----------|
+| `README.md` | All user-facing documentation | Humans |
+| `AGENTS.md` | Agent process guidance, architecture, dev context | Agents |
+| `TODO.md` | Task tracking and planning | Agents |
+| `CHANGELOG.md` | Version history (standard convention) | Both |
+
+### Rules for Agents
+
+- **NEVER create new `.md` files** (no PHASE_SUMMARY.md, no TESTING.md, no DESIGN.md, etc.)
+- **User-facing docs** (usage, features, troubleshooting, API) go in `README.md`
+- **Agent-facing docs** (architecture, process, testing strategy) go in `AGENTS.md`
+- **Task tracking** (open tasks, completed tasks, priorities) goes in `TODO.md`
+- **Release notes** go in `CHANGELOG.md`
+- If you need to document something, find the right section in one of these four files
+- When in doubt, add to `AGENTS.md` for dev context or `README.md` for user docs
 
 ---
 

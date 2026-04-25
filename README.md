@@ -356,16 +356,58 @@ Use FreeCAD macros to create multiple versions:
 
 4. Config is reused for consistent variations
 
+**Using Configuration Files** (skip the dialog):
+
+Create `.freecad_tools/macro_config.yml` manually:
+```yaml
+spreadsheet_label: VariantData
+param1_name: PipeDiameter
+param1_values: "10.1, 10.2, 10.3"
+param2_name: HexIndent
+param2_values: "0.3, 0.5, 0.7, 0.9"
+param3_name: HexLength
+param3_values: "10"
+```
+
+When the macro runs, it will load this config automatically (or show the dialog if not found).
+
+### 4. Template Metadata Merging
+
+When you specify both a template and metadata in your config, they are merged:
+
+```yaml
+export:
+  - name: MyProject
+    source: MyProject.FCStd
+    bodies: [Body]
+    output: prints/MyProject.3mf
+    template: template_print_settings.3mf
+    metadata:
+      Project: "MyProject"
+      QualityLevel: "Draft"
+```
+
+**How merging works**:
+1. Template 3MF metadata is read (e.g., `PrinterName`, `MaterialProfile`)
+2. Your export metadata is merged on top
+3. Export values take precedence over template values for the same key
+4. Result contains both template and export metadata
+
+**Creating a Template**:
+1. Configure your printer settings in PrusaSlicer
+2. Export/save as `template_print_settings.3mf`
+3. Reference in config with `template:` key
+4. Keep one template per printer setup (e.g., `template_prusa_mk3s.3mf`)
+
 ---
 
 ## Project Structure
 
 ```
 freecad_tools/
-├── README.md                           # This file
-├── USAGE.md                            # Detailed feature documentation
+├── README.md                           # This file (all user documentation)
 ├── CHANGELOG.md                        # What's new
-├── AGENTS.md                           # Developer guide
+├── AGENTS.md                           # Agent/developer guide
 ├── TODO.md                             # Open features & tasks
 │
 ├── tools/                              # Python command-line tools
@@ -429,6 +471,53 @@ freecad_tools/
 - **FreeCAD**: v0.20+ (with Python support)
 - **OS**: macOS, Linux, or Windows
 - **Dependencies**: PyYAML, lib3mf (auto-installed)
+
+---
+
+## Macro Helper API
+
+For macro developers, `macro_helper.py` provides utilities:
+
+### Dialog Configuration
+```python
+from macro_helper import show_config_dialog
+
+fields = [
+    {"name": "param1", "type": "text", "label": "Parameter 1:", "default": "value1"},
+    {"name": "count", "type": "number", "label": "Count:", "default": 5}
+]
+config = show_config_dialog(title="My Configuration", fields=fields)
+```
+
+### Object Resolution
+```python
+from macro_helper import get_object_by_identifier
+obj = get_object_by_identifier(doc, "Feed001")  # By Label or Name
+```
+
+### Finding Exportable Bodies
+```python
+from macro_helper import find_exportable_bodies
+bodies = find_exportable_bodies(doc)  # Bodies with ExportTo3MF=True
+```
+
+### Configuration File Management
+```python
+from macro_helper import load_or_prompt_config
+config = load_or_prompt_config(
+    config_path=".freecad_tools/my_config.yml",
+    dialog_fields=fields,
+    dialog_title="My Macro Configuration"
+)
+# Loads config from file, or shows dialog and saves result
+```
+
+### Custom Properties
+```python
+from macro_helper import get_body_property, set_body_property
+export_flag = get_body_property(obj, "ExportTo3MF")
+set_body_property(obj, "ExportTo3MF", True, property_type="App::Bool")
+```
 
 ---
 
@@ -598,7 +687,6 @@ Auto-exporting antenna design...
 
 ### Learn More
 
-- **`USAGE.md`**: Detailed feature documentation
 - **`CHANGELOG.md`**: What's new in each version
 - **`examples/`**: Sample files to copy from
 - **Issues on GitHub**: Ask questions or report bugs
@@ -609,8 +697,8 @@ Auto-exporting antenna design...
 
 ### Questions?
 
-1. Check `USAGE.md` for detailed documentation
-2. Review examples in `examples/` directory
+1. Review examples in `examples/` directory
+2. Check `CHANGELOG.md` for recent changes
 3. Check `TODO.md` for planned features
 4. Open an issue on GitHub
 

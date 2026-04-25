@@ -15,7 +15,7 @@
 
 **Completed Features**:
 - ✅ Config schema supports rotation and position specs
-- ✅ Comprehensive documentation in USAGE.md (new section with examples)
+- ✅ Comprehensive documentation in README.md (new section with examples)
 - ✅ Transform parsing in `tools/fc_export.py` via `parse_body_specs()`
 - ✅ `create_euler_transform()` function for Euler angle rotation matrices
 - ✅ 3MF transformation matrices applied via `lib3mf_utils.py`
@@ -37,7 +37,7 @@ export:
 - `tools/fc_export.py`: Added parse_body_specs(), updated export_bodies_to_3mf_with_template()
 - `tools/lib3mf_utils.py`: Added create_euler_transform(), updated create_3mf_from_stls()
 - `examples/export_config.yml.example.yml`: Added example with oriented bodies
-- `USAGE.md`: New "Body Orientation and Positioning" section
+- `README.md`: New "Body Orientation and Positioning" section
 
 ---
 
@@ -55,14 +55,14 @@ export:
 - ✅ Updated `create_3mf_from_stls()` to read and merge template metadata
 - ✅ Pipeline already passed template path through fc_export → lib3mf_utils
 - ✅ Added 7 unit tests for metadata functions (all pass)
-- ✅ Updated USAGE.md with comprehensive template metadata guide (120+ lines)
+- ✅ Updated README.md with comprehensive template metadata guide (120+ lines)
 - ✅ Created PR #3 with 2,847 additions across 3 files
 
 **Files Modified**:
 - `tools/lib3mf_utils.py` - Added read_metadata_from_3mf(), merge_metadata()
 - `tools/fc_export.py` - No changes needed (template pipeline already in place)
 - `tests/test_lib3mf_utils.py` - Added TestMetadataFunctions class with 7 tests
-- `USAGE.md` - Added "Template Metadata Merging" section with examples
+- `README.md` - Added "Template Metadata Merging" section with examples
 
 **Merged**: Yes (PR #3 merged to main)
 
@@ -82,14 +82,14 @@ export:
 - [ ] Add progress reporting for batch jobs
 - [ ] Handle errors per export (continue on failure)
 - [ ] Test with multiple concurrent exports
-- [ ] Document batch processing in USAGE.md
+- [ ] Document batch processing in README.md
 - [ ] Create PR with comprehensive commit message
 - [ ] Merge PR after review
 
 **Files to Modify**:
 - `tools/export.py`
 - `tools/fc_export.py`
-- `USAGE.md`
+- `README.md`
 
 ---
 
@@ -108,14 +108,14 @@ export:
 - [ ] Add 3MF structure validation
 - [ ] Generate quality report after export
 - [ ] Test metrics with sample models
-- [ ] Document metrics output in USAGE.md
+- [ ] Document metrics output in README.md
 - [ ] Create PR with comprehensive commit message
 - [ ] Merge PR after review
 
 **Files to Modify**:
 - `tools/lib3mf_utils.py`
 - `tools/export.py`
-- `USAGE.md`
+- `README.md`
 
 ---
 
@@ -133,7 +133,7 @@ export:
 - [ ] Handle object resolution across multiple documents
 - [ ] Add dependency management between documents
 - [ ] Test with multiple FCStd files
-- [ ] Document multi-document exports in USAGE.md
+- [ ] Document multi-document exports in README.md
 - [ ] Create PR with comprehensive commit message
 - [ ] Merge PR after review
 
@@ -151,7 +151,7 @@ export:
 **Files to Modify**:
 - `tools/fc_export.py`
 - `tools/export.py`
-- `USAGE.md`
+- `README.md`
 
 ---
 
@@ -171,8 +171,6 @@ export:
 - `macros/macro_helper.py` - Macro utilities (409 lines)
 - `tools/git_utils.py` - Git integration (159 lines)
 - `CHANGELOG.md` - Feature documentation (143 lines)
-- `USAGE.md` - User guide (330 lines)
-- `PHASE1_SUMMARY.md` - Session summary (429 lines)
 
 ### Files Modified in Phase 1
 - `tools/fc_export.py` - Added metadata extraction
@@ -184,87 +182,14 @@ export:
 
 ---
 
-## Development Workflow
-
-### For Each Feature Branch
-1. Create feature branch from main: `git checkout -b agent_<feature_name>`
-2. Implement feature with regular commits following Conventional Commits
-3. Update documentation (USAGE.md, example configs, docstrings)
-4. Run pre-commit checks: `pre-commit run --all-files`
-5. Push branch: `git push -u origin agent_<feature_name>`
-6. Create PR with clear description
-7. Monitor PR for review/feedback
-8. Merge PR after approval
-9. Clean up local branch: `git branch -d agent_<feature_name>`
-
-### Pre-Commit Checks Required
-```bash
-pre-commit run --all-files
-python3 -m py_compile tools/*.py macros/*.py
-ruff check tools/ macros/
-ruff format tools/ macros/ --check
-```
-
-### Commit Message Format
-Follow Conventional Commits:
-```
-feat(scope): description
-fix(scope): description
-docs(scope): description
-style(scope): description
-refactor(scope): description
-test(scope): description
-```
-
----
-
-## Success Criteria
-
-For each feature to be considered complete:
-- ✅ Code passes all pre-commit checks
-- ✅ All functions have docstrings
-- ✅ No breaking changes (backwards compatible)
-- ✅ Documentation updated (USAGE.md, examples, comments)
-- ✅ Example config shows new feature usage
-- ✅ PR created with comprehensive description
-- ✅ PR merged after review
-- ✅ Local branch cleaned up
-
----
-
-## Branch Status
-
-**Main**: Production ready, all Phase 1 features merged
-**Develop**: Staging, ready for next PR
-**agent_body_orientation**: Ready to start implementation
-**agent_template_metadata**: Ready to start implementation
-**agent_batch_processing**: Ready to start implementation
-**agent_quality_metrics**: Ready to start implementation
-**agent_multi_document**: Ready to start implementation
-
----
-
-## Key Documentation Files
-
-- **AGENTS.md**: Agent development process (workflow, PR management, branch strategy)
-- **USAGE.md**: User-facing guide with examples
-- **CHANGELOG.md**: Detailed feature documentation
-- **README.md**: Project overview and quick start
-- **PHASE1_SUMMARY.md**: Phase 1 accomplishments and next steps
-- **TESTING.md**: Testing strategy and procedures
-
----
-
 ## Notes
 
 - Feature branches use `agent_<feature_name>` naming convention
-- AGENTS.md provides process guidance only (NOT task tracking - this file tracks tasks)
+- See AGENTS.md for development process, branching, PR management, commit format, and testing
 - All development happens on feature branches, merged via PR
 - Pre-commit hooks enforce code quality automatically
-- Copilot review requested for all PRs
-- No external resources needed - use Context7 for API documentation
 
 ---
 
 **Last Updated**: April 25, 2026
-**Next Focus**: Body Orientation Support (agent_body_orientation)
+**Next Focus**: Batch Processing (agent_batch_processing)
