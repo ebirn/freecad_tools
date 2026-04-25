@@ -238,9 +238,18 @@ def load_config():
         logger.error(f"Config file '{CONFIG_FILE}' not found.")
         sys.exit(1)
 
-    # Get the directory where the config file is located for path resolution
-    config_dir = os.path.dirname(os.path.abspath(CONFIG_FILE))
-    logger.debug(f"Config directory: {config_dir}")
+    # Get the project root directory for path resolution
+    # If config is in .freecad_tools/, resolve paths relative to parent (project root)
+    # If config is in root (legacy), resolve relative to current directory
+    config_path = os.path.abspath(CONFIG_FILE)
+    config_dir = os.path.dirname(config_path)
+    if os.path.basename(config_dir) == ".freecad_tools":
+        # Config is in .freecad_tools/, use parent directory as base
+        base_dir = os.path.dirname(config_dir)
+    else:
+        # Config is in project root (legacy), use its directory as base
+        base_dir = config_dir
+    logger.debug(f"Base directory for path resolution: {base_dir}")
 
     with open(CONFIG_FILE) as f:
         content = f.read()
@@ -254,13 +263,13 @@ def load_config():
     logger.debug(f"Export list type: {type(result)}, length: {len(result) if isinstance(result, list) else 'N/A'}")
     logger.debug(f"Export list: {result}")
 
-    # Resolve relative paths in config items relative to config file directory
+    # Resolve relative paths in config items relative to project root
     for item in result:
         # List of path fields to resolve
         path_fields = ["source", "output", "template", "stl_output_dir"]
         for field in path_fields:
             if field in item and item[field]:
-                resolved = resolve_relative_path(item[field], config_dir)
+                resolved = resolve_relative_path(item[field], base_dir)
                 if resolved != item[field]:
                     logger.debug(f"Resolved {field} to: {resolved}")
                 item[field] = resolved

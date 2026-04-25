@@ -5,14 +5,14 @@ minimum_pre_commit_version: "2.13.0"
 repos:
   # Security & secret detection
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.22.1
+    rev: v8.30.0
     hooks:
       - id: gitleaks
         stages: [pre-commit]
 
   # Fast Python linting, formatting, and import sorting (Ruff)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.7
+    rev: v0.15.12
     hooks:
       - id: ruff
         name: Ruff lint
@@ -29,7 +29,7 @@ repos:
 
   # YAML validation
   - repo: https://github.com/adrienverge/yamllint
-    rev: v1.35.1
+    rev: v1.38.0
     hooks:
       - id: yamllint
         name: Lint YAML files
@@ -40,7 +40,7 @@ repos:
 
   # Generic pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
         name: Trim trailing whitespace

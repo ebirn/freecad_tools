@@ -9,9 +9,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "ruff",
-    "pylint",
-    "yamllint",
+    "ruff==0.15.12",
+    "yamllint==1.38.0",
+    "pylint==4.0.5",
 ]
 
 [build-system]
