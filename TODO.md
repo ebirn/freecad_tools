@@ -155,6 +155,218 @@ export:
 
 ---
 
+### 6. TechDraw PDF Export & Bill of Materials [MEDIUM PRIORITY]
+**Status**: NOT STARTED
+**Branch**: `agent_techdraw_export`
+**Effort**: Medium-High (3-5 hours)
+**Impact**: High - Completes the design-to-production pipeline
+
+**Description**: Export technical drawings as PDF and generate a bill of materials (BOM) from FreeCAD projects. BOM could be standalone or extracted from TechDraw pages.
+
+**Research Needed**:
+- [ ] Investigate FreeCAD TechDraw workbench API for headless PDF export
+- [ ] Determine best BOM source: TechDraw BOM table vs Part/Assembly inspection
+- [ ] Evaluate output formats for BOM (CSV, PDF table, embedded in TechDraw)
+
+**Tasks**:
+- [ ] Implement TechDraw page detection and PDF export via freecadcmd
+- [ ] Implement BOM extraction (parts list, quantities, materials)
+- [ ] Extend export config schema with `techdraw` and `bom` sections
+- [ ] Handle multiple TechDraw pages per document
+- [ ] Test with example FreeCAD documents containing TechDraw pages
+- [ ] Document in README.md
+
+**Possible Config Format**:
+```yaml
+export:
+  - name: MyProject
+    source: MyProject.FCStd
+    bodies: [Body]
+    output: prints/MyProject.3mf
+    techdraw:
+      pages: []              # Empty = all pages, or list specific page labels
+      output: docs/MyProject_drawing.pdf
+    bom:
+      output: docs/MyProject_bom.csv
+      format: csv            # csv, or pdf (as TechDraw table)
+```
+
+**Files to Modify/Create**:
+- `tools/fc_export.py` - TechDraw PDF export, BOM extraction
+- `tools/export.py` - Config handling for new sections
+- `README.md`
+
+---
+
+### 7. Printables.com Upload & Publishing [LOW PRIORITY]
+**Status**: NOT STARTED
+**Branch**: `agent_printables_upload`
+**Effort**: High (5-10 hours)
+**Impact**: High - Closes the design-to-publish loop
+**Depends on**: #6 TechDraw PDF Export & BOM
+
+**Description**: Upload exported project artifacts (3MF, STL, PDF drawings, BOM) to Printables.com, including build/assembly instructions from a project markdown file.
+
+**Key Constraint**: Printables.com has **no public API** (as of 2026). Options:
+1. **Browser automation** (Selenium/Playwright) - fragile, breaks on site changes
+2. **Undocumented GraphQL API** - reverse-engineer from browser DevTools, no stability guarantee
+3. **Preparation-only mode** - package everything into a zip/folder ready for manual upload, with metadata pre-filled (title, description, tags, license) so the user only drags & drops
+
+Recommendation: Start with option 3 (prepare upload package), add option 1 or 2 later if a stable API surface emerges.
+
+**Build Instructions**:
+- User creates `INSTRUCTIONS.md` (or similar) in the project directory
+- Markdown is converted to HTML/plain text for the Printables description field
+- Could include images referenced from a `docs/` or `images/` folder
+- Config points to the instructions file
+
+**Research Needed**:
+- [ ] Monitor Printables for public API announcements
+- [ ] Reverse-engineer GraphQL endpoint (browser DevTools) to assess feasibility
+- [ ] Evaluate Playwright vs Selenium for browser automation robustness
+- [ ] Determine Printables upload form fields (title, description, category, license, tags, files)
+- [ ] Investigate Printables markdown/HTML support in description field
+
+**Phase A - Upload Package Preparation** (no API needed):
+- [ ] Define `printables` config section in export.yml
+- [ ] Collect all export artifacts (3MF, STL, PDF, BOM) into a staging folder
+- [ ] Convert INSTRUCTIONS.md to Printables-compatible description (HTML/text)
+- [ ] Generate `printables_metadata.json` with title, description, tags, license, category
+- [ ] Create zip archive ready for manual upload
+- [ ] Copy description to clipboard (optional convenience)
+- [ ] Document in README.md
+
+**Phase B - Automated Upload** (requires API or browser automation):
+- [ ] Implement Printables authentication (token or browser session)
+- [ ] Implement model creation/update via GraphQL or Selenium
+- [ ] Upload files (3MF, STL, PDF, images)
+- [ ] Set description, tags, license, category
+- [ ] Handle model updates (detect existing model, update files)
+- [ ] Add `--dry-run` mode for testing without actual upload
+- [ ] Test with real Printables account
+- [ ] Document in README.md
+
+**Possible Config Format**:
+```yaml
+export:
+  - name: MyAntenna
+    source: MyAntenna.FCStd
+    bodies: [Feed, Cover]
+    output: prints/MyAntenna.3mf
+    techdraw:
+      output: docs/MyAntenna_drawing.pdf
+    bom:
+      output: docs/MyAntenna_bom.csv
+
+    printables:
+      title: "VHF Yagi Antenna - 3D Printed"
+      description_file: INSTRUCTIONS.md    # Build instructions markdown
+      category: "Hobby & DIY"
+      tags: [antenna, ham-radio, yagi, vhf]
+      license: "CC-BY-SA-4.0"
+      files:                               # Auto-collected if omitted
+        - prints/MyAntenna.3mf
+        - prints/stl/*.stl
+        - docs/MyAntenna_drawing.pdf
+        - docs/MyAntenna_bom.csv
+      images:                              # Photos/renders for listing
+        - docs/images/assembled.jpg
+        - docs/images/printing.jpg
+      staging_dir: .printables_upload/     # Where to prepare the package
+```
+
+**Files to Create/Modify**:
+- `tools/printables_prep.py` - Upload package preparation (Phase A)
+- `tools/printables_upload.py` - Automated upload (Phase B, later)
+- `tools/export.py` - Integrate printables step into pipeline
+- `README.md`
+
+---
+
+### 8. Explicit Body Selection Mode: Config vs FreeCAD Properties [HIGH PRIORITY]
+**Status**: NOT STARTED
+**Branch**: `agent_body_selection_mode`
+**Effort**: Medium (3-4 hours)
+**Impact**: High - Fixes ambiguity in current design, adds missing property-driven features
+
+**Description**: Currently the body selection system is ambiguous: `bodies: []` is supposed to use FreeCAD-marked bodies, but the two modes (config-driven vs property-driven) can be mixed in confusing ways. This feature makes the mode **explicit** in the config and extends the FreeCAD property system with orientation and count.
+
+**Problem**:
+- Current `bodies: []` silently means "use marked bodies" - not obvious
+- `find_exportable_bodies()` in macro_helper.py isn't actually wired into fc_export.py pipeline
+- No way to specify orientation or count via FreeCAD body properties
+- User could accidentally mix both approaches with undefined behavior
+
+**Design**: Add an explicit `body_source` field to config:
+
+```yaml
+export:
+  - name: MyProject
+    source: MyProject.FCStd
+    body_source: config          # "config" or "properties" - REQUIRED if bodies listed
+    bodies:                      # Only used when body_source: config
+      - Feed001
+      - body: "Cover"
+        rotation: [0, 0, 45]
+
+  - name: AutoProject
+    source: AutoProject.FCStd
+    body_source: properties      # Read everything from FreeCAD body properties
+    output: prints/AutoProject.3mf
+    # No bodies list needed - reads from FreeCAD properties
+```
+
+**FreeCAD Custom Properties** (on each body, when `body_source: properties`):
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `ExportTo3MF` | Bool | Yes | Mark body for export (existing) |
+| `ExportCount` | Int | No | Number of copies to export (default: 1) |
+| `ExportRotation` | String | No | "X,Y,Z" degrees, e.g. "0,0,45" |
+| `ExportPosition` | String | No | "X,Y,Z" mm offset, e.g. "10,0,5" (per-copy offset TBD) |
+
+Notes on position: For multiple copies (`ExportCount > 1`), position could be:
+- Same position for all (user arranges in slicer)
+- Auto-arrayed with configurable spacing
+- Defined per-copy (would need list property - complex)
+
+Recommendation: Start without position in properties mode. Orientation is the key need. Position is better handled in config mode where per-body control is natural.
+
+**Tasks**:
+
+*Phase 1 - Make mode explicit, wire up property reading:*
+- [ ] Add `body_source` field to config schema (`config` | `properties`)
+- [ ] Validate: error if `body_source: config` but `bodies` is empty
+- [ ] Validate: error if `body_source: properties` but `bodies` is non-empty
+- [ ] Backwards compat: if `body_source` omitted, infer from `bodies` presence (warn about deprecation)
+- [ ] Wire `find_exportable_bodies()` into fc_export.py for `body_source: properties`
+- [ ] Read `ExportTo3MF` property to select bodies (existing logic)
+- [ ] Add tests for mode validation and selection
+
+*Phase 2 - Extend properties with orientation and count:*
+- [ ] Read `ExportCount` property (default 1)
+- [ ] Read `ExportRotation` property, parse "X,Y,Z" string to rotation tuple
+- [ ] Generate duplicate entries with rotation when count > 1
+- [ ] Feed property-derived body specs into existing `parse_body_specs` pipeline
+- [ ] Add `set_export_properties()` helper to macro_helper.py for convenience
+- [ ] Add tests for property reading and transform parsing
+
+*Phase 3 - Documentation and tooling:*
+- [ ] Document both modes clearly in README.md
+- [ ] Add FreeCAD macro to set export properties via dialog
+- [ ] Update example config with both modes
+- [ ] Migration guide for existing users
+
+**Files to Modify**:
+- `tools/fc_export.py` - body_source validation, property reading, pipeline wiring
+- `macros/macro_helper.py` - extend find_exportable_bodies() with orientation/count
+- `tests/test_export_config.py` - body_source validation tests
+- `tests/test_lib3mf_utils.py` - property-driven export tests
+- `examples/export_config.yml.example.yml` - both modes
+- `README.md`
+
+---
+
 ## Phase 1 Features - Completed ✅
 
 ### Completed in Previous Session
