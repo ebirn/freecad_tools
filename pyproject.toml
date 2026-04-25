@@ -2,7 +2,7 @@
 name = "freecad-tools"
 version = "0.1.0"
 description = ""
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
     "PyYAML",
     "lib3mf==2.5.0",
@@ -29,7 +29,7 @@ build-backend = "setuptools.build_meta"
 # Ruff configuration - fast Python linting and formatting
 [tool.ruff]
 line-length = 120
-target-version = "py37"
+target-version = "py310"
 include = ["*.py", "*.pyi"]
 exclude = [
     ".git",

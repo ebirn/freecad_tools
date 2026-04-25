@@ -1,8 +1,30 @@
 """Pytest configuration and shared fixtures for freecad_tools tests."""
 
+import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
+
+# Mock FreeCAD and related modules before any code imports them
+# This prevents import errors when running tests without FreeCAD installed
+sys.modules["FreeCAD"] = MagicMock()
+sys.modules["FreeCADGui"] = MagicMock()
+sys.modules["Mesh"] = MagicMock()
+sys.modules["Part"] = MagicMock()
+sys.modules["Draft"] = MagicMock()
+sys.modules["Sketcher"] = MagicMock()
+sys.modules["Spreadsheet"] = MagicMock()
+
+
+# Mock sys.exit to prevent fc_export.py from calling sys.exit() during import
+def mock_exit(code=0):
+    """Mock sys.exit to prevent termination during module import."""
+    # During testing, we want to continue rather than exit
+    pass
+
+
+sys.exit = mock_exit
 
 
 def pytest_configure(config):
