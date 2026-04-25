@@ -13,12 +13,11 @@ Provides functions to:
 import logging
 import subprocess
 from pathlib import Path
-from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
 
-def run_git_command(command: str, cwd: str = None) -> Optional[str]:
+def run_git_command(command: str, cwd: str = None) -> str | None:
     """
     Run a git command and return its output.
 
@@ -60,7 +59,7 @@ def is_git_repo(path: str) -> bool:
     return run_git_command("rev-parse --git-dir", cwd=path) is not None
 
 
-def get_commit_hash(cwd: str = None, short: bool = False) -> Optional[str]:
+def get_commit_hash(cwd: str = None, short: bool = False) -> str | None:
     """
     Get the current git commit hash.
 
@@ -75,7 +74,7 @@ def get_commit_hash(cwd: str = None, short: bool = False) -> Optional[str]:
     return run_git_command(command, cwd=cwd)
 
 
-def get_branch_name(cwd: str = None) -> Optional[str]:
+def get_branch_name(cwd: str = None) -> str | None:
     """
     Get the current git branch name.
 
@@ -88,7 +87,7 @@ def get_branch_name(cwd: str = None) -> Optional[str]:
     return run_git_command("rev-parse --abbrev-ref HEAD", cwd=cwd)
 
 
-def get_branch_name_or_detached(cwd: str = None) -> Optional[str]:
+def get_branch_name_or_detached(cwd: str = None) -> str | None:
     """
     Get the current git branch name or "(detached)" if in detached HEAD state.
 
@@ -104,7 +103,7 @@ def get_branch_name_or_detached(cwd: str = None) -> Optional[str]:
     return branch
 
 
-def get_tags(cwd: str = None) -> Optional[str]:
+def get_tags(cwd: str = None) -> str | None:
     """
     Get git tags for the current commit.
 
@@ -118,7 +117,7 @@ def get_tags(cwd: str = None) -> Optional[str]:
     return tags if tags else None
 
 
-def get_remote_url(cwd: str = None, remote: str = "origin") -> Optional[str]:
+def get_remote_url(cwd: str = None, remote: str = "origin") -> str | None:
     """
     Get git remote URL.
 
@@ -132,7 +131,7 @@ def get_remote_url(cwd: str = None, remote: str = "origin") -> Optional[str]:
     return run_git_command(f"config --get remote.{remote}.url", cwd=cwd)
 
 
-def get_git_metadata(cwd: str = None) -> Dict[str, Optional[str]]:
+def get_git_metadata(cwd: str = None) -> dict[str, str | None]:
     """
     Get comprehensive git metadata for the current directory.
 
