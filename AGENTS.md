@@ -514,7 +514,7 @@ git push --no-verify
   - 100x faster than traditional tools
   - Replaces Black + isort + Flake8
   - Latest version: 0.11.7
-  
+
 - **Pylint** - Deep Python code analysis
   - Catches complex logical errors
   - Runs only on pre-push to avoid slowing down commits

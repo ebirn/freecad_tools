@@ -15,4 +15,3 @@ export:
     keep_stl: true
     # Directory to store STL files (only used if keep_stl is true)
     stl_output_dir: prints/stl
-

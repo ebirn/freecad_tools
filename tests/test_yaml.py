@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-import yaml
 import os
+
+import yaml
 
 CONFIG_FILE = "export_config.yml"
 
 print(f"Looking for config file: {CONFIG_FILE}")
 print(f"File exists: {os.path.exists(CONFIG_FILE)}")
 
-with open(CONFIG_FILE, "r") as f:
+with open(CONFIG_FILE) as f:
     content = f.read()
     print(f"Content: {repr(content)}")
-    
+
 config = yaml.safe_load(content)
 print(f"Parsed config: {config}")
 

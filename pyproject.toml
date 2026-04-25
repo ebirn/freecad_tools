@@ -48,10 +48,6 @@ ignore = [
     "E501",  # Line too long (we prefer to handle this selectively)
 ]
 
-[tool.ruff.lint.isort]
-profile = "black"
-line-length = 120
-
 # Pylint configuration - deep code analysis
 [tool.pylint.messages_control]
 disable = [

@@ -1,4 +1,4 @@
-default_stages: [commit]
+default_stages: [pre-commit]
 fail_fast: true
 minimum_pre_commit_version: "2.13.0"
 
@@ -8,7 +8,7 @@ repos:
     rev: v8.22.1
     hooks:
       - id: gitleaks
-        stages: [commit]
+        stages: [pre-commit]
 
   # Fast Python linting, formatting, and import sorting (Ruff)
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -19,13 +19,13 @@ repos:
         description: Lint Python files and fix errors automatically
         args: [--fix]
         types_or: [python, pyi]
-        stages: [commit]
-      
+        stages: [pre-commit]
+
       - id: ruff-format
         name: Ruff format
         description: Format Python files
         types_or: [python, pyi]
-        stages: [commit]
+        stages: [pre-commit]
 
   # YAML validation
   - repo: https://github.com/adrienverge/yamllint
@@ -36,7 +36,7 @@ repos:
         description: Check YAML syntax and style
         args: [--strict, -c=.yamllint]
         types: [yaml]
-        stages: [commit]
+        stages: [pre-commit]
 
   # Generic pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -45,42 +45,41 @@ repos:
       - id: trailing-whitespace
         name: Trim trailing whitespace
         description: Trim trailing whitespace
-        stages: [commit]
-      
+        stages: [pre-commit]
+
       - id: end-of-file-fixer
         name: Fix end of file
         description: Ensure files end with a newline
-        stages: [commit]
-      
+        stages: [pre-commit]
+
       - id: check-yaml
         name: Check YAML syntax
         description: Check YAML files for syntax errors
-        stages: [commit]
-      
+        stages: [pre-commit]
+
       - id: check-json
         name: Check JSON syntax
         description: Check JSON files for syntax errors
-        stages: [commit]
-      
+        stages: [pre-commit]
+
       - id: check-added-large-files
         name: Check for large files
         description: Prevent giant files from being committed
         args: [--maxkb=1000]
-        stages: [commit]
+        stages: [pre-commit]
 
   # Slower deep analysis (pre-push stage)
   - repo: https://github.com/pylint-dev/pylint
-    rev: pylint-3.0.5
+    rev: v3.3.1
     hooks:
       - id: pylint
         name: Pylint deep analysis
         description: Deep Python code analysis (runs on pre-push)
         additional_dependencies: [pylint]
-        args: [
-          --disable=all,
-          --enable=E,F,                    # Errors and fatal errors only
-          --max-line-length=120,
-          --good-names=i,j,k,ex,_,logger,
-        ]
+        args:
+          - --disable=all
+          - --enable=E,F
+          - --max-line-length=120
+          - --good-names=i,j,k,ex,_,logger
         types: [python]
-        stages: [push]
+        stages: [pre-push]

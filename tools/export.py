@@ -19,8 +19,9 @@ The config file should be YAML format with the following structure:
         stl_output_dir: stl/ (optional)
 """
 
-import sys
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 # Determine the script directory
@@ -46,8 +47,8 @@ if len(sys.argv) > 1:
     os.chdir(CONFIG_FILE.parent)
 
 # If no config argument, look in current directory
-elif os.path.exists('export_config.yml'):
-    CONFIG_FILE = Path('export_config.yml').resolve()  # Also make absolute
+elif os.path.exists("export_config.yml"):
+    CONFIG_FILE = Path("export_config.yml").resolve()  # Also make absolute
     # Config is in current directory, keep it
 
 # Build arguments for fc_export.py
@@ -56,7 +57,5 @@ if CONFIG_FILE:
     fc_args.append(str(CONFIG_FILE))
 
 # Run fc_export.py with the same Python interpreter
-import subprocess
-
 result = subprocess.run(fc_args, text=True)
 sys.exit(result.returncode)
