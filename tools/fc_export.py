@@ -223,6 +223,52 @@ def resolve_object_identifier(doc, identifier):
     return None, None, None
 
 
+def parse_body_specs(bodies_config):
+    """
+    Parse body specifications from config, handling both simple and complex formats.
+
+    Body specs can be:
+    - String: Simple body identifier (Name or Label)
+    - Dict: Object with 'body' field and optional 'rotation' and 'position' transforms
+
+    Args:
+        bodies_config: List of body specifications (strings or dicts)
+
+    Returns:
+        List of tuples: (body_identifier, rotation_deg, position_mm)
+        where rotation_deg and position_mm are None if not specified
+    """
+    parsed = []
+
+    for body_spec in bodies_config:
+        if isinstance(body_spec, str):
+            # Simple string format: just the body identifier
+            parsed.append((body_spec, None, None))
+        elif isinstance(body_spec, dict):
+            # Complex format with optional transforms
+            body_id = body_spec.get("body")
+            if not body_id:
+                logger.warning(f"Body spec missing 'body' field: {body_spec}")
+                continue
+
+            rotation = body_spec.get("rotation")
+            position = body_spec.get("position")
+
+            # Validate rotation/position if provided
+            if rotation and len(rotation) != 3:
+                logger.warning(f"Invalid rotation (expected 3 values): {rotation}")
+                rotation = None
+            if position and len(position) != 3:
+                logger.warning(f"Invalid position (expected 3 values): {position}")
+                position = None
+
+            parsed.append((body_id, rotation, position))
+        else:
+            logger.warning(f"Unexpected body spec format: {body_spec}")
+
+    return parsed
+
+
 def resolve_relative_path(path, base_dir):
     """
     Resolve a path relative to a base directory.
@@ -452,7 +498,9 @@ def export_bodies_to_3mf_with_template(
 
     Args:
         doc: FreeCAD document
-        bodies: List of body identifiers (Name or Label) to export
+        bodies: List of body identifiers or specs. Can be:
+                - Strings: body Name or Label
+                - Dicts: {"body": "name", "rotation": [x,y,z], "position": [x,y,z]}
         output_path: Output 3MF file path
         template_path: Optional path to a template 3MF file
         keep_stl: If True, keep generated STL files in stl_output_dir
@@ -476,11 +524,16 @@ def export_bodies_to_3mf_with_template(
         stl_dir = temp_dir.name
 
     try:
+        # Parse body specifications (can include transforms)
+        parsed_bodies = parse_body_specs(bodies)
+        logger.debug(f"Parsed {len(parsed_bodies)} body specifications")
+
         # Export bodies to STL files
         stl_files = []
+        transforms = []  # Parallel list of transforms
         body_count = {}  # Track duplicate body exports
 
-        for body_id in bodies:
+        for body_id, rotation, position in parsed_bodies:
             # Resolve object by Name or Label
             obj, obj_name, obj_label = resolve_object_identifier(doc, body_id)
 
@@ -525,6 +578,17 @@ def export_bodies_to_3mf_with_template(
                     mesh_label = f"{export_name}_{obj_label}_{body_count[body_key]}"
 
                 stl_files.append((mesh_label, stl_file))
+
+                # Collect transform for this body
+                transform_dict = {}
+                if rotation:
+                    transform_dict["rotation"] = rotation
+                if position:
+                    transform_dict["position"] = position
+
+                transforms.append(transform_dict if transform_dict else None)
+                logger.debug(f"Body '{obj_label}': rotation={rotation}, position={position}")
+
             except Exception as e:
                 logger.error(f"Failed to create STL for '{obj_name}': {e}")
 
@@ -544,6 +608,13 @@ def export_bodies_to_3mf_with_template(
             "output_path": abs_output_path,
             "stl_files": [{"label": label, "path": path} for label, path in stl_files],
         }
+
+        # Add transforms if any are specified
+        if any(transforms):
+            lib3mf_config["transforms"] = [
+                {"rotation": t.get("rotation"), "position": t.get("position")} if t else None for t in transforms
+            ]
+            logger.debug(f"Added {len([t for t in transforms if t])} body transforms to lib3mf config")
 
         if template_path and os.path.exists(template_path):
             lib3mf_config["template_path"] = template_path

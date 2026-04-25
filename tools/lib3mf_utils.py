@@ -12,6 +12,7 @@ Usage:
 
 import json
 import logging
+import math
 import struct
 import sys
 from pathlib import Path
@@ -23,6 +24,69 @@ from lib3mf import get_wrapper
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="lib3mf_utils - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+
+def create_euler_transform(
+    rotation_deg: Optional[List[float]] = None, position: Optional[List[float]] = None
+) -> "lib3mf.Transform":
+    """
+    Create a 3MF transformation matrix from Euler angles and position.
+
+    Args:
+        rotation_deg: List of [X, Y, Z] rotation angles in degrees (optional).
+                     Applied in intrinsic order: X -> Y -> Z
+        position: List of [X, Y, Z] position offsets in mm (optional)
+
+    Returns:
+        lib3mf.Transform object with combined rotation and translation
+
+    Notes:
+        - Rotation uses intrinsic (body-relative) XYZ order
+        - Angles are in degrees and will be converted to radians internally
+        - Identity transform is used if no rotation/position specified
+    """
+    # Default to zeros if not provided
+    if rotation_deg is None:
+        rotation_deg = [0, 0, 0]
+    if position is None:
+        position = [0, 0, 0]
+
+    # Convert degrees to radians
+    rad_x = math.radians(rotation_deg[0])
+    rad_y = math.radians(rotation_deg[1])
+    rad_z = math.radians(rotation_deg[2])
+
+    # Pre-calculate sines and cosines
+    cx = math.cos(rad_x)
+    sx = math.sin(rad_x)
+    cy = math.cos(rad_y)
+    sy = math.sin(rad_y)
+    cz = math.cos(rad_z)
+    sz = math.sin(rad_z)
+
+    # Create transformation matrix with combined XYZ rotation
+    # Using intrinsic rotation order: Rz(Ry(Rx))
+    transform = lib3mf.Transform()
+
+    # Row 0 (X-axis output)
+    transform.Fields[0][0] = cy * cz
+    transform.Fields[0][1] = sx * sy * cz - cx * sz
+    transform.Fields[0][2] = cx * sy * cz + sx * sz
+    transform.Fields[0][3] = position[0]
+
+    # Row 1 (Y-axis output)
+    transform.Fields[1][0] = cy * sz
+    transform.Fields[1][1] = sx * sy * sz + cx * cz
+    transform.Fields[1][2] = cx * sy * sz - sx * cz
+    transform.Fields[1][3] = position[1]
+
+    # Row 2 (Z-axis output)
+    transform.Fields[2][0] = -sy
+    transform.Fields[2][1] = sx * cy
+    transform.Fields[2][2] = cx * cy
+    transform.Fields[2][3] = position[2]
+
+    return transform
 
 
 def convert_stl_to_lib3mf_mesh(stl_file_path: str, mesh_object) -> None:
@@ -136,6 +200,7 @@ def create_3mf_from_stls(
     output_path: str,
     template_path: Optional[str] = None,
     metadata: Optional[dict] = None,
+    transforms: Optional[List[dict]] = None,
 ) -> bool:
     """
     Create a 3MF file with embedded meshes from STL files using lib3mf.
@@ -146,6 +211,10 @@ def create_3mf_from_stls(
         template_path: Optional template 3MF file to copy metadata from
         metadata: Optional metadata dictionary to embed in the 3MF file
                  (keys like "Project", "Author", "Version", "GitCommit", "GitBranch", etc.)
+        transforms: Optional list of transform dictionaries matching stl_files order.
+                   Each transform dict can have:
+                   - "rotation": [x_deg, y_deg, z_deg] (degrees, optional)
+                   - "position": [x_mm, y_mm, z_mm] (millimeters, optional)
 
     Returns:
         True on success, False on failure
@@ -158,7 +227,7 @@ def create_3mf_from_stls(
         model = wrapper.CreateModel()
 
         # Add each STL as a mesh object
-        for body_label, stl_file_path in stl_files:
+        for i, (body_label, stl_file_path) in enumerate(stl_files):
             logger.info(f"Adding mesh object: {body_label}")
 
             # Create mesh object and set name
@@ -168,8 +237,18 @@ def create_3mf_from_stls(
             # Convert STL to mesh with vertex/triangle data
             convert_stl_to_lib3mf_mesh(stl_file_path, mesh_obj)
 
-            # Add to build (place on print bed with identity transform)
-            model.AddBuildItem(mesh_obj, wrapper.GetIdentityTransform())
+            # Get transform for this body (or use identity if not provided)
+            if transforms and i < len(transforms) and transforms[i]:
+                transform_data = transforms[i]
+                rotation = transform_data.get("rotation")
+                position = transform_data.get("position")
+                transform = create_euler_transform(rotation, position)
+                logger.info(f"Applied transform to {body_label}: rotation={rotation}, position={position}")
+            else:
+                transform = wrapper.GetIdentityTransform()
+
+            # Add to build with the specified transform
+            model.AddBuildItem(mesh_obj, transform)
 
         # Add metadata if provided
         if metadata:
@@ -203,6 +282,10 @@ def create_from_json_config(config_path: str) -> bool:
             {"label": "Body2", "path": "path/to/body2.stl"}
         ],
         "template_path": "path/to/template.3mf" (optional),
+        "transforms": [
+            {"rotation": [45, 0, 0], "position": [10, 0, 0]} (optional per body),
+            null (no transform)
+        ] (optional),
         "metadata": {
             "Project": "MyProject",
             "Author": "John Doe",
@@ -226,6 +309,7 @@ def create_from_json_config(config_path: str) -> bool:
         stl_files_config = config.get("stl_files", [])
         template_path = config.get("template_path")
         metadata = config.get("metadata")
+        transforms = config.get("transforms")
 
         if not output_path:
             logger.error("output_path not specified in config")
@@ -239,7 +323,7 @@ def create_from_json_config(config_path: str) -> bool:
         stl_files = [(item["label"], item["path"]) for item in stl_files_config]
 
         logger.info(f"Loading config from {config_path}")
-        return create_3mf_from_stls(stl_files, output_path, template_path, metadata)
+        return create_3mf_from_stls(stl_files, output_path, template_path, metadata, transforms)
 
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON in {config_path}: {e}")

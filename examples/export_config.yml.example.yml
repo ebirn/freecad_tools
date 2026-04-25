@@ -1,5 +1,5 @@
 export:
-  # Basic export example
+  # Basic export example - simple body list
   - name: Moxon_OE1EBG
     source: Moxon_OE1EBG.FCStd
     # Can specify bodies by Name (Body) or Label (Feed001, Cover001, etc) - more user-friendly
@@ -22,6 +22,29 @@ export:
       Version: "1.0"
       Author: "John Doe"
       # Git metadata is automatically added if available (GitCommit, GitBranch, etc)
+
+  # Advanced example: Bodies with orientation and positioning
+  - name: Moxon_With_Orientation
+    source: Moxon_OE1EBG.FCStd
+    # Bodies can be specified as strings (simple format) or objects with transforms
+    bodies:
+      # Simple string format - no transforms
+      - Feed001
+      # Object format - with optional rotation and position
+      - body: "Angle Round"
+        # Optional: rotation in degrees [X, Y, Z]
+        # Rotations are applied in intrinsic order: X -> Y -> Z
+        rotation: [0, 0, 45]
+      # Same body with different position
+      - body: "Angle Round"
+        rotation: [0, 0, 225]
+        # Optional: position offset in mm [X, Y, Z]
+        position: [10, 0, 0]
+    output: prints/Moxon_With_Orientation.3mf
+    metadata:
+      Project: "Moxon_OE1EBG_Oriented"
+      Version: "1.0"
+      Author: "Jane Doe"
 
   # Advanced example: Export only marked bodies
   - name: SelectiveExport
