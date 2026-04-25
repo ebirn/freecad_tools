@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Unit tests for lib3mf_utils.py."""
-import pytest
+
+import json
 import struct
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Add tools/ to path
 _test_dir = Path(__file__).parent
@@ -151,8 +154,9 @@ class Test3MFCreateFromSTLs:
     def test_creates_3mf_file(self, mock_get_wrapper, tmp_path):
         """Should create a valid 3MF file."""
         # Given
-        import lib3mf_utils
         from unittest.mock import MagicMock
+
+        import lib3mf_utils
 
         mock_wrapper = MagicMock()
         mock_model = MagicMock()
@@ -184,8 +188,9 @@ class Test3MFCreateFromSTLs:
     def test_handles_template(self, mock_get_wrapper, tmp_path):
         """Should handle optional template file."""
         # Given
-        import lib3mf_utils
         from unittest.mock import MagicMock
+
+        import lib3mf_utils
 
         mock_wrapper = MagicMock()
         mock_model = MagicMock()
@@ -206,9 +211,7 @@ class Test3MFCreateFromSTLs:
 
         # When - template path is passed
         with patch.object(lib3mf_utils, "convert_stl_to_lib3mf_mesh"):
-            result = lib3mf_utils.create_3mf_from_stls(
-                stl_files, str(output_file), template_path=str(template_file)
-            )
+            result = lib3mf_utils.create_3mf_from_stls(stl_files, str(output_file), template_path=str(template_file))
 
         # Then - template parameter is accepted
         assert result is True
@@ -229,8 +232,8 @@ class TestCreateFromJsonConfig:
     def test_rejects_empty_output_path(self, tmp_path):
         """Should reject config without output_path."""
         # Given
+
         import lib3mf_utils
-        import json
 
         config_file = tmp_path / "no_output.json"
         config_file.write_text('{"stl_files": []}')
@@ -268,6 +271,107 @@ class TestCreateFromJsonConfig:
         assert result is False  # Fails because STL doesn't exist, but JSON was valid
 
 
+class TestMetadataFunctions:
+    """Tests for metadata reading and merging functions."""
+
+    def test_read_metadata_from_nonexistent_file(self):
+        """Should return None for nonexistent template file."""
+        # Given
+        import lib3mf_utils
+
+        # When
+        result = lib3mf_utils.read_metadata_from_3mf("/nonexistent/template.3mf")
+
+        # Then
+        assert result is None
+
+    def test_merge_metadata_export_precedence(self):
+        """Should use export metadata over template metadata."""
+        # Given
+        import lib3mf_utils
+
+        template_meta = {"Title": "Template Title", "Version": "1.0"}
+        export_meta = {"Title": "Export Title", "Author": "John Doe"}
+
+        # When
+        result = lib3mf_utils.merge_metadata(template_meta, export_meta, precedence="export")
+
+        # Then
+        assert result["Title"] == "Export Title"  # Export overrides template
+        assert result["Author"] == "John Doe"  # Export provides new value
+        assert result["Version"] == "1.0"  # Template provides default
+
+    def test_merge_metadata_template_precedence(self):
+        """Should use template metadata over export metadata."""
+        # Given
+        import lib3mf_utils
+
+        template_meta = {"Title": "Template Title", "Version": "1.0"}
+        export_meta = {"Title": "Export Title", "Author": "John Doe"}
+
+        # When
+        result = lib3mf_utils.merge_metadata(template_meta, export_meta, precedence="template")
+
+        # Then
+        assert result["Title"] == "Template Title"  # Template overrides export
+        assert result["Author"] == "John Doe"  # Export provides new value
+        assert result["Version"] == "1.0"  # Template provides value
+
+    def test_merge_metadata_merge_mode(self):
+        """Should combine all metadata in merge mode."""
+        # Given
+        import lib3mf_utils
+
+        template_meta = {"Title": "Template Title", "Version": "1.0"}
+        export_meta = {"Title": "Export Title", "Author": "John Doe"}
+
+        # When
+        result = lib3mf_utils.merge_metadata(template_meta, export_meta, precedence="merge")
+
+        # Then
+        # In merge mode, export should still take precedence for conflicts
+        assert result["Title"] == "Export Title"
+        assert result["Author"] == "John Doe"
+        assert result["Version"] == "1.0"
+
+    def test_merge_metadata_with_none_template(self):
+        """Should handle None template metadata."""
+        # Given
+        import lib3mf_utils
+
+        export_meta = {"Title": "Export Title", "Author": "John Doe"}
+
+        # When
+        result = lib3mf_utils.merge_metadata(None, export_meta, precedence="export")
+
+        # Then
+        assert result == export_meta
+
+    def test_merge_metadata_with_none_export(self):
+        """Should handle None export metadata."""
+        # Given
+        import lib3mf_utils
+
+        template_meta = {"Title": "Template Title", "Version": "1.0"}
+
+        # When
+        result = lib3mf_utils.merge_metadata(template_meta, None, precedence="export")
+
+        # Then
+        assert result == template_meta
+
+    def test_merge_metadata_with_both_none(self):
+        """Should return empty dict when both are None."""
+        # Given
+        import lib3mf_utils
+
+        # When
+        result = lib3mf_utils.merge_metadata(None, None, precedence="export")
+
+        # Then
+        assert result == {}
+
+
 class TestSTLCreation:
     """Tests for STL file creation helper."""
 
@@ -296,10 +400,10 @@ class TestSTLCreation:
 
             # Read triangles
             for _ in range(tri_count):
-                normal = struct.unpack("<fff", f.read(12))
+                struct.unpack("<fff", f.read(12))  # normal (ignored)
                 for _ in range(3):
-                    vertex = struct.unpack("<fff", f.read(12))
-                attr = struct.unpack("<H", f.read(2))
+                    struct.unpack("<fff", f.read(12))  # vertex (ignored)
+                struct.unpack("<H", f.read(2))  # attribute (ignored)
 
 
 if __name__ == "__main__":

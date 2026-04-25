@@ -89,6 +89,114 @@ def create_euler_transform(
     return transform
 
 
+def read_metadata_from_3mf(template_path: str) -> Optional[dict]:
+    """
+    Read metadata from an existing 3MF template file.
+
+    Args:
+        template_path: Path to the template 3MF file
+
+    Returns:
+        Dictionary of metadata key-value pairs, or None if file doesn't exist or has no metadata
+
+    Notes:
+        - Returns only the metadata entries (name and value pairs)
+        - Ignores namespace and type information
+        - Returns empty dict if file exists but has no metadata
+    """
+    if not template_path or not Path(template_path).exists():
+        logger.warning(f"Template file not found: {template_path}")
+        return None
+
+    try:
+        wrapper = get_wrapper()
+        model = wrapper.CreateModel()
+
+        # Read template 3MF file
+        reader = model.QueryReader("3mf")
+        reader.SetStrictModeActive(False)
+        reader.ReadFromFile(template_path)
+
+        # Extract metadata
+        metadata_dict = {}
+        metadata_group = model.GetMetaDataGroup()
+        metadata_count = metadata_group.GetMetaDataCount()
+
+        logger.debug(f"Reading {metadata_count} metadata entries from template: {template_path}")
+
+        for i in range(metadata_count):
+            meta = metadata_group.GetMetaData(i)
+            name = meta.GetName()
+            value = meta.GetValue()
+            metadata_dict[name] = value
+            logger.debug(f"  Template metadata: {name} = {value}")
+
+        if metadata_count == 0:
+            logger.info(f"Template file has no metadata: {template_path}")
+            return {}
+
+        logger.info(f"Extracted {len(metadata_dict)} metadata entries from template")
+        return metadata_dict
+
+    except Exception as e:
+        logger.error(f"Failed to read metadata from template: {e}")
+        import traceback
+
+        logger.debug(traceback.format_exc())
+        return None
+
+
+def merge_metadata(
+    template_metadata: Optional[dict], export_metadata: Optional[dict], precedence: str = "export"
+) -> dict:
+    """
+    Merge template and export metadata with precedence rules.
+
+    Args:
+        template_metadata: Metadata from template 3MF file (lower priority)
+        export_metadata: Metadata from export config (higher priority by default)
+        precedence: Which metadata takes precedence:
+                   - "export" (default): Export metadata overrides template
+                   - "template": Template metadata overrides export
+                   - "merge": Combine without overrides (all keys preserved)
+
+    Returns:
+        Merged metadata dictionary
+
+    Notes:
+        - "export" mode: Start with template, add/override with export metadata
+        - "template" mode: Start with export, add/override with template metadata
+        - "merge" mode: Combine all, with export taking precedence
+    """
+    result = {}
+
+    if not template_metadata:
+        template_metadata = {}
+    if not export_metadata:
+        export_metadata = {}
+
+    if precedence == "template":
+        # Template takes precedence: start with export, override with template
+        result.update(export_metadata)
+        result.update(template_metadata)
+        logger.debug("Merge precedence: template > export")
+
+    elif precedence == "merge":
+        # Merge all keys, with export taking precedence
+        result.update(template_metadata)
+        result.update(export_metadata)
+        logger.debug("Merge precedence: export > template (merge mode)")
+
+    else:  # "export" (default)
+        # Export takes precedence: start with template, override with export
+        result.update(template_metadata)
+        result.update(export_metadata)
+        logger.debug("Merge precedence: export > template (default)")
+
+    logger.debug(f"Final merged metadata: {len(result)} keys")
+    return result
+
+
 def convert_stl_to_lib3mf_mesh(stl_file_path: str, mesh_object) -> None:
     """
     Parse a binary STL file and add its mesh data to a lib3mf mesh object.
@@ -251,8 +359,21 @@ def create_3mf_from_stls(
             model.AddBuildItem(mesh_obj, transform)
 
         # Add metadata if provided
-        if metadata:
-            add_metadata_to_model(model, metadata)
+        if metadata or template_path:
+            # Read template metadata if provided
+            template_metadata = None
+            if template_path:
+                template_metadata = read_metadata_from_3mf(template_path)
+                if template_metadata:
+                    logger.info(f"Loaded {len(template_metadata)} metadata entries from template")
+
+            # Merge template and export metadata
+            if template_metadata or metadata:
+                merged_metadata = merge_metadata(template_metadata, metadata, precedence="export")
+                logger.debug(f"Final metadata: {list(merged_metadata.keys())}")
+                add_metadata_to_model(model, merged_metadata)
+            else:
+                logger.debug("No metadata to add (no template, no export metadata)")
 
         # Write to file
         logger.info(f"Writing 3MF to {output_path}")
