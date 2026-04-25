@@ -37,3 +37,4 @@ jobs:
       # Integration tests (test_3mf.py, test_export.py) require FreeCAD and are skipped here
       - name: Unit tests
         run: uv run pytest tests/test_git_utils.py tests/test_lib3mf_utils.py tests/test_export_config.py -v
+
