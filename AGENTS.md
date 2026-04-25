@@ -304,13 +304,60 @@ export:
 
 ### Testing
 1. **Unit tests**: Add to `tests/` directory (not yet created)
-2. **Integration tests**: Test full pipeline with sample FCStd files
+2. **Integration tests**: Test full pipeline with sample FCStd files in `examples/`
 3. **Regression tests**: Ensure 3MF output remains valid across changes
 
 ### Code Organization
 - All Python code uses logging module (not print statements)
 - Relative paths preferred for portability
 - Subprocess calls for tool isolation (FreeCAD vs venv Python)
+
+---
+
+## Example Files for Development & Testing
+
+Located in `examples/` directory:
+
+- **`example.FCStd`** - Sample FreeCAD document for testing exports
+  - Contains simple geometry to test the full export pipeline
+  - Use with `examples/export_config.yml.example.yml` for testing
+
+- **`example.3mf`** - Sample 3MF output for reference/testing
+  - Shows expected structure of generated 3MF files
+  - Can inspect with `unzip -l example.3mf` to view internal structure
+
+- **`export_config.yml.example.yml`** - Template export configuration
+  - Copy to `.freecad_tools/export.yml` in your test project
+  - Update paths to point to your FCStd files
+  - Shows all available config options with comments
+
+- **`pre-commit-config.yaml.example`** - Pre-commit hook configuration template
+  - Copy to `.pre-commit-config.yaml` in your test project
+  - Configures freecad-export hooks with correct repository reference
+
+### Quick Development Test
+
+```bash
+# 1. Set up a test project directory
+mkdir test_project
+cd test_project
+
+# 2. Copy example configs
+cp ../freecad_tools/examples/export_config.yml.example.yml .freecad_tools/export.yml
+cp ../freecad_tools/examples/example.FCStd .
+
+# 3. Update export.yml to reference example.FCStd
+# Edit .freecad_tools/export.yml and update:
+#   source: example.FCStd
+#   bodies: [Body, Body001, ...]  (check with FreeCAD GUI)
+
+# 4. Run export
+python3 ../freecad_tools/tools/fc_export.py
+
+# 5. Check output
+ls -lh prints/example.3mf
+unzip -l prints/example.3mf | grep model
+```
 
 ---
 
