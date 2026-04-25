@@ -26,6 +26,9 @@ python_functions = ["test_*"]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.packages.find]
+exclude = ["hooks*", "macros*", "templates*", "tests*", "examples*"]
+
 # Ruff configuration - fast Python linting and formatting
 [tool.ruff]
 line-length = 120
