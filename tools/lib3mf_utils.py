@@ -16,7 +16,6 @@ import math
 import struct
 import sys
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 import lib3mf
 from lib3mf import get_wrapper
@@ -27,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_euler_transform(
-    rotation_deg: Optional[List[float]] = None, position: Optional[List[float]] = None
+    rotation_deg: list[float] | None = None, position: list[float] | None = None
 ) -> "lib3mf.Transform":
     """
     Create a 3MF transformation matrix from Euler angles and position.
@@ -89,7 +88,7 @@ def create_euler_transform(
     return transform
 
 
-def read_metadata_from_3mf(template_path: str) -> Optional[dict]:
+def read_metadata_from_3mf(template_path: str) -> dict | None:
     """
     Read metadata from an existing 3MF template file.
 
@@ -146,9 +145,7 @@ def read_metadata_from_3mf(template_path: str) -> Optional[dict]:
         return None
 
 
-def merge_metadata(
-    template_metadata: Optional[dict], export_metadata: Optional[dict], precedence: str = "export"
-) -> dict:
+def merge_metadata(template_metadata: dict | None, export_metadata: dict | None, precedence: str = "export") -> dict:
     """
     Merge template and export metadata with precedence rules.
 
@@ -282,7 +279,7 @@ def convert_stl_to_lib3mf_mesh(stl_file_path: str, mesh_object) -> None:
         raise
 
 
-def add_metadata_to_model(model, metadata: Optional[dict] = None) -> None:
+def add_metadata_to_model(model, metadata: dict | None = None) -> None:
     """
     Add metadata to a 3MF model.
 
@@ -304,11 +301,11 @@ def add_metadata_to_model(model, metadata: Optional[dict] = None) -> None:
 
 
 def create_3mf_from_stls(
-    stl_files: List[Tuple[str, str]],
+    stl_files: list[tuple[str, str]],
     output_path: str,
-    template_path: Optional[str] = None,
-    metadata: Optional[dict] = None,
-    transforms: Optional[List[dict]] = None,
+    template_path: str | None = None,
+    metadata: dict | None = None,
+    transforms: list[dict] | None = None,
 ) -> bool:
     """
     Create a 3MF file with embedded meshes from STL files using lib3mf.
@@ -329,6 +326,14 @@ def create_3mf_from_stls(
     """
     try:
         logger.info(f"Creating 3MF with {len(stl_files)} meshes")
+
+        # Read template metadata BEFORE creating the main model
+        # This avoids potential conflicts with lib3mf's wrapper state
+        template_metadata = None
+        if template_path:
+            template_metadata = read_metadata_from_3mf(template_path)
+            if template_metadata:
+                logger.info(f"Loaded {len(template_metadata)} metadata entries from template")
 
         # Create a new 3MF model
         wrapper = get_wrapper()
@@ -359,21 +364,14 @@ def create_3mf_from_stls(
             model.AddBuildItem(mesh_obj, transform)
 
         # Add metadata if provided
-        if metadata or template_path:
-            # Read template metadata if provided
-            template_metadata = None
-            if template_path:
-                template_metadata = read_metadata_from_3mf(template_path)
-                if template_metadata:
-                    logger.info(f"Loaded {len(template_metadata)} metadata entries from template")
-
+        if metadata or template_metadata:
             # Merge template and export metadata
-            if template_metadata or metadata:
-                merged_metadata = merge_metadata(template_metadata, metadata, precedence="export")
+            merged_metadata = merge_metadata(template_metadata, metadata, precedence="export")
+            if merged_metadata:
                 logger.debug(f"Final metadata: {list(merged_metadata.keys())}")
                 add_metadata_to_model(model, merged_metadata)
             else:
-                logger.debug("No metadata to add (no template, no export metadata)")
+                logger.debug("No metadata to add")
 
         # Write to file
         logger.info(f"Writing 3MF to {output_path}")
