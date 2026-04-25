@@ -1,5 +1,7 @@
 # FreeCAD Tools - Project Documentation for Agents
 
+**IMPORTANT**: This file provides process guidance, architecture overview, and development context. **Task tracking is in TODO.md - NOT in this file.** Refer to TODO.md for open tasks and feature status.
+
 ## Project Overview
 
 **freecad_tools** is a collection of Python utilities for working with FreeCAD designs, enabling:
