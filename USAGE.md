@@ -6,9 +6,10 @@ This guide covers the new features added to freecad_tools for macros, metadata, 
 
 1. [Macro Configuration](#macro-configuration)
 2. [Body Marking System](#body-marking-system)
-3. [Metadata in 3MF Files](#metadata-in-3mf-files)
-4. [Git Integration](#git-integration)
-5. [Macro Helper API](#macro-helper-api)
+3. [Body Orientation and Positioning](#body-orientation-and-positioning)
+4. [Metadata in 3MF Files](#metadata-in-3mf-files)
+5. [Git Integration](#git-integration)
+6. [Macro Helper API](#macro-helper-api)
 
 ## Macro Configuration
 
@@ -86,6 +87,115 @@ doc = FreeCAD.ActiveDocument
 marked_bodies = find_exportable_bodies(doc)
 print(f"Found {len(marked_bodies)} marked bodies: {marked_bodies}")
 ```
+
+## Body Orientation and Positioning
+
+### Why Use Body Orientation?
+
+Instead of rotating models in PrusaSlicer after export, you can specify body orientations directly in the export configuration. This allows you to:
+
+- Pre-position bodies for optimal printing
+- Export multiple copies of the same body in different orientations
+- Preserve intended positioning across multiple exports
+- Avoid manual adjustments in the slicer
+
+### Specifying Body Transforms
+
+Bodies can be specified in two formats:
+
+**Simple Format (String):**
+```yaml
+bodies:
+  - Feed001
+  - "Angle Round"
+```
+
+**Transform Format (Object):**
+```yaml
+bodies:
+  - body: "Angle Round"
+    rotation: [45, 0, 0]    # X, Y, Z rotation in degrees
+    position: [10, 0, 5]    # X, Y, Z offset in mm
+```
+
+### Rotation Details
+
+- **Rotation Order**: Intrinsic (body-relative). First X rotation, then Y, then Z
+- **Units**: Degrees (0-360)
+- **Example**: `[45, 0, 0]` rotates 45° around X-axis
+- **Optional**: Leave blank or omit to use default (no rotation)
+
+### Position Details
+
+- **Position Offset**: Translation in 3D space
+- **Units**: Millimeters (mm)
+- **Reference**: Offset from body origin
+- **Example**: `[10, 0, 5]` moves 10mm in X, 0mm in Y, 5mm in Z
+- **Optional**: Leave blank or omit to use default (no offset)
+
+### Complete Example
+
+```yaml
+export:
+  - name: Antenna_Oriented
+    source: Antenna.FCStd
+    bodies:
+      # Body without transforms (default orientation)
+      - Feed001
+
+      # Same body rotated 45° around Z-axis
+      - body: "Feed001"
+        rotation: [0, 0, 45]
+
+      # Body rotated and positioned
+      - body: "Angle Round"
+        rotation: [90, 0, 0]
+        position: [5, 5, 10]
+
+      # Multiple copies with different orientations
+      - body: "Mounting Bracket"
+        rotation: [0, 0, 0]
+        position: [0, 0, 0]
+
+      - body: "Mounting Bracket"
+        rotation: [0, 0, 90]
+        position: [20, 0, 0]
+
+      - body: "Mounting Bracket"
+        rotation: [0, 0, 180]
+        position: [40, 0, 0]
+
+      - body: "Mounting Bracket"
+        rotation: [0, 0, 270]
+        position: [60, 0, 0]
+
+    output: prints/Antenna_Oriented.3mf
+    metadata:
+      Project: "Antenna"
+      Version: "2.0"
+      Author: "Jane Doe"
+```
+
+### Mixing Simple and Transform Formats
+
+You can mix both formats in the same export:
+
+```yaml
+bodies:
+  - Feed001                    # Simple format
+  - body: "Angle Round"        # Transform format
+    rotation: [45, 0, 0]
+  - "Another Body"             # Simple format
+  - body: "Bracket"            # Transform format
+    position: [10, 10, 0]
+```
+
+### Tips for Best Results
+
+1. **Test in FreeCAD**: Visualize the orientation in FreeCAD before exporting
+2. **Use PrusaSlicer to Validate**: Import the 3MF and verify positioning in the slicer
+3. **Document Your Orientations**: Add comments in the config for complex layouts
+4. **Reuse Configs**: Save successful configurations for repeated use
 
 ## Metadata in 3MF Files
 
