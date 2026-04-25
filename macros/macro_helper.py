@@ -13,7 +13,7 @@ This module is designed to be imported by macros running inside FreeCAD.
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 try:
     import FreeCAD  # noqa: F401
@@ -41,7 +41,7 @@ class MacroConfigDialog(QtWidgets.QDialog):
     Allows users to specify object names/labels and parameter values.
     """
 
-    def __init__(self, parent=None, title="Macro Configuration", fields: List[Dict[str, Any]] = None):
+    def __init__(self, parent=None, title="Macro Configuration", fields: list[dict[str, Any]] = None):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.fields = fields or []
@@ -112,7 +112,7 @@ class MacroConfigDialog(QtWidgets.QDialog):
         self.setLayout(layout)
         self.setMinimumWidth(400)
 
-    def get_values(self) -> Dict[str, Any]:
+    def get_values(self) -> dict[str, Any]:
         """Get the values entered by the user."""
         values = {}
         for field_name, (widget, field_type) in self.input_widgets.items():
@@ -130,7 +130,7 @@ class MacroConfigDialog(QtWidgets.QDialog):
         return values
 
 
-def get_object_by_identifier(doc, identifier: str) -> Optional[object]:
+def get_object_by_identifier(doc, identifier: str) -> object | None:
     """
     Find a FreeCAD object by Name or Label.
 
@@ -161,7 +161,7 @@ def get_object_by_identifier(doc, identifier: str) -> Optional[object]:
     return None
 
 
-def get_objects_with_property(doc, property_name: str, property_value: Any = None) -> List[object]:
+def get_objects_with_property(doc, property_name: str, property_value: Any = None) -> list[object]:
     """
     Get all objects in a document that have a specific custom property.
 
@@ -195,7 +195,7 @@ def get_objects_with_property(doc, property_name: str, property_value: Any = Non
     return matching_objects
 
 
-def get_body_property(obj, property_name: str) -> Optional[Any]:
+def get_body_property(obj, property_name: str) -> Any | None:
     """
     Get a custom property value from a FreeCAD object.
 
@@ -249,7 +249,7 @@ def set_body_property(obj, property_name: str, value: Any, property_type: str = 
     return False
 
 
-def show_config_dialog(title: str = "Configuration", fields: List[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+def show_config_dialog(title: str = "Configuration", fields: list[dict[str, Any]] = None) -> dict[str, Any] | None:
     """
     Show a configuration dialog to the user and return their input.
 
@@ -270,7 +270,7 @@ def show_config_dialog(title: str = "Configuration", fields: List[Dict[str, Any]
     return None
 
 
-def load_macro_config(config_path: str) -> Optional[Dict[str, Any]]:
+def load_macro_config(config_path: str) -> dict[str, Any] | None:
     """
     Load macro configuration from a YAML file.
 
@@ -299,7 +299,7 @@ def load_macro_config(config_path: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def save_macro_config(config: Dict[str, Any], config_path: str) -> bool:
+def save_macro_config(config: dict[str, Any], config_path: str) -> bool:
     """
     Save macro configuration to a YAML file.
 
@@ -328,9 +328,9 @@ def save_macro_config(config: Dict[str, Any], config_path: str) -> bool:
 
 def load_or_prompt_config(
     config_path: str,
-    dialog_fields: List[Dict[str, Any]] = None,
+    dialog_fields: list[dict[str, Any]] = None,
     dialog_title: str = "Configuration",
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Load configuration from file, or prompt user with dialog if file doesn't exist.
 
@@ -365,7 +365,7 @@ def load_or_prompt_config(
     return None
 
 
-def find_exportable_bodies(doc) -> List[str]:
+def find_exportable_bodies(doc) -> list[str]:
     """
     Find all bodies in a FreeCAD document that are marked for export.
 

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Unit tests for git_utils.py."""
-import pytest
+
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Add tools/ to path - go up from tests/ to freecad_tools/, then into tools/
 _test_dir = Path(__file__).parent
@@ -11,7 +13,7 @@ _tools_dir = _test_dir.parent / "tools"
 sys.path.insert(0, str(_tools_dir))
 
 # Import the module under test
-import git_utils
+import git_utils  # noqa: E402
 
 
 class TestIsGitRepo:
@@ -200,7 +202,7 @@ class TestGetRemoteUrl:
         mock_run.return_value = "upstream_url"
 
         # When
-        result = git_utils.get_remote_url(cwd="/fake/path", remote="upstream")
+        git_utils.get_remote_url(cwd="/fake/path", remote="upstream")
 
         # Then
         mock_run.assert_called_once_with("config --get remote.upstream.url", cwd="/fake/path")
