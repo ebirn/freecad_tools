@@ -444,6 +444,8 @@ def create_from_json_config(config_path: str) -> bool:
         logger.info(f"Loading config from {config_path}")
         return create_3mf_from_stls(stl_files, output_path, template_path, metadata, transforms)
 
+    except FileNotFoundError:
+        raise
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON in {config_path}: {e}")
         return False
