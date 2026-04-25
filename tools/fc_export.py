@@ -89,6 +89,7 @@ if not freecad_found:
 
 logger.debug("FreeCAD modules successfully available, proceeding with main()")
 
+# Default config file - can be overridden by command-line argument
 CONFIG_FILE = "export_config.yml"
 
 
@@ -448,6 +449,12 @@ def main():
 
 
 if __name__ == "__main__":
+    global CONFIG_FILE
+    # Check for config file argument
+    if len(sys.argv) > 1:
+        CONFIG_FILE = sys.argv[1]
+        logger.debug(f"Config file from command-line argument: {CONFIG_FILE}")
+    
     try:
         logger.debug("Executing main via __main__ guard")
         main()
@@ -458,6 +465,12 @@ if __name__ == "__main__":
     logger.debug("Script end")
 else:
     # If not executed as main (e.g., by freecadcmd), still run main()
+    global CONFIG_FILE
+    # Check for config file argument
+    if len(sys.argv) > 1:
+        CONFIG_FILE = sys.argv[1]
+        logger.debug(f"Config file from command-line argument: {CONFIG_FILE}")
+    
     logger.debug("Script invoked as module, executing main() directly")
     try:
         main()
