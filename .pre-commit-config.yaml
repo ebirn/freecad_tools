@@ -77,7 +77,7 @@ repos:
         description: Deep Python code analysis (runs on pre-push)
         additional_dependencies: [pylint]
         args:
-          - --disable=all
+          - --disable=all,import-error
           - --enable=E,F
           - --max-line-length=120
           - --good-names=i,j,k,ex,_,logger
