@@ -1,0 +1,8 @@
+repos:
+  - repo: https://github.com/ebirn/freecad_tools
+    rev: v1.0.0
+    hooks:
+      - id: freecad-export
+      - id: freecad-export-manual
+
+default_install_hook_types: [pre-commit, pre-push]

@@ -1,0 +1,20 @@
+repos:
+  - repo: local
+    hooks:
+      - id: freecad-export
+        name: FreeCAD 3MF Export
+        entry: hooks/freecad-export
+        language: system
+        types: [tag]
+        always_run: true
+        pass_filenames: false
+        description: Export FreeCAD bodies to 3MF when a tag is pushed
+
+      - id: freecad-export-manual
+        name: FreeCAD 3MF Export (Manual)
+        entry: hooks/freecad-export-manual
+        language: system
+        stages: [manual]
+        always_run: true
+        pass_filenames: false
+        description: Manually run FreeCAD 3MF export

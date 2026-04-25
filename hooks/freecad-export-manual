@@ -1,0 +1,33 @@
+#!/bin/bash
+# FreeCAD 3MF Export - Manual trigger
+# Called via: pre-commit run --hook-stage manual freecad-export-manual
+# Entry point is relative to freecad_tools repo root
+
+# Get freecad_tools repo root (where this script is located)
+TOOLS_ROOT="$(cd "$(dirname "$0")" && pwd)"
+
+# Get the project root (where .git is)
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+
+if [ -z "$PROJECT_ROOT" ]; then
+    echo "Error: Not in a git repository" >&2
+    exit 1
+fi
+
+# Check for .freecad_tools directory
+CONFIG_DIR="$PROJECT_ROOT/.freecad_tools"
+if [ ! -d "$CONFIG_DIR" ]; then
+    echo "Error: .freecad_tools directory not found in $PROJECT_ROOT" >&2
+    exit 1
+fi
+
+# Find export.yml in .freecad_tools
+EXPORT_CONFIG="$CONFIG_DIR/export.yml"
+if [ ! -f "$EXPORT_CONFIG" ]; then
+    echo "Error: export.yml not found in $CONFIG_DIR" >&2
+    exit 1
+fi
+
+# Change to project root and run export
+cd "$PROJECT_ROOT"
+python3 "$TOOLS_ROOT/tools/export.py" "$EXPORT_CONFIG"

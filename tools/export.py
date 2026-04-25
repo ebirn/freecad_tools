@@ -33,20 +33,30 @@ if not FC_EXPORT_SCRIPT.exists():
     print(f"Error: fc_export.py not found at {FC_EXPORT_SCRIPT}", file=sys.stderr)
     sys.exit(1)
 
-# Change to caller's directory so relative paths in config work correctly
-# (config file should be in the project directory, not the tools directory)
-# Only change if we're running the export tools directly
-if os.path.exists('export_config.yml'):
+# Determine config file to use
+CONFIG_FILE = None
+
+# Check command-line argument first
+if len(sys.argv) > 1:
+    CONFIG_FILE = Path(sys.argv[1])
+    if not CONFIG_FILE.exists():
+        print(f"Error: Config file not found: {CONFIG_FILE}", file=sys.stderr)
+        sys.exit(1)
+    # Change to config file's directory so relative paths work
+    os.chdir(CONFIG_FILE.parent)
+
+# If no config argument, look in current directory
+elif os.path.exists('export_config.yml'):
+    CONFIG_FILE = Path('export_config.yml')
     # Config is in current directory, keep it
-    pass
-elif os.path.exists(os.path.join(SCRIPT_DIR, 'export_config.yml.example')):
-    # Config template is in tools directory, but user should copy to project dir
-    pass
-# Don't change directory - let fc_export.py handle paths relative to caller
+
+# Build arguments for fc_export.py
+fc_args = [sys.executable, str(FC_EXPORT_SCRIPT)]
+if CONFIG_FILE:
+    fc_args.append(str(CONFIG_FILE))
 
 # Run fc_export.py with the same Python interpreter
-# (it will re-invoke itself with FreeCAD if needed)
 import subprocess
 
-result = subprocess.run([sys.executable, str(FC_EXPORT_SCRIPT)], text=True)
+result = subprocess.run(fc_args, text=True)
 sys.exit(result.returncode)
