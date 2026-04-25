@@ -90,7 +90,57 @@ if not freecad_found:
 logger.debug("FreeCAD modules successfully available, proceeding with main()")
 
 # Default config file - can be overridden by command-line argument
-CONFIG_FILE = "export_config.yml"
+CONFIG_FILE = None
+
+
+def resolve_template_path(template_name):
+    """
+    Resolve template 3MF file path.
+    Try locations in order:
+    1. Check if template_name is absolute path that exists
+    2. Check in current directory
+    3. Check in project's .freecad_tools/ directory
+    4. Check in freecad_tools/templates/ directory (use default.3mf if available)
+    
+    Args:
+        template_name: Name or path of template file
+    
+    Returns:
+        Absolute path to template if found, None otherwise
+    """
+    if not template_name:
+        return None
+    
+    # Try as absolute path first
+    if os.path.isabs(template_name) and os.path.exists(template_name):
+        logger.debug(f"Found template at absolute path: {template_name}")
+        return template_name
+    
+    # Try in current directory
+    if os.path.exists(template_name):
+        abs_path = os.path.abspath(template_name)
+        logger.debug(f"Found template in current directory: {abs_path}")
+        return abs_path
+    
+    # Try in .freecad_tools/ directory
+    project_template = os.path.join(".freecad_tools", template_name)
+    if os.path.exists(project_template):
+        abs_path = os.path.abspath(project_template)
+        logger.debug(f"Found template in .freecad_tools/: {abs_path}")
+        return abs_path
+    
+    # Try to find freecad_tools templates directory and use default.3mf
+    script_dir = os.path.dirname(os.path.abspath(__file__))  # tools/
+    tools_root = os.path.dirname(script_dir)  # freecad_tools/
+    default_template = os.path.join(tools_root, "templates", "default.3mf")
+    
+    if os.path.exists(default_template):
+        logger.info(f"Template '{template_name}' not found, using default: {default_template}")
+        return default_template
+    
+    logger.warning(f"Template '{template_name}' not found and no default available")
+    return None
+
 
 
 def resolve_object_identifier(doc, identifier):
@@ -124,6 +174,23 @@ def resolve_object_identifier(doc, identifier):
 
 
 def load_config():
+    global CONFIG_FILE
+    
+    # If CONFIG_FILE not set by command-line, determine default
+    if not CONFIG_FILE:
+        # Try .freecad_tools/export.yml first (per-project config)
+        project_config = ".freecad_tools/export.yml"
+        if os.path.exists(project_config):
+            CONFIG_FILE = project_config
+            logger.info(f"Using per-project config: {CONFIG_FILE}")
+        # Fall back to export_config.yml in current directory
+        elif os.path.exists("export_config.yml"):
+            CONFIG_FILE = "export_config.yml"
+            logger.info(f"Using legacy config: {CONFIG_FILE}")
+        else:
+            logger.error("Config file not found. Tried '.freecad_tools/export.yml' and 'export_config.yml'")
+            sys.exit(1)
+    
     logger.debug(f"Looking for config file: {CONFIG_FILE}")
     if not os.path.exists(CONFIG_FILE):
         logger.error(f"Config file '{CONFIG_FILE}' not found.")
@@ -424,9 +491,15 @@ def main():
             if bodies:
                 logger.info(f"Exporting bodies {bodies} with export name '{export_name}'")
                 # Use template-based export if template is specified
+                # Resolve template path if specified
+                resolved_template = None
                 if template:
+                    resolved_template = resolve_template_path(template)
+                
+                # Use template-based export if template is resolved
+                if resolved_template:
                     success = export_bodies_to_3mf_with_template(
-                        doc, bodies, output, template, keep_stl, stl_output_dir, export_name
+                        doc, bodies, output, resolved_template, keep_stl, stl_output_dir, export_name
                     )
                 else:
                     # Fallback to STL export if no template
@@ -449,7 +522,6 @@ def main():
 
 
 if __name__ == "__main__":
-    global CONFIG_FILE
     # Check for config file argument
     if len(sys.argv) > 1:
         CONFIG_FILE = sys.argv[1]
@@ -465,7 +537,6 @@ if __name__ == "__main__":
     logger.debug("Script end")
 else:
     # If not executed as main (e.g., by freecadcmd), still run main()
-    global CONFIG_FILE
     # Check for config file argument
     if len(sys.argv) > 1:
         CONFIG_FILE = sys.argv[1]
