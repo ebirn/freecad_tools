@@ -196,6 +196,25 @@ def resolve_object_identifier(doc, identifier):
     return None, None, None
 
 
+def resolve_relative_path(path, base_dir):
+    """
+    Resolve a path relative to a base directory.
+    If path is already absolute, return as-is. If relative, join with base_dir.
+
+    Args:
+        path: The path to resolve (can be None, absolute, or relative)
+        base_dir: The base directory for resolving relative paths
+
+    Returns:
+        Resolved absolute path, or None if path is None
+    """
+    if not path:
+        return None
+    if os.path.isabs(path):
+        return path
+    return os.path.join(base_dir, path)
+
+
 def load_config():
     global CONFIG_FILE
 
@@ -237,33 +256,14 @@ def load_config():
 
     # Resolve relative paths in config items relative to config file directory
     for item in result:
-        # Resolve source path
-        if "source" in item and item["source"]:
-            source = item["source"]
-            if not os.path.isabs(source):
-                item["source"] = os.path.join(config_dir, source)
-                logger.debug(f"Resolved source to: {item['source']}")
-
-        # Resolve output path
-        if "output" in item and item["output"]:
-            output = item["output"]
-            if not os.path.isabs(output):
-                item["output"] = os.path.join(config_dir, output)
-                logger.debug(f"Resolved output to: {item['output']}")
-
-        # Resolve template path
-        if "template" in item and item["template"]:
-            template = item["template"]
-            if not os.path.isabs(template):
-                item["template"] = os.path.join(config_dir, template)
-                logger.debug(f"Resolved template to: {item['template']}")
-
-        # Resolve stl_output_dir path
-        if "stl_output_dir" in item and item["stl_output_dir"]:
-            stl_dir = item["stl_output_dir"]
-            if not os.path.isabs(stl_dir):
-                item["stl_output_dir"] = os.path.join(config_dir, stl_dir)
-                logger.debug(f"Resolved stl_output_dir to: {item['stl_output_dir']}")
+        # List of path fields to resolve
+        path_fields = ["source", "output", "template", "stl_output_dir"]
+        for field in path_fields:
+            if field in item and item[field]:
+                resolved = resolve_relative_path(item[field], config_dir)
+                if resolved != item[field]:
+                    logger.debug(f"Resolved {field} to: {resolved}")
+                item[field] = resolved
 
     return result
 

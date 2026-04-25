@@ -13,11 +13,12 @@ This project bridges FreeCAD (a powerful 3D CAD tool) with modern 3D printing wo
 
 ## Commit & Push Guidelines
 
-### Always Ask Before Committing
-- **NEVER commit and push without explicit user approval**
-- Present the changes and ask "Ready to commit?" or similar
+### Always Ask Before Committing AND Pushing
+- **NEVER commit without explicit user approval** - present changes and ask "Ready to commit?"
+- **NEVER push without explicit user approval** - after committing, ask "Ready to push?" before running `git push`
 - Wait for user confirmation before running `git commit`
 - Wait for user confirmation before running `git push`
+- These are separate approval steps - even if commit was approved, ask again before pushing
 
 ### Commit Message Format
 All commit messages must follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) specification:
