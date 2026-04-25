@@ -1,0 +1,12 @@
+[project]
+name = "freecad-tools"
+version = "0.1.0"
+description = ""
+dependencies = [
+    "PyYAML",
+    "lib3mf==2.5.0",
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"

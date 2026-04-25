@@ -1,0 +1,18 @@
+export:
+  - name: Moxon_OE1EBG
+    source: Moxon_OE1EBG.FCStd
+    # Can specify bodies by Name (Body) or Label (Feed001, Cover001, etc) - more user-friendly
+    bodies:
+      - Feed001           # Actual Label: Feed001 (Name: Body)
+      - Cover001          # Actual Label: Cover001 (Name: Body002)
+      - "Angle Round"     # Actual Label: Angle Round (Name: Body003)
+      - "Angle Round"     # Export the same body twice for a 2-piece set
+    # Optional: output filename (default: prints/{name}.3mf)
+    output: prints/Moxon_OE1EBG.3mf
+    # Optional: template 3MF file with pre-configured printer settings
+    template: template_print_settings.3mf
+    # Keep generated STL files after creating 3MF (default: false)
+    keep_stl: true
+    # Directory to store STL files (only used if keep_stl is true)
+    stl_output_dir: prints/stl
+
