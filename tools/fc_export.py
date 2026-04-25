@@ -120,19 +120,31 @@ def resolve_template_path(template_name):
     """
     Resolve template 3MF file path.
     Try locations in order:
-    1. Check if template_name is absolute path that exists
-    2. Check in current directory
-    3. Check in project's .freecad_tools/ directory
-    4. Check in freecad_tools/templates/ directory (use default.3mf if available)
+    1. If template_name is None, use default template from examples/
+    2. Check if template_name is absolute path that exists
+    3. Check in current directory
+    4. Check in project's .freecad_tools/ directory
+    5. Fallback to examples/default.3mf if available
     
     Args:
-        template_name: Name or path of template file
+        template_name: Name or path of template file, or None to use default
     
     Returns:
         Absolute path to template if found, None otherwise
     """
+    # Try to find freecad_tools default template (examples/default.3mf)
+    script_dir = os.path.dirname(os.path.abspath(__file__))  # tools/
+    tools_root = os.path.dirname(script_dir)  # freecad_tools/
+    default_template = os.path.join(tools_root, "examples", "default.3mf")
+    
+    # If no template specified, use default
     if not template_name:
-        return None
+        if os.path.exists(default_template):
+            logger.debug(f"Using default template: {default_template}")
+            return default_template
+        else:
+            logger.debug(f"No template specified and no default available")
+            return None
     
     # Try as absolute path first
     if os.path.isabs(template_name) and os.path.exists(template_name):
@@ -152,11 +164,7 @@ def resolve_template_path(template_name):
         logger.debug(f"Found template in .freecad_tools/: {abs_path}")
         return abs_path
     
-    # Try to find freecad_tools templates directory and use default.3mf
-    script_dir = os.path.dirname(os.path.abspath(__file__))  # tools/
-    tools_root = os.path.dirname(script_dir)  # freecad_tools/
-    default_template = os.path.join(tools_root, "templates", "default.3mf")
-    
+    # Fallback to default template
     if os.path.exists(default_template):
         logger.info(f"Template '{template_name}' not found, using default: {default_template}")
         return default_template
@@ -511,22 +519,19 @@ def main():
             logger.debug(f"Document objects: {[(obj.Name, obj.Label if hasattr(obj, 'Label') else 'N/A') for obj in doc.Objects]}")
             FreeCAD.setActiveDocument(doc_name)
             
-            if bodies:
-                logger.info(f"Exporting bodies {bodies} with export name '{export_name}'")
-                # Use template-based export if template is specified
-                # Resolve template path if specified
-                resolved_template = None
-                if template:
-                    resolved_template = resolve_template_path(template)
-                
-                # Use template-based export if template is resolved
-                if resolved_template:
-                    success = export_bodies_to_3mf_with_template(
-                        doc, bodies, output, resolved_template, keep_stl, stl_output_dir, export_name
-                    )
-                else:
-                    # Fallback to STL export if no template
-                    success = export_bodies(doc, bodies, output)
+             if bodies:
+                 logger.info(f"Exporting bodies {bodies} with export name '{export_name}'")
+                 # Try to resolve template path (uses config value or falls back to default)
+                 resolved_template = resolve_template_path(template)
+                 
+                 # Use template-based export if template is available
+                 if resolved_template:
+                     success = export_bodies_to_3mf_with_template(
+                         doc, bodies, output, resolved_template, keep_stl, stl_output_dir, export_name
+                     )
+                 else:
+                     # Fallback to STL export if no template available
+                     success = export_bodies(doc, bodies, output)
             else:
                 logger.info(f"Exporting full document")
                 success = export_full_doc(doc, output)
