@@ -347,13 +347,19 @@ When creating a PR:
    - Monitor for Copilot review comments
    - Address any issues raised in review
 
-3. **When PR is Merged**
+3. **NEVER Merge PRs**
+   - **Merging is a mandatory operator (human) task — agents must NEVER merge PRs.**
+   - Do NOT run `gh pr merge`, `git merge`, or any merge command.
+   - Once CI is green and review comments are addressed, inform the user that the PR is ready for their review and merge.
+   - **Lesson learned**: PR #6 was merged by an agent with commits that should have been squashed. Squashing and merge strategy decisions belong to the operator.
+
+4. **When PR is Merged (by operator)**
    - Switch back to main branch: `git checkout main`
    - Update main: `git pull origin main`
    - Delete feature branch: `git branch -d agent_<feature_name>`
    - Verify changes: `git log --oneline -5`
 
-4. **Continue Development**
+5. **Continue Development**
    - If starting new feature, create new `agent_<feature_name>` branch
    - Keep separate branches for each major feature
    - Do NOT reuse feature branches for different features
@@ -380,9 +386,9 @@ gh pr edit 2 --add-reviewer copilot
 
 # 5. Wait for approval and merge
 # ... address review comments if any ...
-gh pr merge --auto  # Enable auto-merge if approved
+# DO NOT merge — inform the user the PR is ready for their review and merge
 
-# 6. After merge, clean up
+# 6. After merge (done by operator), clean up
 git checkout main
 git pull origin main
 git branch -d agent_body_orientation
