@@ -3,7 +3,6 @@
 
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 # Add tools to path
@@ -13,12 +12,15 @@ sys.path.insert(0, str(tools_dir))
 
 def test_techdraw_and_bom_export():
     """Test TechDraw and BOM export with example document."""
-    example_dir = Path(__file__).parent
+    import tempfile
+
+    import yaml
+
+    # Example file is in examples directory, not tests directory
+    example_dir = Path(__file__).parent.parent / "examples"
     example_doc = example_dir / "example_techdraw.FCStd"
 
-    if not example_doc.exists():
-        print(f"Example document not found: {example_doc}")
-        return False
+    assert example_doc.exists(), f"Example document not found: {example_doc}"
 
     # Create temporary output directory
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -48,7 +50,6 @@ def test_techdraw_and_bom_export():
 
         # Write config to temp file
         config_file = tmpdir / "export.yml"
-        import yaml
 
         config_file.write_text(yaml.dump(config))
 
@@ -71,15 +72,12 @@ def test_techdraw_and_bom_export():
 
             # We can't actually run this without FreeCAD in the test
             # But we can verify the config is valid
-            print("\n✓ Config structure is valid")
-            print(f"✓ Config file created: {config_file}")
-
-            return True
+            assert config_file.exists(), "Config file should be created"
+            assert config_file.read_text(), "Config file should have content"
 
         finally:
             os.chdir(original_cwd)
 
 
 if __name__ == "__main__":
-    success = test_techdraw_and_bom_export()
-    sys.exit(0 if success else 1)
+    test_techdraw_and_bom_export()
