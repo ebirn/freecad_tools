@@ -3,6 +3,23 @@
 All notable changes to this project will be documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+
+- **TechDraw PDF Export** (PR #6): Pixel-perfect technical drawing export via FreeCAD GUI binary
+  - Two-step pipeline: `techdraw_export.py` (FreeCAD GUI) + `techdraw_pdf.py` (pypdf/reportlab)
+  - Cover page with metadata, TOC, and inline BOM table
+  - Assembly instructions from markdown files
+  - Consistent page footers (title, page numbers, date/version)
+  - Mixed landscape/portrait page support
+- **Bill of Materials Generation** (PR #6): BOM extraction and CSV output
+  - Primary: reads from Assembly::BomObject (respects user's FreeCAD BOM config)
+  - Fallback: Spreadsheet → Part/Body inspection
+  - CSV output with configurable fields
+  - Config sections: `techdraw:` and `bom:` in export.yml
+- **New dependencies**: `pypdf>=5.0`, `reportlab>=4.0`
+
 ## [v0.1.0] - 2026-04-26
 
 First tagged release. Includes all features developed across PRs #1-#5.

@@ -7,166 +7,7 @@ For process guidance see AGENTS.md.
 
 ## Open Tasks
 
-### 1. Batch Processing [MEDIUM PRIORITY]
-**Status**: NOT STARTED
-**Branch**: `agent_batch_processing`
-**Effort**: Low-Medium (1-2 hours)
-
-Process multiple export jobs with parallel execution and per-job error handling.
-
-**Tasks**:
-- [ ] Design batch processing interface (CLI args or separate config)
-- [ ] Implement export queue management
-- [ ] Add progress reporting for batch jobs
-- [ ] Handle errors per export (continue on failure)
-- [ ] Test with multiple concurrent exports
-- [ ] Document in README.md
-
----
-
-### 2. Quality Metrics [MEDIUM PRIORITY]
-**Status**: NOT STARTED
-**Branch**: `agent_quality_metrics`
-**Effort**: Low (1-2 hours)
-
-Report mesh statistics (vertex/triangle counts, file sizes) and validate 3MF output structure.
-
-**Tasks**:
-- [ ] Add vertex/triangle counting in `tools/lib3mf_utils.py`
-- [ ] Implement file size reporting
-- [ ] Add 3MF structure validation
-- [ ] Generate quality report after export
-- [ ] Test with sample models
-- [ ] Document in README.md
-
----
-
-### 3. Multi-Document Support [LOW PRIORITY]
-**Status**: NOT STARTED
-**Branch**: `agent_multi_document`
-**Effort**: Medium (2-3 hours)
-
-Export bodies from multiple FCStd files in a single export config.
-
-**Possible Config**:
-```yaml
-export:
-  - name: Combined
-    documents:
-      - source: project1.FCStd
-        bodies: [Body1, Body2]
-      - source: project2.FCStd
-        bodies: [Body3, Body4]
-```
-
----
-
-### 4. TechDraw PDF Export & Bill of Materials [COMPLETE]
-**Status**: DONE
-**Branch**: `agent_techdraw_export`
-**Completed**: April 26, 2026
-
-Export technical drawings and generate a bill of materials (BOM) from FreeCAD projects.
-
-**Completed Features**:
-- ✅ BOM extraction from FreeCAD 1.0+ Assembly workbench
-- ✅ BOM fallback extraction from Spreadsheet objects
-- ✅ BOM fallback extraction from Part/Body inspection
-- ✅ CSV generation with custom fields support
-- ✅ Config schema extended with `techdraw:` and `bom:` sections
-- ✅ Multi-page TechDraw detection
-- ✅ Graceful handling of headless mode limitations
-- ✅ 106 unit tests passing (56 config + 13 BOM CSV + 37 lib3mf/git utils)
-- ✅ End-to-end testing with realistic Assembly documents
-- ✅ Documentation in README.md
-
-**Implementation Notes**:
-- TechDraw PDF export uses **FreeCAD GUI binary**: `TechDrawGui.exportPageAsPdf()` for pixel-perfect output
-- Runs headlessly on macOS; set `FREECAD_GUI_BINARY` env var if needed
-- BOM extraction is **fully production-ready**
-- **Reads from existing Assembly::BomObject** (respects user's BOM configuration)
-- CSV output columns match BomObject exactly (Index, Name, Description, File Name, Quantity, etc.)
-- Falls back to Spreadsheet then Part/Body inspection if no BomObject found
-
-**Config Format** (fully implemented):
-```yaml
-export:
-  - name: MyProject
-    source: MyProject.FCStd
-    bodies: [Body]
-    output: prints/MyProject.3mf
-
-    techdraw:
-      pages: []                    # Empty = all, or list specific labels
-      output_dir: docs            # Where to save exported files
-      format: pdf                 # PDF export via GUI binary
-
-    bom:
-      source: assembly            # auto/assembly/spreadsheet/parts
-      output: docs/MyProject_bom.csv
-      spreadsheet_name: BOM       # If source: spreadsheet
-      fields:                      # Optional custom fields
-        - material
-        - vendor
-        - price
-```
-
----
-
-### 5. Printables.com Upload & Publishing [LOW PRIORITY]
-**Status**: NOT STARTED
-**Branch**: `agent_printables_upload`
-**Effort**: High (5-10 hours)
-**Depends on**: #4 TechDraw PDF Export & BOM
-
-Upload exported project artifacts (3MF, STL, PDF, BOM) to Printables.com, including build/assembly instructions from a project markdown file.
-
-**Key Constraint**: Printables.com has **no public API** (as of 2026). Options:
-1. **Browser automation** (Selenium/Playwright) - fragile, breaks on site changes
-2. **Undocumented GraphQL API** - reverse-engineer, no stability guarantee
-3. **Preparation-only mode** - package everything into a zip/folder for manual upload
-
-Recommendation: Start with option 3 (prepare upload package).
-
-**Build Instructions**: User creates `INSTRUCTIONS.md` in project, converted to HTML/text for the Printables description field.
-
-**Research Needed**:
-- [ ] Monitor Printables for public API announcements
-- [ ] Reverse-engineer GraphQL endpoint to assess feasibility
-- [ ] Determine Printables upload form fields (title, description, category, license, tags, files)
-
-**Phase A - Upload Package Preparation** (no API needed):
-- [ ] Define `printables` config section in export.yml
-- [ ] Collect all export artifacts into a staging folder
-- [ ] Convert INSTRUCTIONS.md to Printables-compatible description
-- [ ] Generate `printables_metadata.json` with title, description, tags, license
-- [ ] Create zip archive ready for manual upload
-- [ ] Document in README.md
-
-**Phase B - Automated Upload** (requires API or browser automation):
-- [ ] Implement Printables authentication
-- [ ] Implement model creation/update
-- [ ] Upload files, set description/tags/license
-- [ ] Handle model updates (detect existing, update files)
-- [ ] Add `--dry-run` mode
-- [ ] Document in README.md
-
-**Possible Config**:
-```yaml
-printables:
-  title: "VHF Yagi Antenna - 3D Printed"
-  description_file: INSTRUCTIONS.md
-  category: "Hobby & DIY"
-  tags: [antenna, ham-radio, yagi, vhf]
-  license: "CC-BY-SA-4.0"
-  images:
-    - docs/images/assembled.jpg
-  staging_dir: .printables_upload/
-```
-
----
-
-### 6. Explicit Body Selection Mode: Config vs FreeCAD Properties [HIGH PRIORITY]
+### 1. Explicit Body Selection Mode: Config vs FreeCAD Properties [HIGH PRIORITY]
 **Status**: NOT STARTED
 **Branch**: `agent_body_selection_mode`
 **Effort**: Medium (3-4 hours)
@@ -234,7 +75,7 @@ All properties are grouped under `freecad_tools` in the Properties panel.
 | `example.FCStd` | Simple geometry | None | Basic export pipeline testing |
 | `example_properties.FCStd` | Angles, Ball, Cube, Doughnut | `ExportTo3MF`, `ExportCount`, `ExportRotation` | Property-based selection testing |
 | `example_multi.FCStd` | Multiple bodies | None | Multi-document export testing |
-| `example_techdraw.FCStd` | Bodies + TechDraw pages | None | TechDraw/BOM testing (Task #4) |
+| `example_techdraw.FCStd` | Bodies + TechDraw pages | None | TechDraw/BOM testing |
 
 `example_properties.FCStd` body configurations:
 
@@ -265,6 +106,112 @@ All properties are grouped under `freecad_tools` in the Properties panel.
 - [ ] Document both modes in README.md
 - [ ] Add FreeCAD macro to set export properties via dialog
 - [ ] Update example config with both modes
+
+---
+
+### 2. Batch Processing [MEDIUM PRIORITY]
+**Status**: NOT STARTED
+**Branch**: `agent_batch_processing`
+**Effort**: Low-Medium (1-2 hours)
+
+Process multiple export jobs with parallel execution and per-job error handling.
+
+**Tasks**:
+- [ ] Design batch processing interface (CLI args or separate config)
+- [ ] Implement export queue management
+- [ ] Add progress reporting for batch jobs
+- [ ] Handle errors per export (continue on failure)
+- [ ] Test with multiple concurrent exports
+- [ ] Document in README.md
+
+---
+
+### 3. Quality Metrics [MEDIUM PRIORITY]
+**Status**: NOT STARTED
+**Branch**: `agent_quality_metrics`
+**Effort**: Low (1-2 hours)
+
+Report mesh statistics (vertex/triangle counts, file sizes) and validate 3MF output structure.
+
+**Tasks**:
+- [ ] Add vertex/triangle counting in `tools/lib3mf_utils.py`
+- [ ] Implement file size reporting
+- [ ] Add 3MF structure validation
+- [ ] Generate quality report after export
+- [ ] Test with sample models
+- [ ] Document in README.md
+
+---
+
+### 4. Multi-Document Support [LOW PRIORITY]
+**Status**: NOT STARTED
+**Branch**: `agent_multi_document`
+**Effort**: Medium (2-3 hours)
+
+Export bodies from multiple FCStd files in a single export config.
+
+**Possible Config**:
+```yaml
+export:
+  - name: Combined
+    documents:
+      - source: project1.FCStd
+        bodies: [Body1, Body2]
+      - source: project2.FCStd
+        bodies: [Body3, Body4]
+```
+
+---
+
+### 5. Printables.com Upload & Publishing [LOW PRIORITY]
+**Status**: NOT STARTED
+**Branch**: `agent_printables_upload`
+**Effort**: High (5-10 hours)
+
+Upload exported project artifacts (3MF, STL, PDF, BOM) to Printables.com, including build/assembly instructions from a project markdown file.
+
+**Key Constraint**: Printables.com has **no public API** (as of 2026). Options:
+1. **Browser automation** (Selenium/Playwright) - fragile, breaks on site changes
+2. **Undocumented GraphQL API** - reverse-engineer, no stability guarantee
+3. **Preparation-only mode** - package everything into a zip/folder for manual upload
+
+Recommendation: Start with option 3 (prepare upload package).
+
+**Build Instructions**: User creates `INSTRUCTIONS.md` in project, converted to HTML/text for the Printables description field.
+
+**Research Needed**:
+- [ ] Monitor Printables for public API announcements
+- [ ] Reverse-engineer GraphQL endpoint to assess feasibility
+- [ ] Determine Printables upload form fields (title, description, category, license, tags, files)
+
+**Phase A - Upload Package Preparation** (no API needed):
+- [ ] Define `printables` config section in export.yml
+- [ ] Collect all export artifacts into a staging folder
+- [ ] Convert INSTRUCTIONS.md to Printables-compatible description
+- [ ] Generate `printables_metadata.json` with title, description, tags, license
+- [ ] Create zip archive ready for manual upload
+- [ ] Document in README.md
+
+**Phase B - Automated Upload** (requires API or browser automation):
+- [ ] Implement Printables authentication
+- [ ] Implement model creation/update
+- [ ] Upload files, set description/tags/license
+- [ ] Handle model updates (detect existing, update files)
+- [ ] Add `--dry-run` mode
+- [ ] Document in README.md
+
+**Possible Config**:
+```yaml
+printables:
+  title: "VHF Yagi Antenna - 3D Printed"
+  description_file: INSTRUCTIONS.md
+  category: "Hobby & DIY"
+  tags: [antenna, ham-radio, yagi, vhf]
+  license: "CC-BY-SA-4.0"
+  images:
+    - docs/images/assembled.jpg
+  staging_dir: .printables_upload/
+```
 
 ---
 
