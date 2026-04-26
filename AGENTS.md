@@ -785,6 +785,16 @@ This project uses exactly **four** markdown files. Do NOT create additional `.md
 - If you need to document something, find the right section in one of these four files
 - When in doubt, add to `AGENTS.md` for dev context or `README.md` for user docs
 
+### TODO.md Hygiene
+
+Keep TODO.md compact and actionable:
+
+- **Only open tasks** belong in TODO.md. No completed items.
+- When a task is finished, **move it to CHANGELOG.md** under the appropriate version section, then **remove it from TODO.md**.
+- User-relevant information from completed tasks (new features, config options) must be documented in **README.md**.
+- Do not accumulate "Files Modified" lists, phase summaries, or implementation details for completed work in TODO.md - that belongs in CHANGELOG.md or git history.
+- Renumber tasks when removing completed ones to keep the list sequential.
+
 ---
 
 ## Contact & Questions
