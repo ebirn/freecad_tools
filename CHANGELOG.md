@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.2.0] - 2026-04-26
+
 ### Added
 
 - **TechDraw PDF Export** (PR #6): Pixel-perfect technical drawing export via FreeCAD GUI binary
