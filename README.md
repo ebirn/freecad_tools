@@ -314,12 +314,15 @@ bom:
 ```
 
 **What gets generated**:
-- CSV file with columns: `label`, `quantity`, plus any custom fields
-- Example output:
+- CSV file with columns matching the BOM source:
+  - **Assembly**: Columns from BomObject (e.g., `Index`, `Name`, `Description`, `File Name`, `Quantity`)
+  - **Spreadsheet**: Columns from spreadsheet cells
+  - **Parts**: `label`, `quantity`, plus any custom fields
+- Example output (assembly source):
   ```
-  label,quantity,material,vendor,price
-  Bearing 608,4,Steel,SKF,2.50
-  Housing,1,Aluminum,Local,15.00
+  Index,Name,Description,File Name,Quantity
+  1,Bearing 608,8mm Ball Bearing,Bearing.FCStd,4
+  2,Housing,Main housing,Housing.FCStd,1
   ```
 
 **Why use this**:
@@ -401,8 +404,6 @@ export:
 ```
 
 ---
-
-## Full Configuration Reference
 
 ### Config File Location
 ```
@@ -582,7 +583,10 @@ freecad_tools/
 │   ├── export.py                       # Entry point (user runs this)
 │   ├── fc_export.py                    # FreeCAD integration (runs inside FreeCAD)
 │   ├── lib3mf_utils.py                 # 3MF creation (runs in venv)
-│   └── git_utils.py                    # Git metadata extraction
+│   ├── git_utils.py                    # Git metadata extraction
+│   ├── techdraw_export.py              # TechDraw PDF export (runs in FreeCAD GUI)
+│   ├── techdraw_pdf.py                 # PDF merging/cover page (runs in venv)
+│   └── bom_utils.py                    # BOM CSV generation utility
 │
 ├── macros/                             # FreeCAD macros
 │   ├── macro_helper.py                 # Utilities for macro development
@@ -615,20 +619,19 @@ freecad_tools/
    cd freecad_tools
    ```
 
-2. **Create virtual environment** (optional but recommended):
+2. **Create virtual environment and install dependencies**:
+   ```bash
+   uv sync
+   ```
+
+   Or without uv:
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
+   pip install -e .
    ```
 
-3. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   # OR using uv (faster):
-   uv pip install -r requirements.txt
-   ```
-
-4. **Verify installation**:
+3. **Verify installation**:
    ```bash
    python3 tools/export.py --help
    ```
@@ -636,7 +639,7 @@ freecad_tools/
 ### System Requirements
 
 - **Python**: 3.10 or higher
-- **FreeCAD**: v0.20+ (with Python support)
+- **FreeCAD**: v0.20+ (v1.0+ required for Assembly BOM features)
 - **OS**: macOS, Linux, or Windows
 - **Dependencies**: PyYAML, lib3mf, pypdf, reportlab (auto-installed via `uv sync`)
 
@@ -890,8 +893,7 @@ See `AGENTS.md` for development guidelines.
 
 ## Version History
 
-- **Latest**: Body rotation, positioning, metadata embedding, body marking
-- See `CHANGELOG.md` for complete history
+See `CHANGELOG.md` for complete release history.
 
 ---
 

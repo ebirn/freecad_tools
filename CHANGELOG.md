@@ -10,6 +10,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - README: Python version corrected from 3.7 to 3.10+ (matches pyproject.toml)
 - README: Added missing dependencies (pypdf, reportlab) to requirements list
 - README: Documented `techdraw.instructions` config option for markdown in PDF reports
+- README: Fixed installation instructions — replaced `requirements.txt` with `uv sync` / `pip install -e .`
+- README: Added new tools to project structure (techdraw_export.py, techdraw_pdf.py, bom_utils.py)
+- README: Removed duplicate "Full Configuration Reference" heading
+- README: FreeCAD version note — v1.0+ required for Assembly BOM features
+- README: Fixed BOM CSV column description — assembly source uses BomObject columns, not label/quantity
+- README: Cleaned up outdated version history section
 
 ## [v0.2.0] - 2026-04-26
 
