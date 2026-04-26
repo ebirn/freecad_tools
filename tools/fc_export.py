@@ -1359,7 +1359,7 @@ def main():
                         # Write BOM CSV using shared utility
                         os.makedirs(os.path.dirname(bom_output) or ".", exist_ok=True)
 
-                        from bom_utils import write_bom_csv
+                        from bom_utils import write_bom_csv  # pylint: disable=import-error
 
                         # Determine fields: if BOM has custom fields from config, pass them;
                         # otherwise let write_bom_csv auto-detect from data keys
