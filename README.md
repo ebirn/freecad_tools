@@ -9,7 +9,7 @@ A comprehensive collection of Python utilities for converting FreeCAD designs to
 - **🎯 3MF Export**: Convert FreeCAD bodies to 3MF files with embedded mesh data, ready for PrusaSlicer
 - **🔄 Body Rotation & Positioning**: Specify exact orientation and position in config (no manual adjustment in slicer needed)
 - **📊 Metadata Embedding**: Embed project info, version, author, and git metadata directly in 3MF files
-- **📄 TechDraw Export**: Extract technical drawings to SVG for documentation
+- **📄 TechDraw Export**: Extract technical drawings to PDF for documentation
 - **📋 Bill of Materials**: Auto-generate BOM CSV from assemblies with custom fields
 - **🏷️ Body Marking**: Mark bodies in FreeCAD for automatic export detection
 - **⚙️ Parametric Variants**: Generate multiple design variations using FreeCAD macros
@@ -236,7 +236,7 @@ export:
 
 ---
 
-### 7. Export TechDraw Pages to SVG
+### 7. Export TechDraw Pages to PDF
 
 Extract technical drawings from your FreeCAD documents:
 
@@ -250,25 +250,22 @@ export:
     output: prints/Antenna.3mf
     techdraw:
       pages: []              # Empty = export all TechDraw pages
-      output_dir: docs       # Where to save SVG files
-      format: svg            # Only SVG supported currently
+      output_dir: docs       # Where to save exported files
+      format: pdf            # Currently only 'pdf' supported
 ```
 
-**Current Limitation**:
-TechDraw rendering currently requires FreeCAD's GUI and is not available in headless mode (freecadcmd). To export TechDraw pages:
+**How It Works**:
+TechDraw PDF export uses a two-step pipeline:
+1. FreeCAD GUI binary exports individual page PDFs via `TechDrawGui.exportPageAsPdf()`
+2. Pages are merged with optional cover page (metadata, TOC, BOM) and instructions
 
-1. Open your document in FreeCAD GUI
-2. Select the TechDraw page in the tree
-3. Right-click → "Export Page as SVG"
-4. Save to your desired output directory
-
-The `techdraw:` configuration section is recognized but SVG export will not generate files in headless mode. Future FreeCAD versions may support headless TechDraw rendering, at which point this feature will work automatically.
+This requires the FreeCAD GUI binary (not freecadcmd). On macOS it runs headlessly without displaying a window. Set `FREECAD_GUI_BINARY` environment variable if FreeCAD is not in a standard location.
 
 **Why use this**:
-- ✅ Keep technical drawings in sync with CAD model
-- ✅ Embed in documentation
-- ✅ Version control drawings alongside 3MF
-- ✅ SVG is vector format (scales without quality loss)
+- Keep technical drawings in sync with CAD model
+- Embed in documentation
+- Version control drawings alongside 3MF
+- PDF preserves all annotations, hatching, dimensions, and balloons
 
 ---
 
@@ -341,8 +338,8 @@ techdraw:                           # Optional: export technical drawings
   pages: []                         # Which pages to export
                                     # - Empty/omitted = all pages
                                     # - List page labels: ["Drawing1", "Assembly"]
-  output_dir: docs                  # Where to save SVG files
-  format: svg                       # Currently only 'svg' supported
+  output_dir: docs                  # Where to save exported files
+  format: pdf                       # Currently only 'pdf' supported
 ```
 
 ### BOM Generation Configuration
@@ -382,7 +379,7 @@ export:
     techdraw:
       pages: []                   # All TechDraw pages
       output_dir: docs
-      format: svg
+      format: pdf
 
     # Bill of materials
     bom:

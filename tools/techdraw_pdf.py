@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import sys
+from xml.sax.saxutils import escape as xml_escape
 
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib import colors
@@ -52,7 +53,8 @@ def _build_cover_page(metadata, toc_entries, bom_csv_path=None):
         bom_csv_path: Optional path to BOM CSV — rendered inline on the cover page.
 
     Returns:
-        List of reportlab flowables.
+        Tuple of (flowables, resolved_date) where flowables is a list of
+        reportlab flowables and resolved_date is the date string used.
     """
     from datetime import datetime
 
@@ -95,8 +97,8 @@ def _build_cover_page(metadata, toc_entries, bom_csv_path=None):
     meta_rows = []
 
     date_str = metadata.get("date") or datetime.now().strftime("%Y-%m-%d %H:%M")
-    # Store for footer use
-    metadata["_resolved_date"] = date_str
+    # Return resolved date via a copy — do not mutate the caller's dict
+    resolved_date = date_str
     meta_rows.append(("Created", date_str))
 
     author = metadata.get("Author") or metadata.get("author", "")
@@ -207,7 +209,7 @@ def _build_cover_page(metadata, toc_entries, bom_csv_path=None):
         flowables.append(Spacer(1, 2 * mm))
         flowables.extend(bom_flowables)
 
-    return flowables
+    return flowables, resolved_date
 
 
 def _build_bom_table_compact(bom_csv_path):
@@ -249,9 +251,9 @@ def _build_bom_table_compact(bom_csv_path):
         "BOMHeaderCompact", parent=styles["Normal"], fontSize=7, leading=9, fontName="Helvetica-Bold"
     )
 
-    table_data = [[Paragraph(c, header_style) for c in header]]
+    table_data = [[Paragraph(xml_escape(c), header_style) for c in header]]
     for row in data_rows:
-        table_data.append([Paragraph(c, cell_style) for c in row])
+        table_data.append([Paragraph(xml_escape(c), cell_style) for c in row])
 
     table = Table(table_data, repeatRows=1)
     table.setStyle(
@@ -310,9 +312,9 @@ def _build_bom_table(bom_csv_path):
         "BOMHeader", parent=styles["Normal"], fontSize=9, leading=11, fontName="Helvetica-Bold"
     )
 
-    table_data = [[Paragraph(c, header_style) for c in header]]
+    table_data = [[Paragraph(xml_escape(c), header_style) for c in header]]
     for row in data_rows:
-        table_data.append([Paragraph(c, cell_style) for c in row])
+        table_data.append([Paragraph(xml_escape(c), cell_style) for c in row])
 
     table = Table(table_data, repeatRows=1)
     table.setStyle(
@@ -394,7 +396,14 @@ def _build_instructions_flowables(instructions_path):
 
 
 def _md_inline_to_rl(text):
-    """Convert basic markdown inline formatting to reportlab XML tags."""
+    """Convert basic markdown inline formatting to reportlab XML tags.
+
+    Escapes XML-special characters (&, <, >) first to prevent reportlab
+    ParseError or unintended markup injection, then applies markdown
+    replacements on the escaped text.
+    """
+    # Escape XML-special chars before any markup conversion
+    text = xml_escape(text)
     # Bold: **text** → <b>text</b>
     text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
     # Italic: *text* → <i>text</i>
@@ -443,7 +452,7 @@ def _generate_extra_pages_pdf(bom_csv_path=None, instructions_path=None):
     return buf.getvalue()
 
 
-def _stamp_page_footers(writer, metadata=None):
+def _stamp_page_footers(writer, metadata=None, resolved_date=""):
     """
     Stamp a consistent footer on every page in the PdfWriter.
 
@@ -458,7 +467,7 @@ def _stamp_page_footers(writer, metadata=None):
     right_text = ""
     if metadata:
         title = metadata.get("title") or metadata.get("name", "")
-        date_str = metadata.get("_resolved_date", "")
+        date_str = resolved_date
         version = metadata.get("Version") or metadata.get("version", "")
         right_parts = []
         if date_str:
@@ -549,8 +558,13 @@ def generate_pdf(page_pdfs, output_path, bom_csv_path=None, instructions_path=No
             toc_entries.append((current_page, "Assembly Instructions"))
 
         # 1. Cover page (with inline BOM)
-        if metadata:
-            cover_flowables = _build_cover_page(metadata, toc_entries, bom_csv_path=bom_csv_path)
+        # Generate cover when metadata is provided, or when BOM exists (use empty dict as default)
+        resolved_date = ""
+        effective_metadata = metadata if metadata else ({} if bom_csv_path else None)
+        if effective_metadata is not None:
+            cover_flowables, resolved_date = _build_cover_page(
+                effective_metadata, toc_entries, bom_csv_path=bom_csv_path
+            )
             if cover_flowables:
                 buf = io.BytesIO()
                 margin = 15 * mm
@@ -592,7 +606,7 @@ def generate_pdf(page_pdfs, output_path, bom_csv_path=None, instructions_path=No
             return False
 
         # 4. Stamp consistent footer on every page
-        _stamp_page_footers(writer, metadata=metadata)
+        _stamp_page_footers(writer, metadata=metadata, resolved_date=resolved_date)
 
         with open(output_path, "wb") as f:
             writer.write(f)

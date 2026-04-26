@@ -81,8 +81,8 @@ Export technical drawings and generate a bill of materials (BOM) from FreeCAD pr
 - ✅ Documentation in README.md
 
 **Implementation Notes**:
-- TechDraw SVG export is **limited by FreeCAD 1.1.1**: requires GUI rendering
-- Workaround: export TechDraw pages manually from FreeCAD GUI (documented)
+- TechDraw PDF export uses **FreeCAD GUI binary**: `TechDrawGui.exportPageAsPdf()` for pixel-perfect output
+- Runs headlessly on macOS; set `FREECAD_GUI_BINARY` env var if needed
 - BOM extraction is **fully production-ready**
 - **Reads from existing Assembly::BomObject** (respects user's BOM configuration)
 - CSV output columns match BomObject exactly (Index, Name, Description, File Name, Quantity, etc.)
@@ -98,8 +98,8 @@ export:
 
     techdraw:
       pages: []                    # Empty = all, or list specific labels
-      output_dir: docs            # Where to save (future SVG export)
-      format: svg                 # Only SVG currently recognized
+      output_dir: docs            # Where to save exported files
+      format: pdf                 # PDF export via GUI binary
 
     bom:
       source: assembly            # auto/assembly/spreadsheet/parts

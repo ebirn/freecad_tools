@@ -37,7 +37,7 @@ def test_techdraw_and_bom_export():
                     "techdraw": {
                         "pages": [],  # Export all TechDraw pages
                         "output_dir": str(tmpdir / "drawings"),
-                        "format": "svg",
+                        "format": "pdf",
                     },
                     "bom": {
                         "source": "parts",  # Fallback to parts for this test

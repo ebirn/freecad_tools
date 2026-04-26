@@ -639,7 +639,7 @@ class TestTechDrawConfigSection:
             "techdraw": {
                 "pages": [],  # empty = all pages
                 "output_dir": "docs/",
-                "format": "svg",
+                "format": "pdf",
             },
         }
 
@@ -650,7 +650,7 @@ class TestTechDrawConfigSection:
         assert techdraw is not None
         assert techdraw["pages"] == []
         assert techdraw["output_dir"] == "docs/"
-        assert techdraw["format"] == "svg"
+        assert techdraw["format"] == "pdf"
 
     def test_techdraw_section_pages_all(self):
         """Should handle empty pages list (means all pages)."""
@@ -675,17 +675,6 @@ class TestTechDrawConfigSection:
         assert len(pages) == 3
         assert "Page" in pages
         assert "DetailView" in pages
-
-    def test_techdraw_section_format_svg(self):
-        """Should accept svg format."""
-        # Given
-        techdraw = {"format": "svg"}
-
-        # When
-        fmt = techdraw.get("format")
-
-        # Then
-        assert fmt == "svg"
 
     def test_techdraw_section_format_pdf(self):
         """Should accept pdf format."""
@@ -799,11 +788,11 @@ class TestBOMConfigSection:
     def test_bom_source_spreadsheet(self):
         """Should accept 'spreadsheet' source."""
         # Given
-        bom = {"source": "spreadsheet", "spreadsheet": "BOM"}
+        bom = {"source": "spreadsheet", "spreadsheet_name": "BOM"}
 
         # When
         source = bom.get("source")
-        spreadsheet_name = bom.get("spreadsheet")
+        spreadsheet_name = bom.get("spreadsheet_name")
 
         # Then
         assert source == "spreadsheet"
@@ -948,7 +937,7 @@ class TestExportWithTechDrawAndBOM:
             "techdraw": {
                 "pages": [],
                 "output_dir": "docs/",
-                "format": "svg",
+                "format": "pdf",
             },
             "bom": {
                 "source": "assembly",
@@ -984,7 +973,7 @@ class TestExportWithTechDrawAndBOM:
             "techdraw": {
                 "pages": ["Page", "Page001"],
                 "output_dir": "docs/",
-                "format": "svg",
+                "format": "pdf",
             },
             "bom": {
                 "source": "assembly",

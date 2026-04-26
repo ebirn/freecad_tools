@@ -788,99 +788,136 @@ def export_techdraw_to_pdf(doc, pages_to_export, output_path, bom_csv_path=None,
             logger.error("Document has no file path — save it first")
             return False
 
-        # Create temp directory for individual page PDFs
-        temp_dir = tempfile.mkdtemp(prefix="techdraw_")
-        result_file = os.path.join(temp_dir, "result.json")
-
-        # Build config for techdraw_export.py
-        tools_dir = os.path.dirname(os.path.abspath(__file__))
-        export_script = os.path.join(tools_dir, "techdraw_export.py")
-
-        export_config = {
-            "source": source_path,
-            "pages": pages_to_export if pages_to_export else None,
-            "output_dir": temp_dir,
-            "result_file": result_file,
-        }
-
-        config_path = os.path.join(temp_dir, "export_config.json")
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(export_config, f, indent=2)
-
-        cmd = [freecad_gui, export_script, config_path]
-        logger.info(f"Exporting TechDraw pages via GUI: {freecad_gui}")
-        logger.debug(f"Running: {' '.join(cmd)}")
-
-        gui_result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-
-        if gui_result.stdout:
-            logger.debug(f"GUI export stdout: {gui_result.stdout[:500]}")
-        if gui_result.stderr:
-            logger.debug(f"GUI export stderr: {gui_result.stderr[:500]}")
-
-        # Read result
-        if not os.path.exists(result_file):
-            logger.error(f"GUI export produced no result file. Exit code: {gui_result.returncode}")
-            return False
-
-        with open(result_file, encoding="utf-8") as f:
-            export_result = json.load(f)
-
-        if not export_result.get("success"):
-            logger.error(f"GUI export failed: {export_result.get('error', 'unknown error')}")
-            return False
-
-        page_pdfs = [p["pdf_path"] for p in export_result["pages"] if p.get("pdf_path")]
-        if not page_pdfs and not bom_csv_path and not instructions_path:
-            logger.warning("No TechDraw pages exported and no BOM/instructions to include")
-            return False
-
-        logger.info(f"Exported {len(page_pdfs)} TechDraw page PDF(s)")
-
-        # Step 2: Merge page PDFs + BOM + instructions via venv subprocess
-        pdf_script = os.path.join(tools_dir, "techdraw_pdf.py")
-        venv_python = _find_venv_python()
-
-        merge_config = {
-            "page_pdfs": page_pdfs,
-            "output_path": os.path.abspath(output_path),
-        }
-        if bom_csv_path:
-            merge_config["bom_csv_path"] = os.path.abspath(bom_csv_path)
-        if instructions_path:
-            merge_config["instructions_path"] = os.path.abspath(instructions_path)
-        if metadata:
-            merge_config["metadata"] = metadata
-
-        merge_config_path = os.path.join(temp_dir, "merge_config.json")
-        with open(merge_config_path, "w", encoding="utf-8") as f:
-            json.dump(merge_config, f, indent=2)
-
-        merge_cmd = [venv_python, pdf_script, merge_config_path]
-        logger.info(f"Merging PDF: {output_path}")
-        logger.debug(f"Running: {' '.join(merge_cmd)}")
-
-        merge_result = subprocess.run(merge_cmd, capture_output=True, text=True, timeout=120)
-
-        if merge_result.stdout:
-            logger.debug(f"PDF merger stdout: {merge_result.stdout[:500]}")
-        if merge_result.stderr:
-            logger.debug(f"PDF merger stderr: {merge_result.stderr[:500]}")
-
-        if merge_result.returncode != 0:
-            logger.error(f"PDF merge failed (exit code {merge_result.returncode})")
-            return False
-
-        if os.path.exists(output_path):
-            logger.info(f"PDF generated: {output_path} ({os.path.getsize(output_path)} bytes)")
-            return True
-
-        logger.error(f"PDF merge completed but file not found: {output_path}")
-        return False
+        # Create temp directory for individual page PDFs (cleaned up automatically)
+        with tempfile.TemporaryDirectory(prefix="techdraw_") as temp_dir:
+            return _run_techdraw_pipeline(
+                doc,
+                pages_to_export,
+                output_path,
+                temp_dir,
+                bom_csv_path=bom_csv_path,
+                instructions_path=instructions_path,
+                metadata=metadata,
+                freecad_gui=freecad_gui,
+            )
 
     except Exception as e:
         logger.exception(f"Error exporting TechDraw to PDF: {e}")
         return False
+
+
+def _run_techdraw_pipeline(
+    doc,
+    pages_to_export,
+    output_path,
+    temp_dir,
+    bom_csv_path=None,
+    instructions_path=None,
+    metadata=None,
+    freecad_gui=None,
+):
+    """Inner pipeline for TechDraw PDF export, runs inside a TemporaryDirectory context."""
+    result_file = os.path.join(temp_dir, "result.json")
+
+    # Build config for techdraw_export.py
+    tools_dir = os.path.dirname(os.path.abspath(__file__))
+    export_script = os.path.join(tools_dir, "techdraw_export.py")
+
+    source_path = doc.FileName
+
+    export_config = {
+        "source": source_path,
+        "pages": pages_to_export if pages_to_export else None,
+        "output_dir": temp_dir,
+        "result_file": result_file,
+    }
+
+    config_path = os.path.join(temp_dir, "export_config.json")
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(export_config, f, indent=2)
+
+    cmd = [freecad_gui, export_script, config_path]
+    logger.info(f"Exporting TechDraw pages via GUI: {freecad_gui}")
+    logger.debug(f"Running: {' '.join(cmd)}")
+
+    gui_result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+
+    if gui_result.stdout:
+        logger.debug(f"GUI export stdout: {gui_result.stdout[:500]}")
+    if gui_result.stderr:
+        logger.debug(f"GUI export stderr: {gui_result.stderr[:500]}")
+
+    # Read result
+    if not os.path.exists(result_file):
+        logger.error(f"GUI export produced no result file. Exit code: {gui_result.returncode}")
+        return False
+
+    with open(result_file, encoding="utf-8") as f:
+        export_result = json.load(f)
+
+    if not export_result.get("success"):
+        logger.error(f"GUI export failed: {export_result.get('error', 'unknown error')}")
+        return False
+
+    page_pdfs = [p["pdf_path"] for p in export_result["pages"] if p.get("pdf_path")]
+    if not page_pdfs and not bom_csv_path and not instructions_path:
+        logger.warning("No TechDraw pages exported and no BOM/instructions to include")
+        return False
+
+    logger.info(f"Exported {len(page_pdfs)} TechDraw page PDF(s)")
+
+    # Step 2: Merge page PDFs + BOM + instructions via venv subprocess
+    pdf_script = os.path.join(tools_dir, "techdraw_pdf.py")
+    venv_python = _find_venv_python()
+
+    merge_config = {
+        "page_pdfs": page_pdfs,
+        "output_path": os.path.abspath(output_path),
+    }
+    if bom_csv_path:
+        merge_config["bom_csv_path"] = os.path.abspath(bom_csv_path)
+    if instructions_path:
+        merge_config["instructions_path"] = os.path.abspath(instructions_path)
+    if metadata:
+        merge_config["metadata"] = metadata
+
+    merge_config_path = os.path.join(temp_dir, "merge_config.json")
+    with open(merge_config_path, "w", encoding="utf-8") as f:
+        json.dump(merge_config, f, indent=2)
+
+    merge_cmd = [venv_python, pdf_script, merge_config_path]
+    logger.info(f"Merging PDF: {output_path}")
+    logger.debug(f"Running: {' '.join(merge_cmd)}")
+
+    merge_result = subprocess.run(merge_cmd, capture_output=True, text=True, timeout=120)
+
+    if merge_result.stdout:
+        logger.debug(f"PDF merger stdout: {merge_result.stdout[:500]}")
+    if merge_result.stderr:
+        logger.debug(f"PDF merger stderr: {merge_result.stderr[:500]}")
+
+    if merge_result.returncode != 0:
+        logger.error(f"PDF merge failed (exit code {merge_result.returncode})")
+        return False
+
+    if os.path.exists(output_path):
+        logger.info(f"PDF generated: {output_path} ({os.path.getsize(output_path)} bytes)")
+        return True
+
+    logger.error(f"PDF merge completed but file not found: {output_path}")
+    return False
+
+
+def _col_index_to_letter(col_idx):
+    """Convert a 1-based column index to Excel-style letter(s).
+
+    Examples: 1→A, 26→Z, 27→AA, 52→AZ, 53→BA, 702→ZZ
+    """
+    result = []
+    while col_idx > 0:
+        col_idx, remainder = divmod(col_idx - 1, 26)
+        result.append(chr(65 + remainder))
+    return "".join(reversed(result))
 
 
 def extract_bom_from_assembly(doc, custom_fields=None):
@@ -928,11 +965,8 @@ def extract_bom_from_assembly(doc, custom_fields=None):
         headers = []
         col_idx = 1
         while True:
-            # Convert column index to letter: 1=A, 2=B, 3=C, ..., 27=AA, etc.
-            if col_idx <= 26:
-                col_letter = chr(64 + col_idx)
-            else:
-                col_letter = chr(64 + (col_idx // 26)) + chr(64 + (col_idx % 26))
+            # Convert column index to letter: 1=A, 2=B, ..., 27=AA, etc.
+            col_letter = _col_index_to_letter(col_idx)
 
             cell_addr = col_letter + "1"
             try:
@@ -961,10 +995,7 @@ def extract_bom_from_assembly(doc, custom_fields=None):
 
             for col_idx, header in enumerate(headers, start=1):
                 # Convert column index to letter
-                if col_idx <= 26:
-                    col_letter = chr(64 + col_idx)
-                else:
-                    col_letter = chr(64 + (col_idx // 26)) + chr(64 + (col_idx % 26))
+                col_letter = _col_index_to_letter(col_idx)
 
                 cell_addr = col_letter + str(row_idx)
                 try:
@@ -1325,37 +1356,18 @@ def main():
                             logger.info(f"Successfully extracted BOM from Parts ({len(bom_data)} items)")
 
                     if bom_data:
-                        # Write BOM CSV via subprocess (lib3mf_utils pattern)
+                        # Write BOM CSV using shared utility
                         os.makedirs(os.path.dirname(bom_output) or ".", exist_ok=True)
 
-                        # For now, write BOM directly (no subprocess needed for CSV)
-                        # In future, can use subprocess pattern if we need XML/Excel formats
-                        import csv
+                        from bom_utils import write_bom_csv
 
-                        # Determine fields to write
-                        # If BOM came from BomObject, it has all columns already
-                        if bom_data and isinstance(bom_data, list) and bom_data:
-                            # Collect all field names from data rows (preserving order)
-                            csv_fields = []
-                            seen_fields = set()
-                            for item in bom_data:
-                                for key in item.keys():
-                                    if key not in seen_fields:
-                                        csv_fields.append(key)
-                                        seen_fields.add(key)
-                        else:
-                            csv_fields = ["label", "quantity"]
-                            if bom_fields:
-                                csv_fields.extend(bom_fields)
+                        # Determine fields: if BOM has custom fields from config, pass them;
+                        # otherwise let write_bom_csv auto-detect from data keys
+                        fields = None
+                        if bom_fields:
+                            fields = ["label", "quantity"] + bom_fields
 
-                        with open(bom_output, "w", newline="", encoding="utf-8") as csvfile:
-                            writer = csv.DictWriter(csvfile, fieldnames=csv_fields, restval="")
-                            writer.writeheader()
-                            for item in bom_data:
-                                row = {field: item.get(field, "") for field in csv_fields}
-                                writer.writerow(row)
-
-                        logger.info(f"Wrote BOM to {bom_output} ({len(bom_data)} items, {len(csv_fields)} fields)")
+                        write_bom_csv(bom_data, bom_output, fields=fields)
                     else:
                         logger.warning("No BOM data extracted from document")
 
