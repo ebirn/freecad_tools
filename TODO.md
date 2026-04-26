@@ -173,7 +173,7 @@ export:
     bodies:
       - Feed001
       - body: "Cover"
-        rotation: [0, 0, 45]
+        rotation: {axis: [0, 0, 1], angle: 45}   # 45 deg around Z
 
   - name: AutoProject
     source: AutoProject.FCStd
@@ -183,13 +183,52 @@ export:
 
 **FreeCAD Custom Properties** (when `body_source: properties`):
 
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `ExportTo3MF` | Bool | Yes | Mark body for export (existing) |
-| `ExportCount` | Int | No | Number of copies (default: 1) |
-| `ExportRotation` | String | No | "X,Y,Z" degrees, e.g. "0,0,45" |
+| Property | FreeCAD Type | Required | Description |
+|----------|--------------|----------|-------------|
+| `ExportTo3MF` | `App::PropertyBool` | Yes | Mark body for export |
+| `ExportCount` | `App::PropertyInteger` | No | Number of copies (default: 1) |
+| `ExportRotation` | `App::PropertyRotation` | No | Orientation for export |
 
-Position omitted for properties mode - better handled in config mode.
+All properties are grouped under `freecad_tools` in the Properties panel.
+
+**`App::PropertyRotation` details**:
+- FreeCAD GUI displays this as **Axis (x,y,z) + Angle** — not Euler angles
+- Axis+Angle is unambiguous (no Euler convention confusion, no gimbal lock)
+- Read in Python via `obj.ExportRotation` → `FreeCAD.Rotation` object
+- Convert to rotation matrix for 3MF transform via `.toMatrix()`
+- Construct in scripts: `FreeCAD.Rotation(FreeCAD.Vector(0,0,1), 45)` = 45 deg around Z
+
+**Config rotation format** (when `body_source: config`):
+- **Axis+Angle dict** (matches FreeCAD property): `rotation: {axis: [0, 0, 1], angle: 45}`
+- This is the same representation shown in FreeCAD's Properties panel
+- Axis is a direction vector (will be normalized), angle is in degrees
+- No Euler angle ambiguity — what you set in config = what you see in FreeCAD GUI
+
+**Implementation notes**:
+- Current `parse_body_specs()` and `create_euler_transform()` use Euler X,Y,Z rotation order
+- Must replace with axis+angle → rotation matrix conversion
+- Rename `create_euler_transform()` → `create_axis_angle_transform()` (or similar)
+- When reading `App::PropertyRotation` from FreeCAD, the `FreeCAD.Rotation` object
+  can be converted to axis+angle via `.Axis` and `.Angle` properties
+- All existing rotation tests must be updated for axis+angle format
+
+**Test data** (in `examples/`):
+
+| File | Bodies | Properties | Purpose |
+|------|--------|------------|---------|
+| `example.FCStd` | Simple geometry | None | Basic export pipeline testing |
+| `example_properties.FCStd` | Angles, Ball, Cube, Doughnut | `ExportTo3MF`, `ExportCount`, `ExportRotation` | Property-based selection testing |
+| `example_multi.FCStd` | Multiple bodies | None | Multi-document export testing |
+| `example_techdraw.FCStd` | Bodies + TechDraw pages | None | TechDraw/BOM testing (Task #4) |
+
+`example_properties.FCStd` body configurations:
+
+| Body | ExportTo3MF | ExportCount | ExportRotation |
+|------|-------------|-------------|----------------|
+| Angles | true | 1 | identity (no rotation) |
+| Ball | true | 1 | 90 deg around X |
+| Cube | true | 3 | 45 deg around Z |
+| Doughnut | false | 1 | identity (no rotation) |
 
 **Phase 1** - Make mode explicit, wire up property reading:
 - [ ] Add `body_source` field to config schema
@@ -199,10 +238,13 @@ Position omitted for properties mode - better handled in config mode.
 - [ ] Add tests for mode validation
 
 **Phase 2** - Extend properties with orientation and count:
-- [ ] Read `ExportCount` and `ExportRotation` properties
+- [ ] Read `ExportCount` and `ExportRotation` (`App::PropertyRotation`) properties
+- [ ] Convert `FreeCAD.Rotation` → axis+angle for pipeline
+- [ ] Update `parse_body_specs()` to accept `{axis: [x,y,z], angle: N}` dict format
+- [ ] Replace `create_euler_transform()` with axis+angle → rotation matrix
 - [ ] Feed property-derived body specs into existing pipeline
-- [ ] Add `set_export_properties()` helper to macro_helper.py
-- [ ] Add tests
+- [ ] Add `set_export_properties()` helper to macro_helper.py (using `App::PropertyRotation`)
+- [ ] Update all rotation tests for axis+angle format
 
 **Phase 3** - Documentation:
 - [ ] Document both modes in README.md

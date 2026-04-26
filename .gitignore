@@ -1,6 +1,6 @@
 __pycache__
 */__pycache__
-examples/example_cad.*.FCBak
+examples/*.FCBak
 *.log
 .DS_Store
 *.egg-info/
