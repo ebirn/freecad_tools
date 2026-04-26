@@ -817,6 +817,33 @@ Keep TODO.md compact and actionable:
 - Do not accumulate "Files Modified" lists, phase summaries, or implementation details for completed work in TODO.md - that belongs in CHANGELOG.md or git history.
 - Renumber tasks when removing completed ones to keep the list sequential.
 
+### Release Process
+
+When the user asks to cut a release:
+
+1. **Pre-release checklist** (verify all before proceeding):
+   - All tests pass (`python -m pytest` via venv)
+   - CHANGELOG.md is up to date (no items left under `[Unreleased]` without a version)
+   - TODO.md is clean (no completed tasks — they belong in CHANGELOG.md)
+   - README.md reflects all current features and config options
+   - Linter passes (`ruff check`, `ruff format --check`)
+
+2. **Update CHANGELOG.md**:
+   - Rename `[Unreleased]` to `[vX.Y.Z] - YYYY-MM-DD` with today's date
+   - Add a fresh empty `[Unreleased]` section above it
+
+3. **Commit and tag**:
+   ```bash
+   git add -A
+   git commit -m "chore(release): vX.Y.Z"
+   git tag vX.Y.Z
+   ```
+
+4. **Push** (only after user approval):
+   ```bash
+   git push && git push --tags
+   ```
+
 ---
 
 ## Contact & Questions
