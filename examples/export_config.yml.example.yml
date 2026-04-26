@@ -56,3 +56,25 @@ export:
     metadata:
       Project: "AnotherDesign"
       Version: "2.1"
+
+  # TechDraw + BOM export example
+  - name: AssemblyProject
+    source: MyAssembly.FCStd
+    bodies:
+      - Body
+      - Body001
+    output: prints/MyAssembly.3mf
+
+    # TechDraw pages → multi-page PDF (with BOM table + instructions)
+    techdraw:
+      pages: []                          # Empty = all TechDraw pages
+      output_dir: docs                   # Output directory for PDF
+      format: pdf                        # Generates {name}.pdf
+      instructions: INSTRUCTIONS.md      # Optional: markdown included in PDF
+
+    # Bill of Materials → CSV (also embedded in TechDraw PDF)
+    bom:
+      source: assembly                   # Read from Assembly::BomObject
+      output: docs/bom.csv              # CSV output path
+      fields:
+        - material                       # Optional custom fields

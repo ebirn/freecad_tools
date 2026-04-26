@@ -1,6 +1,7 @@
 #!/usr/bin/env yaml
 # End-to-end test configuration for TechDraw and BOM export
-# Run from examples/ directory: python3 ../tools/export.py
+# Run from project root: python3 tools/export.py examples/export_techdraw_test.yml
+# Paths are relative to this config file's directory (examples/)
 
 export:
   - name: techdraw_assembly_test
@@ -10,18 +11,24 @@ export:
       - Body001        # Sphere
       - Box            # AdditiveBox
 
-    # 3MF output
-    output: test_output/assembly_test.3mf
+    # Output paths use ../ to go up from examples/ to project root
+    output: ../test_output/assembly_test.3mf
+
+    # Project metadata (embedded in 3MF and shown on PDF cover page)
+    metadata:
+      Author: "OE1EBG"
+      Version: "0.1.0"
 
     # TechDraw export (document has 2 TechDraw pages)
     techdraw:
       pages: []              # Empty = export all pages
-      output_dir: test_output/drawings
-      format: svg
+      output_dir: ../test_output/drawings
+      format: pdf            # PDF with TechDraw pages + BOM table + instructions
+      instructions: INSTRUCTIONS.md  # Include assembly instructions in PDF
 
     # BOM generation from Assembly
     bom:
-      source: assembly       # Use Assembly tree walk
-      output: test_output/bom.csv
+      source: assembly       # Read from Assembly::BomObject
+      output: ../test_output/bom.csv
       fields:
         - material

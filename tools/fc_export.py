@@ -400,6 +400,24 @@ def load_config():
                     logger.debug(f"Resolved {field} '{item[field]}' to: {resolved}")
                 item[field] = resolved
 
+        # Resolve nested paths in techdraw section
+        if "techdraw" in item and isinstance(item["techdraw"], dict):
+            td = item["techdraw"]
+            if "output_dir" in td and td["output_dir"]:
+                resolved = resolve_relative_path(td["output_dir"], base_dir)
+                if resolved != td["output_dir"]:
+                    logger.debug(f"Resolved techdraw.output_dir '{td['output_dir']}' to: {resolved}")
+                td["output_dir"] = resolved
+
+        # Resolve nested paths in bom section
+        if "bom" in item and isinstance(item["bom"], dict):
+            bom = item["bom"]
+            if "output" in bom and bom["output"]:
+                resolved = resolve_relative_path(bom["output"], base_dir)
+                if resolved != bom["output"]:
+                    logger.debug(f"Resolved bom.output '{bom['output']}' to: {resolved}")
+                bom["output"] = resolved
+
     return result
 
 
@@ -688,80 +706,181 @@ def export_bodies_to_3mf_with_template(
             temp_dir.cleanup()
 
 
-def export_techdraw_pages(doc, pages_to_export, output_dir):
+def _find_venv_python():
+    """Find the venv Python executable for subprocess calls."""
+    lib3mf_python = os.environ.get("FREECAD_TOOLS_LIB3MF_PYTHON")
+    if lib3mf_python:
+        return lib3mf_python
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    venv_python = os.path.join(os.path.dirname(script_dir), ".venv", "bin", "python3")
+    venv_python = os.path.abspath(venv_python)
+    if os.path.exists(venv_python):
+        return venv_python
+    return sys.executable
+
+
+def _find_freecad_gui_binary():
     """
-    Export TechDraw pages from a document to SVG files.
+    Find the FreeCAD GUI binary for TechDraw PDF export.
 
-    Attempts to extract TechDraw pages by rendering them to SVG.
-    Note: TechDraw SVG export requires GUI rendering, which is not available
-    in headless mode (freecadcmd). This function serves as a placeholder for
-    future enhancement when FreeCAD provides headless rendering support.
-
-    For now, TechDraw pages can be exported manually from the FreeCAD GUI:
-    - TechDraw > Export Page as SVG
-
-    Args:
-        doc: FreeCAD document
-        pages_to_export: List of page names/labels (empty = all pages)
-        output_dir: Directory to save SVG files
+    TechDrawGui.exportPageAsPdf() requires the GUI binary (not freecadcmd).
+    As of FreeCAD 1.1, there is no offline/headless API for pixel-perfect
+    TechDraw PDF export — check future FreeCAD releases for improvements.
 
     Returns:
-        List of (page_label, svg_file_path) tuples (empty in headless mode)
+        Path to FreeCAD GUI binary, or None if not found
     """
-    result = []
+    gui_paths = [
+        # macOS
+        "/Applications/FreeCAD.app/Contents/MacOS/FreeCAD",
+        # Linux common locations
+        "/usr/bin/freecad",
+        "/usr/local/bin/freecad",
+        "/opt/freecad/bin/freecad",
+        # Snap/Flatpak
+        "/snap/freecad/current/bin/freecad",
+    ]
 
+    # Also check env var override
+    env_path = os.environ.get("FREECAD_GUI_BINARY")
+    if env_path and os.path.exists(env_path):
+        return env_path
+
+    for path in gui_paths:
+        if os.path.exists(path):
+            return path
+
+    return None
+
+
+def export_techdraw_to_pdf(doc, pages_to_export, output_path, bom_csv_path=None, instructions_path=None, metadata=None):
+    """
+    Export TechDraw pages to a multi-page PDF.
+
+    Two-step pipeline:
+    1. Export individual page PDFs via FreeCAD GUI binary (TechDrawGui.exportPageAsPdf)
+    2. Merge page PDFs + BOM table + instructions via venv subprocess (techdraw_pdf.py)
+
+    Args:
+        doc: FreeCAD document (used to get source path and page names)
+        pages_to_export: List of page names/labels (empty = all pages)
+        output_path: Path for the output PDF file
+        bom_csv_path: Optional path to BOM CSV to include in PDF
+        instructions_path: Optional path to instructions markdown to include in PDF
+        metadata: Optional dict with document metadata for cover page
+
+    Returns:
+        True on success, False on failure
+    """
     try:
-        import TechDraw  # noqa: F401 - needed for TechDraw objects
+        # Step 1: Export individual page PDFs via FreeCAD GUI binary
+        freecad_gui = _find_freecad_gui_binary()
+        if not freecad_gui:
+            logger.error(
+                "FreeCAD GUI binary not found. TechDraw PDF export requires the GUI binary. "
+                "Set FREECAD_GUI_BINARY environment variable or install FreeCAD in a standard location."
+            )
+            return False
 
-        # Find all TechDraw DrawPage objects in document
-        techdraw_pages = [obj for obj in doc.Objects if hasattr(obj, "TypeId") and obj.TypeId == "TechDraw::DrawPage"]
+        # Get the source document path
+        source_path = doc.FileName
+        if not source_path:
+            logger.error("Document has no file path — save it first")
+            return False
 
-        if not techdraw_pages:
-            logger.info("No TechDraw pages found in document")
-            return result
+        # Create temp directory for individual page PDFs
+        temp_dir = tempfile.mkdtemp(prefix="techdraw_")
+        result_file = os.path.join(temp_dir, "result.json")
 
-        logger.info(f"Found {len(techdraw_pages)} TechDraw page(s)")
+        # Build config for techdraw_export.py
+        tools_dir = os.path.dirname(os.path.abspath(__file__))
+        export_script = os.path.join(tools_dir, "techdraw_export.py")
 
-        # Determine which pages to export
-        if pages_to_export:
-            # Export specific pages
-            pages_to_process = []
-            for page_spec in pages_to_export:
-                # Try Name first, then Label
-                found = None
-                for page in techdraw_pages:
-                    if page.Name == page_spec or (hasattr(page, "Label") and page.Label == page_spec):
-                        found = page
-                        break
-                if found:
-                    pages_to_process.append(found)
-                else:
-                    logger.warning(f"TechDraw page '{page_spec}' not found")
-        else:
-            # Export all pages
-            pages_to_process = techdraw_pages
+        export_config = {
+            "source": source_path,
+            "pages": pages_to_export if pages_to_export else None,
+            "output_dir": temp_dir,
+            "result_file": result_file,
+        }
 
-        logger.info(f"TechDraw pages available: {len(pages_to_process)}")
-        logger.debug("Note: TechDraw SVG export requires GUI rendering (not available in headless mode)")
-        logger.info("To export TechDraw pages manually:")
-        logger.info("  1. Open the document in FreeCAD GUI")
-        logger.info("  2. Right-click TechDraw page → Export Page as SVG")
-        logger.info("  3. Save to output directory")
+        config_path = os.path.join(temp_dir, "export_config.json")
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(export_config, f, indent=2)
 
-        for page in pages_to_process:
-            page_label = page.Label if hasattr(page, "Label") else page.Name
-            logger.debug(f"Identified TechDraw page: {page_label} ({page.Name})")
+        cmd = [freecad_gui, export_script, config_path]
+        logger.info(f"Exporting TechDraw pages via GUI: {freecad_gui}")
+        logger.debug(f"Running: {' '.join(cmd)}")
 
-        # Return empty list since SVG export requires GUI
-        # Future: when FreeCAD provides headless rendering, this will generate SVGs
-        logger.warning("TechDraw SVG export skipped (requires FreeCAD GUI, not available in headless mode)")
+        gui_result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
 
-    except ImportError:
-        logger.warning("TechDraw module not available")
+        if gui_result.stdout:
+            logger.debug(f"GUI export stdout: {gui_result.stdout[:500]}")
+        if gui_result.stderr:
+            logger.debug(f"GUI export stderr: {gui_result.stderr[:500]}")
+
+        # Read result
+        if not os.path.exists(result_file):
+            logger.error(f"GUI export produced no result file. Exit code: {gui_result.returncode}")
+            return False
+
+        with open(result_file, encoding="utf-8") as f:
+            export_result = json.load(f)
+
+        if not export_result.get("success"):
+            logger.error(f"GUI export failed: {export_result.get('error', 'unknown error')}")
+            return False
+
+        page_pdfs = [p["pdf_path"] for p in export_result["pages"] if p.get("pdf_path")]
+        if not page_pdfs and not bom_csv_path and not instructions_path:
+            logger.warning("No TechDraw pages exported and no BOM/instructions to include")
+            return False
+
+        logger.info(f"Exported {len(page_pdfs)} TechDraw page PDF(s)")
+
+        # Step 2: Merge page PDFs + BOM + instructions via venv subprocess
+        pdf_script = os.path.join(tools_dir, "techdraw_pdf.py")
+        venv_python = _find_venv_python()
+
+        merge_config = {
+            "page_pdfs": page_pdfs,
+            "output_path": os.path.abspath(output_path),
+        }
+        if bom_csv_path:
+            merge_config["bom_csv_path"] = os.path.abspath(bom_csv_path)
+        if instructions_path:
+            merge_config["instructions_path"] = os.path.abspath(instructions_path)
+        if metadata:
+            merge_config["metadata"] = metadata
+
+        merge_config_path = os.path.join(temp_dir, "merge_config.json")
+        with open(merge_config_path, "w", encoding="utf-8") as f:
+            json.dump(merge_config, f, indent=2)
+
+        merge_cmd = [venv_python, pdf_script, merge_config_path]
+        logger.info(f"Merging PDF: {output_path}")
+        logger.debug(f"Running: {' '.join(merge_cmd)}")
+
+        merge_result = subprocess.run(merge_cmd, capture_output=True, text=True, timeout=120)
+
+        if merge_result.stdout:
+            logger.debug(f"PDF merger stdout: {merge_result.stdout[:500]}")
+        if merge_result.stderr:
+            logger.debug(f"PDF merger stderr: {merge_result.stderr[:500]}")
+
+        if merge_result.returncode != 0:
+            logger.error(f"PDF merge failed (exit code {merge_result.returncode})")
+            return False
+
+        if os.path.exists(output_path):
+            logger.info(f"PDF generated: {output_path} ({os.path.getsize(output_path)} bytes)")
+            return True
+
+        logger.error(f"PDF merge completed but file not found: {output_path}")
+        return False
+
     except Exception as e:
-        logger.exception(f"Error processing TechDraw pages: {e}")
-
-    return result
+        logger.exception(f"Error exporting TechDraw to PDF: {e}")
+        return False
 
 
 def extract_bom_from_assembly(doc, custom_fields=None):
@@ -1142,22 +1261,32 @@ def main():
                 logger.info("Processing TechDraw export")
                 pages_to_export = techdraw_config.get("pages", [])
                 techdraw_output_dir = techdraw_config.get("output_dir", "docs")
-                techdraw_format = techdraw_config.get("format", "svg")  # Currently only SVG supported
+                techdraw_format = techdraw_config.get("format", "pdf")  # Default to PDF now
 
-                if techdraw_format != "svg":
-                    logger.warning(f"TechDraw format '{techdraw_format}' not yet supported, skipping")
-                else:
+                # Resolve output path
+                if not os.path.isabs(techdraw_output_dir):
+                    techdraw_output_dir = os.path.join(PROJECT_ROOT or os.getcwd(), techdraw_output_dir)
+                os.makedirs(techdraw_output_dir, exist_ok=True)
+
+                if techdraw_format == "pdf":
                     try:
-                        logger.debug(f"Exporting TechDraw pages: {pages_to_export or 'all'} to {techdraw_output_dir}")
-                        techdraw_results = export_techdraw_pages(doc, pages_to_export, techdraw_output_dir)
-                        if techdraw_results:
-                            logger.info(f"Exported {len(techdraw_results)} TechDraw page(s)")
-                            for page_label, svg_path in techdraw_results:
-                                logger.info(f"  → {page_label}: {svg_path}")
-                        else:
-                            logger.warning("No TechDraw pages exported")
+                        pdf_output = os.path.join(techdraw_output_dir, f"{export_name}.pdf")
+                        # BOM CSV path will be available after BOM processing below
+                        # For now, collect it; PDF generation happens after BOM
+                        techdraw_pdf_pending = {
+                            "pages": pages_to_export,
+                            "output": pdf_output,
+                            "instructions": techdraw_config.get("instructions"),
+                        }
+                        logger.debug(f"TechDraw PDF generation pending: {pdf_output}")
                     except Exception as e:
-                        logger.exception(f"Error exporting TechDraw pages: {e}")
+                        logger.exception(f"Error preparing TechDraw PDF: {e}")
+                        techdraw_pdf_pending = None
+                else:
+                    logger.warning(f"TechDraw format '{techdraw_format}' not yet supported, skipping")
+                    techdraw_pdf_pending = None
+            else:
+                techdraw_pdf_pending = None
 
             # Process BOM generation if configured
             if bom_config:
@@ -1168,8 +1297,9 @@ def main():
 
                 try:
                     # Generate default BOM output path if not specified
+                    # Path is already resolved by load_config() if relative
                     if not os.path.isabs(bom_output):
-                        bom_output = os.path.join(os.getcwd(), bom_output)
+                        bom_output = os.path.join(PROJECT_ROOT or os.getcwd(), bom_output)
 
                     # Extract BOM based on source priority (auto/assembly/spreadsheet/parts)
                     bom_data = []
@@ -1231,6 +1361,41 @@ def main():
 
                 except Exception as e:
                     logger.exception(f"Error generating BOM: {e}")
+
+            # Generate TechDraw PDF (after BOM so we can include BOM CSV)
+            if techdraw_pdf_pending:
+                try:
+                    pdf_output = techdraw_pdf_pending["output"]
+                    pages = techdraw_pdf_pending["pages"]
+                    instructions_path = techdraw_pdf_pending.get("instructions")
+
+                    # Resolve instructions path
+                    if instructions_path and not os.path.isabs(instructions_path):
+                        instructions_path = os.path.join(PROJECT_ROOT or os.getcwd(), instructions_path)
+
+                    # Use BOM CSV if it was generated
+                    bom_csv_for_pdf = bom_output if (bom_config and os.path.exists(bom_output)) else None
+
+                    # Build metadata for PDF cover page
+                    pdf_metadata = get_export_metadata(item, PROJECT_ROOT or os.getcwd())
+                    pdf_metadata["title"] = export_name
+                    pdf_metadata["source"] = os.path.basename(source)
+
+                    logger.info(f"Generating TechDraw PDF: {pdf_output}")
+                    pdf_success = export_techdraw_to_pdf(
+                        doc,
+                        pages,
+                        pdf_output,
+                        bom_csv_path=bom_csv_for_pdf,
+                        instructions_path=instructions_path,
+                        metadata=pdf_metadata,
+                    )
+                    if pdf_success:
+                        logger.info(f"TechDraw PDF generated: {pdf_output}")
+                    else:
+                        logger.warning("TechDraw PDF generation failed")
+                except Exception as e:
+                    logger.exception(f"Error generating TechDraw PDF: {e}")
 
             FreeCAD.closeDocument(doc_name)
             logger.debug(f"Closed document {doc_name}")
