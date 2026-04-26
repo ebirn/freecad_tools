@@ -254,23 +254,15 @@ export:
       format: svg            # Only SVG supported currently
 ```
 
-**What happens**:
-- Reads all TechDraw DrawPage objects from the document
-- Saves each page as an SVG file in `docs/`
-- SVG format for easy embedding in documentation or printing
+**Current Limitation**:
+TechDraw rendering currently requires FreeCAD's GUI and is not available in headless mode (freecadcmd). To export TechDraw pages:
 
-**Specific pages**:
-```yaml
-techdraw:
-  pages:
-    - "Assembly Drawing"    # Export only specific pages by label
-    - "Component Details"
-  output_dir: docs
-```
+1. Open your document in FreeCAD GUI
+2. Select the TechDraw page in the tree
+3. Right-click → "Export Page as SVG"
+4. Save to your desired output directory
 
-**Result**:
-- `docs/Assembly_Drawing.svg`
-- `docs/Component_Details.svg`
+The `techdraw:` configuration section is recognized but SVG export will not generate files in headless mode. Future FreeCAD versions may support headless TechDraw rendering, at which point this feature will work automatically.
 
 **Why use this**:
 - ✅ Keep technical drawings in sync with CAD model

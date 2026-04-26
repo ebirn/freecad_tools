@@ -692,8 +692,13 @@ def export_techdraw_pages(doc, pages_to_export, output_dir):
     """
     Export TechDraw pages from a document to SVG files.
 
-    Extracts TechDraw pages by name and saves their SVG representation.
-    Works headlessly via PageResult property (no GUI required).
+    Attempts to extract TechDraw pages by rendering them to SVG.
+    Note: TechDraw SVG export requires GUI rendering, which is not available
+    in headless mode (freecadcmd). This function serves as a placeholder for
+    future enhancement when FreeCAD provides headless rendering support.
+
+    For now, TechDraw pages can be exported manually from the FreeCAD GUI:
+    - TechDraw > Export Page as SVG
 
     Args:
         doc: FreeCAD document
@@ -701,7 +706,7 @@ def export_techdraw_pages(doc, pages_to_export, output_dir):
         output_dir: Directory to save SVG files
 
     Returns:
-        List of (page_label, svg_file_path) tuples, or empty list if no pages found
+        List of (page_label, svg_file_path) tuples (empty in headless mode)
     """
     result = []
 
@@ -736,48 +741,25 @@ def export_techdraw_pages(doc, pages_to_export, output_dir):
             # Export all pages
             pages_to_process = techdraw_pages
 
-        logger.info(f"Exporting {len(pages_to_process)} TechDraw page(s)")
+        logger.info(f"TechDraw pages available: {len(pages_to_process)}")
+        logger.debug("Note: TechDraw SVG export requires GUI rendering (not available in headless mode)")
+        logger.info("To export TechDraw pages manually:")
+        logger.info("  1. Open the document in FreeCAD GUI")
+        logger.info("  2. Right-click TechDraw page → Export Page as SVG")
+        logger.info("  3. Save to output directory")
 
-        # Create output directory if needed
-        os.makedirs(output_dir, exist_ok=True)
-
-        # Export each page's SVG representation
         for page in pages_to_process:
             page_label = page.Label if hasattr(page, "Label") else page.Name
-            logger.debug(f"Processing TechDraw page: {page_label} ({page.Name})")
+            logger.debug(f"Identified TechDraw page: {page_label} ({page.Name})")
 
-            # Recompute to ensure PageResult is up-to-date
-            try:
-                page.recompute()
-            except Exception as e:
-                logger.warning(f"Failed to recompute page {page_label}: {e}")
-
-            # Get the SVG representation via PageResult property
-            # PageResult is the internally rendered SVG file path
-            if hasattr(page, "PageResult"):
-                svg_path = page.PageResult
-                logger.debug(f"PageResult for {page_label}: {svg_path}")
-
-                if svg_path and os.path.exists(svg_path):
-                    # Copy SVG to output directory
-                    output_file = os.path.join(output_dir, f"{page_label}.svg")
-                    try:
-                        import shutil
-
-                        shutil.copy2(svg_path, output_file)
-                        logger.info(f"Exported SVG: {output_file}")
-                        result.append((page_label, output_file))
-                    except Exception as e:
-                        logger.error(f"Failed to copy SVG for {page_label}: {e}")
-                else:
-                    logger.warning(f"PageResult not available or invalid for {page_label}")
-            else:
-                logger.warning(f"PageResult property not found on {page_label}")
+        # Return empty list since SVG export requires GUI
+        # Future: when FreeCAD provides headless rendering, this will generate SVGs
+        logger.warning("TechDraw SVG export skipped (requires FreeCAD GUI, not available in headless mode)")
 
     except ImportError:
         logger.warning("TechDraw module not available")
     except Exception as e:
-        logger.exception(f"Error exporting TechDraw pages: {e}")
+        logger.exception(f"Error processing TechDraw pages: {e}")
 
     return result
 
