@@ -688,6 +688,373 @@ def export_bodies_to_3mf_with_template(
             temp_dir.cleanup()
 
 
+def export_techdraw_pages(doc, pages_to_export, output_dir):
+    """
+    Export TechDraw pages from a document to SVG files.
+
+    Extracts TechDraw pages by name and saves their SVG representation.
+    Works headlessly via PageResult property (no GUI required).
+
+    Args:
+        doc: FreeCAD document
+        pages_to_export: List of page names/labels (empty = all pages)
+        output_dir: Directory to save SVG files
+
+    Returns:
+        List of (page_label, svg_file_path) tuples, or empty list if no pages found
+    """
+    result = []
+
+    try:
+        import TechDraw  # noqa: F401 - needed for TechDraw objects
+
+        # Find all TechDraw DrawPage objects in document
+        techdraw_pages = [obj for obj in doc.Objects if hasattr(obj, "TypeId") and obj.TypeId == "TechDraw::DrawPage"]
+
+        if not techdraw_pages:
+            logger.info("No TechDraw pages found in document")
+            return result
+
+        logger.info(f"Found {len(techdraw_pages)} TechDraw page(s)")
+
+        # Determine which pages to export
+        if pages_to_export:
+            # Export specific pages
+            pages_to_process = []
+            for page_spec in pages_to_export:
+                # Try Name first, then Label
+                found = None
+                for page in techdraw_pages:
+                    if page.Name == page_spec or (hasattr(page, "Label") and page.Label == page_spec):
+                        found = page
+                        break
+                if found:
+                    pages_to_process.append(found)
+                else:
+                    logger.warning(f"TechDraw page '{page_spec}' not found")
+        else:
+            # Export all pages
+            pages_to_process = techdraw_pages
+
+        logger.info(f"Exporting {len(pages_to_process)} TechDraw page(s)")
+
+        # Create output directory if needed
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Export each page's SVG representation
+        for page in pages_to_process:
+            page_label = page.Label if hasattr(page, "Label") else page.Name
+            logger.debug(f"Processing TechDraw page: {page_label} ({page.Name})")
+
+            # Recompute to ensure PageResult is up-to-date
+            try:
+                page.recompute()
+            except Exception as e:
+                logger.warning(f"Failed to recompute page {page_label}: {e}")
+
+            # Get the SVG representation via PageResult property
+            # PageResult is the internally rendered SVG file path
+            if hasattr(page, "PageResult"):
+                svg_path = page.PageResult
+                logger.debug(f"PageResult for {page_label}: {svg_path}")
+
+                if svg_path and os.path.exists(svg_path):
+                    # Copy SVG to output directory
+                    output_file = os.path.join(output_dir, f"{page_label}.svg")
+                    try:
+                        import shutil
+
+                        shutil.copy2(svg_path, output_file)
+                        logger.info(f"Exported SVG: {output_file}")
+                        result.append((page_label, output_file))
+                    except Exception as e:
+                        logger.error(f"Failed to copy SVG for {page_label}: {e}")
+                else:
+                    logger.warning(f"PageResult not available or invalid for {page_label}")
+            else:
+                logger.warning(f"PageResult property not found on {page_label}")
+
+    except ImportError:
+        logger.warning("TechDraw module not available")
+    except Exception as e:
+        logger.exception(f"Error exporting TechDraw pages: {e}")
+
+    return result
+
+
+def extract_bom_from_assembly(doc, custom_fields=None):
+    """
+    Extract Bill of Materials from FreeCAD Assembly workbench (native, FreeCAD 1.0+).
+
+    Walks the Assembly object tree recursively to build a BOM with part counts.
+
+    Args:
+        doc: FreeCAD document
+        custom_fields: List of custom property names to extract (e.g., ["URL", "Price", "Material"])
+
+    Returns:
+        List of BOM dicts: [{"label": "", "quantity": 1, "material": "", ...}, ...]
+    """
+    bom = []
+    part_count = {}  # Track part counts by linked object
+
+    if custom_fields is None:
+        custom_fields = []
+
+    try:
+        # Find Assembly objects (native workbench: FreeCAD 1.0+)
+        assembly_objects = [
+            obj
+            for obj in doc.Objects
+            if hasattr(obj, "TypeId") and obj.TypeId in ["Assembly::AssemblyObject", "Assembly::AssemblyLink"]
+        ]
+
+        if not assembly_objects:
+            logger.info("No native Assembly found in document")
+            return bom
+
+        logger.info(f"Found {len(assembly_objects)} Assembly object(s)")
+
+        # Recursively walk assembly tree
+        def walk_assembly(obj, depth=0):
+            indent = "  " * depth
+            logger.debug(f"{indent}Walking {obj.Name} (TypeId: {obj.TypeId})")
+
+            # Get subobjects (child parts/assemblies)
+            try:
+                subobjects = obj.getSubObjects()
+                for subobj_name in subobjects:
+                    try:
+                        subobj = obj.getSubObject(subobj_name, retType=1)
+                        if subobj is None:
+                            continue
+
+                        # For App::Link objects, get the linked object
+                        # This handles duplicates (Bearing001, Bearing002) as same part
+                        linked_obj = subobj
+                        if hasattr(subobj, "LinkedObject"):
+                            linked_obj = subobj.LinkedObject
+
+                        # Use linked object's ID for counting duplicates
+                        obj_id = linked_obj.FullName if hasattr(linked_obj, "FullName") else linked_obj.Name
+
+                        # Increment count for this part
+                        part_count[obj_id] = part_count.get(obj_id, 0) + 1
+
+                        logger.debug(
+                            f"{indent}  Part: {subobj.Label} → {linked_obj.Label} (count: {part_count[obj_id]})"
+                        )
+
+                        # Recurse if this is a container
+                        if hasattr(subobj, "getSubObjects"):
+                            walk_assembly(subobj, depth + 1)
+                    except Exception as e:
+                        logger.debug(f"{indent}  Error processing subobject: {e}")
+            except Exception as e:
+                logger.debug(f"{indent}  Error getting subobjects: {e}")
+
+        # Walk each assembly
+        for asm_obj in assembly_objects:
+            walk_assembly(asm_obj)
+
+        # Build BOM from part counts
+        for obj_id, qty in part_count.items():
+            # Parse FullName to get object name
+            if "#" in obj_id:
+                doc_name, obj_name = obj_id.split("#", 1)
+                obj = doc.getObject(obj_name)
+            else:
+                obj = doc.getObject(obj_id)
+
+            if obj is None:
+                logger.warning(f"Could not find object: {obj_id}")
+                continue
+
+            bom_item = {
+                "label": obj.Label if hasattr(obj, "Label") else obj.Name,
+                "quantity": qty,
+            }
+
+            # Extract custom properties if present
+            for field in custom_fields:
+                try:
+                    value = getattr(obj, field, "")
+                    if value:
+                        bom_item[field.lower()] = str(value)
+                except Exception:
+                    pass
+
+            bom.append(bom_item)
+
+        logger.info(f"Extracted {len(bom)} unique parts from Assembly")
+
+    except Exception as e:
+        logger.exception(f"Error extracting Assembly BOM: {e}")
+
+    return bom
+
+
+def extract_bom_from_spreadsheet(doc, spreadsheet_name=None, custom_fields=None):
+    """
+    Extract Bill of Materials from a FreeCAD Spreadsheet.
+
+    Reads cells from a spreadsheet object to build BOM.
+
+    Args:
+        doc: FreeCAD document
+        spreadsheet_name: Name/Label of spreadsheet to read (default: "BOM")
+        custom_fields: List of custom property names to extract
+
+    Returns:
+        List of BOM dicts
+    """
+    bom = []
+
+    if spreadsheet_name is None:
+        spreadsheet_name = "BOM"
+
+    if custom_fields is None:
+        custom_fields = []
+
+    try:
+        # Find spreadsheet object
+        sheet_obj = None
+        for obj in doc.Objects:
+            if hasattr(obj, "TypeId") and obj.TypeId == "Spreadsheet::Sheet":
+                if obj.Name == spreadsheet_name or (hasattr(obj, "Label") and obj.Label == spreadsheet_name):
+                    sheet_obj = obj
+                    break
+
+        if sheet_obj is None:
+            logger.warning(f"Spreadsheet '{spreadsheet_name}' not found")
+            return bom
+
+        logger.info(f"Reading BOM from spreadsheet: {spreadsheet_name}")
+
+        # Get non-empty cells range
+        try:
+            # Try getUsedRange() if available (newer FreeCAD)
+            if hasattr(sheet_obj, "getUsedRange"):
+                start_cell, end_cell = sheet_obj.getUsedRange()
+                logger.debug(f"Used range: {start_cell} to {end_cell}")
+            else:
+                # Fallback: assume data starts at A1
+                start_cell = "A1"
+                end_cell = None
+        except Exception as e:
+            logger.debug(f"Could not determine cell range: {e}")
+            # Assume standard BOM format with header in row 1
+            start_cell = "A1"
+
+        # Read spreadsheet cells (simplified: assumes standard BOM table format)
+        # Expected format: Column A = Label, Column B = Quantity, etc.
+        try:
+            # Get all non-empty cells
+            if hasattr(sheet_obj, "getNonEmptyCells"):
+                cells = sheet_obj.getNonEmptyCells()
+                logger.debug(f"Found {len(cells)} non-empty cells")
+
+                # Group by row and build BOM items
+                rows = {}
+                for cell_addr in cells:
+                    # Parse cell address (e.g., "A1" → (1, 'A'))
+                    # Extract row number
+                    row_num = int("".join(c for c in cell_addr if c.isdigit()))
+                    col_letter = "".join(c for c in cell_addr if c.isalpha())
+
+                    if row_num not in rows:
+                        rows[row_num] = {}
+                    try:
+                        cell_value = sheet_obj.getContents(cell_addr)
+                        rows[row_num][col_letter] = cell_value
+                    except Exception:
+                        pass
+
+                # Skip header row (row 1), build BOM from data rows
+                for row_num in sorted(rows.keys()):
+                    if row_num == 1:  # Skip header
+                        continue
+
+                    row = rows[row_num]
+                    # Assume: A=Label, B=Quantity, C+=custom fields
+                    if "A" in row:
+                        bom_item = {
+                            "label": str(row.get("A", "")),
+                            "quantity": int(row.get("B", "1")),
+                        }
+
+                        # Map remaining columns to custom fields
+                        col_letters = ["C", "D", "E", "F", "G", "H", "I", "J"]
+                        for i, field_name in enumerate(custom_fields):
+                            if i < len(col_letters) and col_letters[i] in row:
+                                bom_item[field_name.lower()] = str(row[col_letters[i]])
+
+                        bom.append(bom_item)
+
+        except Exception as e:
+            logger.warning(f"Error reading spreadsheet cells: {e}")
+
+        logger.info(f"Extracted {len(bom)} items from spreadsheet")
+
+    except Exception as e:
+        logger.exception(f"Error extracting Spreadsheet BOM: {e}")
+
+    return bom
+
+
+def extract_bom_from_parts(doc, custom_fields=None):
+    """
+    Extract Bill of Materials by inspecting Part and Body objects directly.
+
+    Fallback BOM generation when Assembly/Spreadsheet not available.
+
+    Args:
+        doc: FreeCAD document
+        custom_fields: List of custom property names to extract
+
+    Returns:
+        List of BOM dicts
+    """
+    bom = []
+
+    if custom_fields is None:
+        custom_fields = []
+
+    try:
+        # Find all Part and Body objects
+        part_bodies = [
+            obj
+            for obj in doc.Objects
+            if hasattr(obj, "TypeId") and obj.TypeId in ["PartDesign::Body", "Part::Feature", "Part::FeaturePython"]
+        ]
+
+        logger.info(f"Found {len(part_bodies)} Part/Body object(s)")
+
+        for obj in part_bodies:
+            bom_item = {
+                "label": obj.Label if hasattr(obj, "Label") else obj.Name,
+                "quantity": 1,
+            }
+
+            # Extract custom properties if present
+            for field in custom_fields:
+                try:
+                    value = getattr(obj, field, "")
+                    if value:
+                        bom_item[field.lower()] = str(value)
+                except Exception:
+                    pass
+
+            bom.append(bom_item)
+
+        logger.info(f"Extracted {len(bom)} parts from document")
+
+    except Exception as e:
+        logger.exception(f"Error extracting Parts BOM: {e}")
+
+    return bom
+
+
 def main():
     logger.info("=" * 60)
     logger.debug(f"Current working directory: {os.getcwd()}")
@@ -711,10 +1078,13 @@ def main():
         keep_stl = item.get("keep_stl", False)  # Keep STL files?
         stl_output_dir = item.get("stl_output_dir")  # Where to place STL files
         export_name = item.get("name", "export")  # Export item name (used for file prefixing)
+        techdraw_config = item.get("techdraw")  # Optional TechDraw export config
+        bom_config = item.get("bom")  # Optional BOM generation config
 
         logger.debug(
             f"Item {i}: name={export_name}, source={source}, output={output}, bodies={bodies}, "
-            f"template={template}, keep_stl={keep_stl}, stl_output_dir={stl_output_dir}"
+            f"template={template}, keep_stl={keep_stl}, stl_output_dir={stl_output_dir}, "
+            f"techdraw={techdraw_config}, bom={bom_config}"
         )
 
         if not source:
@@ -770,9 +1140,8 @@ def main():
                 success = export_full_doc(doc, output)
 
             logger.debug(f"Export success: {success}")
-            FreeCAD.closeDocument(doc_name)
-            logger.debug(f"Closed document {doc_name}")
             if not success:
+                FreeCAD.closeDocument(doc_name)
                 sys.exit(1)
 
             # Final validation: ensure output file exists
@@ -780,10 +1149,106 @@ def main():
             if not os.path.exists(output_abs):
                 logger.error(f"Export reported success but output file does not exist: {output_abs}")
                 logger.error("This is a critical issue - the export process completed but produced no file")
+                FreeCAD.closeDocument(doc_name)
                 sys.exit(1)
 
             file_size = os.path.getsize(output_abs)
             logger.info(f"Output file verified: {output_abs} ({file_size} bytes)")
+
+            # Process TechDraw pages if configured
+            if techdraw_config:
+                logger.info("Processing TechDraw export")
+                pages_to_export = techdraw_config.get("pages", [])
+                techdraw_output_dir = techdraw_config.get("output_dir", "docs")
+                techdraw_format = techdraw_config.get("format", "svg")  # Currently only SVG supported
+
+                if techdraw_format != "svg":
+                    logger.warning(f"TechDraw format '{techdraw_format}' not yet supported, skipping")
+                else:
+                    try:
+                        logger.debug(f"Exporting TechDraw pages: {pages_to_export or 'all'} to {techdraw_output_dir}")
+                        techdraw_results = export_techdraw_pages(doc, pages_to_export, techdraw_output_dir)
+                        if techdraw_results:
+                            logger.info(f"Exported {len(techdraw_results)} TechDraw page(s)")
+                            for page_label, svg_path in techdraw_results:
+                                logger.info(f"  → {page_label}: {svg_path}")
+                        else:
+                            logger.warning("No TechDraw pages exported")
+                    except Exception as e:
+                        logger.exception(f"Error exporting TechDraw pages: {e}")
+
+            # Process BOM generation if configured
+            if bom_config:
+                logger.info("Processing BOM generation")
+                bom_source = bom_config.get("source", "auto")  # auto/assembly/spreadsheet/parts
+                bom_output = bom_config.get("output", f"docs/{export_name}_bom.csv")
+                bom_fields = bom_config.get("fields", [])  # Custom fields like material, url, price
+
+                try:
+                    # Generate default BOM output path if not specified
+                    if not os.path.isabs(bom_output):
+                        bom_output = os.path.join(os.getcwd(), bom_output)
+
+                    # Extract BOM based on source priority (auto/assembly/spreadsheet/parts)
+                    bom_data = []
+                    if bom_source in ("auto", "assembly"):
+                        logger.debug("Attempting to extract BOM from Assembly")
+                        bom_data = extract_bom_from_assembly(doc, custom_fields=bom_fields)
+                        if bom_data:
+                            logger.info(f"Successfully extracted BOM from Assembly ({len(bom_data)} items)")
+
+                    if not bom_data and bom_source in ("auto", "spreadsheet"):
+                        spreadsheet_name = bom_config.get("spreadsheet_name", "BOM")
+                        logger.debug(f"Attempting to extract BOM from Spreadsheet '{spreadsheet_name}'")
+                        bom_data = extract_bom_from_spreadsheet(
+                            doc, spreadsheet_name=spreadsheet_name, custom_fields=bom_fields
+                        )
+                        if bom_data:
+                            logger.info(f"Successfully extracted BOM from Spreadsheet ({len(bom_data)} items)")
+
+                    if not bom_data and bom_source in ("auto", "parts"):
+                        logger.debug("Attempting to extract BOM from Parts")
+                        bom_data = extract_bom_from_parts(doc, custom_fields=bom_fields)
+                        if bom_data:
+                            logger.info(f"Successfully extracted BOM from Parts ({len(bom_data)} items)")
+
+                    if bom_data:
+                        # Write BOM CSV via subprocess (lib3mf_utils pattern)
+                        os.makedirs(os.path.dirname(bom_output) or ".", exist_ok=True)
+
+                        # For now, write BOM directly (no subprocess needed for CSV)
+                        # In future, can use subprocess pattern if we need XML/Excel formats
+                        import csv
+
+                        # Determine fields to write
+                        csv_fields = ["label", "quantity"]
+                        if bom_fields:
+                            csv_fields.extend(bom_fields)
+                        else:
+                            # Infer fields from BOM data
+                            seen_fields = set()
+                            for item in bom_data:
+                                for key in item.keys():
+                                    if key not in csv_fields and key not in seen_fields:
+                                        csv_fields.append(key)
+                                        seen_fields.add(key)
+
+                        with open(bom_output, "w", newline="", encoding="utf-8") as csvfile:
+                            writer = csv.DictWriter(csvfile, fieldnames=csv_fields, restval="")
+                            writer.writeheader()
+                            for item in bom_data:
+                                row = {field: item.get(field, "") for field in csv_fields}
+                                writer.writerow(row)
+
+                        logger.info(f"Wrote BOM to {bom_output} ({len(bom_data)} items, {len(csv_fields)} fields)")
+                    else:
+                        logger.warning("No BOM data extracted from document")
+
+                except Exception as e:
+                    logger.exception(f"Error generating BOM: {e}")
+
+            FreeCAD.closeDocument(doc_name)
+            logger.debug(f"Closed document {doc_name}")
         except Exception as e:
             logger.exception(f"Exception during processing: {e}")
             sys.exit(1)
