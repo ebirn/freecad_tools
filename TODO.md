@@ -76,7 +76,7 @@ Export technical drawings and generate a bill of materials (BOM) from FreeCAD pr
 - ✅ Config schema extended with `techdraw:` and `bom:` sections
 - ✅ Multi-page TechDraw detection
 - ✅ Graceful handling of headless mode limitations
-- ✅ 69 unit tests passing (56 config + 13 BOM CSV)
+- ✅ 106 unit tests passing (56 config + 13 BOM CSV + 37 lib3mf/git utils)
 - ✅ End-to-end testing with realistic Assembly documents
 - ✅ Documentation in README.md
 
@@ -84,8 +84,9 @@ Export technical drawings and generate a bill of materials (BOM) from FreeCAD pr
 - TechDraw SVG export is **limited by FreeCAD 1.1.1**: requires GUI rendering
 - Workaround: export TechDraw pages manually from FreeCAD GUI (documented)
 - BOM extraction is **fully production-ready**
-- Assembly tree walking counts duplicates correctly
-- Custom fields (material, vendor, price) work via object properties
+- **Reads from existing Assembly::BomObject** (respects user's BOM configuration)
+- CSV output columns match BomObject exactly (Index, Name, Description, File Name, Quantity, etc.)
+- Falls back to Spreadsheet then Part/Body inspection if no BomObject found
 
 **Config Format** (fully implemented):
 ```yaml
