@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- README: Python version corrected from 3.7 to 3.10+ (matches pyproject.toml)
+- README: Added missing dependencies (pypdf, reportlab) to requirements list
+- README: Documented `techdraw.instructions` config option for markdown in PDF reports
+
 ## [v0.2.0] - 2026-04-26
 
 ### Added
