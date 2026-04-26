@@ -766,112 +766,112 @@ def export_techdraw_pages(doc, pages_to_export, output_dir):
 
 def extract_bom_from_assembly(doc, custom_fields=None):
     """
-    Extract Bill of Materials from FreeCAD Assembly workbench (native, FreeCAD 1.0+).
+    Extract Bill of Materials directly from Assembly::BomObject.
 
-    Walks the Assembly object tree recursively to build a BOM with part counts.
+    Reads the embedded spreadsheet in the Assembly::BomObject (native FreeCAD 1.0+).
+    This respects what the user explicitly configured in the BOM, rather than walking the tree.
 
     Args:
         doc: FreeCAD document
         custom_fields: List of custom property names to extract (e.g., ["URL", "Price", "Material"])
+                      Note: These are inferred from BomObject columns if present.
 
     Returns:
-        List of BOM dicts: [{"label": "", "quantity": 1, "material": "", ...}, ...]
+        List of BOM row dicts with all columns from BomObject as keys
+        E.g., [{"Index": "1", "Name": "Sphere", "Description": "", "File Name": "...", "Quantity": "1"}, ...]
     """
     bom = []
-    part_count = {}  # Track part counts by linked object
 
     if custom_fields is None:
         custom_fields = []
 
     try:
-        # Find Assembly objects (native workbench: FreeCAD 1.0+)
-        assembly_objects = [
-            obj
-            for obj in doc.Objects
-            if hasattr(obj, "TypeId") and obj.TypeId in ["Assembly::AssemblyObject", "Assembly::AssemblyLink"]
-        ]
+        # Find Assembly::BomObject
+        bom_obj = None
+        for obj in doc.Objects:
+            if hasattr(obj, "TypeId") and "BomObject" in obj.TypeId:
+                bom_obj = obj
+                break
 
-        if not assembly_objects:
-            logger.info("No native Assembly found in document")
+        if bom_obj is None:
+            logger.info("No Assembly::BomObject found in document")
             return bom
 
-        logger.info(f"Found {len(assembly_objects)} Assembly object(s)")
+        logger.info(f"Found Assembly::BomObject: {bom_obj.Name} (Label: {bom_obj.Label})")
 
-        # Recursively walk assembly tree
-        def walk_assembly(obj, depth=0):
-            indent = "  " * depth
-            logger.debug(f"{indent}Walking {obj.Name} (TypeId: {obj.TypeId})")
+        # Access the embedded spreadsheet via cells property
+        cells = bom_obj.cells
+        if cells is None:
+            logger.warning("BomObject has no cells/spreadsheet")
+            return bom
 
-            # Get subobjects (child parts/assemblies)
-            try:
-                subobjects = obj.getSubObjects()
-                for subobj_name in subobjects:
-                    try:
-                        subobj = obj.getSubObject(subobj_name, retType=1)
-                        if subobj is None:
-                            continue
-
-                        # For App::Link objects, get the linked object
-                        # This handles duplicates (Bearing001, Bearing002) as same part
-                        linked_obj = subobj
-                        if hasattr(subobj, "LinkedObject"):
-                            linked_obj = subobj.LinkedObject
-
-                        # Use linked object's ID for counting duplicates
-                        obj_id = linked_obj.FullName if hasattr(linked_obj, "FullName") else linked_obj.Name
-
-                        # Increment count for this part
-                        part_count[obj_id] = part_count.get(obj_id, 0) + 1
-
-                        logger.debug(
-                            f"{indent}  Part: {subobj.Label} → {linked_obj.Label} (count: {part_count[obj_id]})"
-                        )
-
-                        # Recurse if this is a container
-                        if hasattr(subobj, "getSubObjects"):
-                            walk_assembly(subobj, depth + 1)
-                    except Exception as e:
-                        logger.debug(f"{indent}  Error processing subobject: {e}")
-            except Exception as e:
-                logger.debug(f"{indent}  Error getting subobjects: {e}")
-
-        # Walk each assembly
-        for asm_obj in assembly_objects:
-            walk_assembly(asm_obj)
-
-        # Build BOM from part counts
-        for obj_id, qty in part_count.items():
-            # Parse FullName to get object name
-            if "#" in obj_id:
-                doc_name, obj_name = obj_id.split("#", 1)
-                obj = doc.getObject(obj_name)
+        # Extract column headers from row 1
+        headers = []
+        col_idx = 1
+        while True:
+            # Convert column index to letter: 1=A, 2=B, 3=C, ..., 27=AA, etc.
+            if col_idx <= 26:
+                col_letter = chr(64 + col_idx)
             else:
-                obj = doc.getObject(obj_id)
+                col_letter = chr(64 + (col_idx // 26)) + chr(64 + (col_idx % 26))
 
-            if obj is None:
-                logger.warning(f"Could not find object: {obj_id}")
-                continue
+            cell_addr = col_letter + "1"
+            try:
+                header = cells[cell_addr]
+                if header is None or header == "":
+                    break
+                # Remove leading apostrophe used by FreeCAD for text formatting
+                header = header.strip("'")
+                headers.append(header)
+                col_idx += 1
+            except Exception as e:
+                logger.debug(f"Error reading header {cell_addr}: {e}")
+                break
 
-            bom_item = {
-                "label": obj.Label if hasattr(obj, "Label") else obj.Name,
-                "quantity": qty,
-            }
+        logger.info(f"Found {len(headers)} BOM columns: {headers}")
 
-            # Extract custom properties if present
-            for field in custom_fields:
+        if not headers:
+            logger.warning("BomObject has no column headers")
+            return bom
+
+        # Extract data rows
+        row_idx = 2
+        while True:
+            row_data = {}
+            row_empty = True
+
+            for col_idx, header in enumerate(headers, start=1):
+                # Convert column index to letter
+                if col_idx <= 26:
+                    col_letter = chr(64 + col_idx)
+                else:
+                    col_letter = chr(64 + (col_idx // 26)) + chr(64 + (col_idx % 26))
+
+                cell_addr = col_letter + str(row_idx)
                 try:
-                    value = getattr(obj, field, "")
-                    if value:
-                        bom_item[field.lower()] = str(value)
-                except Exception:
-                    pass
+                    val = cells[cell_addr]
+                    if val is not None and val != "":
+                        row_empty = False
+                    # Convert to string first (cells may return int), then strip apostrophe
+                    val_str = str(val) if val is not None else ""
+                    val_str = val_str.strip("'").strip()
+                    row_data[header] = val_str
+                except Exception as e:
+                    logger.debug(f"Error reading cell {cell_addr}: {e}")
+                    row_data[header] = ""
 
-            bom.append(bom_item)
+            if row_empty:
+                # End of data rows
+                break
 
-        logger.info(f"Extracted {len(bom)} unique parts from Assembly")
+            bom.append(row_data)
+            logger.debug(f"Row {row_idx}: {row_data}")
+            row_idx += 1
+
+        logger.info(f"Extracted {len(bom)} rows from BomObject")
 
     except Exception as e:
-        logger.exception(f"Error extracting Assembly BOM: {e}")
+        logger.exception(f"Error extracting BomObject: {e}")
 
     return bom
 
@@ -1203,17 +1203,20 @@ def main():
                         import csv
 
                         # Determine fields to write
-                        csv_fields = ["label", "quantity"]
-                        if bom_fields:
-                            csv_fields.extend(bom_fields)
-                        else:
-                            # Infer fields from BOM data
+                        # If BOM came from BomObject, it has all columns already
+                        if bom_data and isinstance(bom_data, list) and bom_data:
+                            # Collect all field names from data rows (preserving order)
+                            csv_fields = []
                             seen_fields = set()
                             for item in bom_data:
                                 for key in item.keys():
-                                    if key not in csv_fields and key not in seen_fields:
+                                    if key not in seen_fields:
                                         csv_fields.append(key)
                                         seen_fields.add(key)
+                        else:
+                            csv_fields = ["label", "quantity"]
+                            if bom_fields:
+                                csv_fields.extend(bom_fields)
 
                         with open(bom_output, "w", newline="", encoding="utf-8") as csvfile:
                             writer = csv.DictWriter(csvfile, fieldnames=csv_fields, restval="")
