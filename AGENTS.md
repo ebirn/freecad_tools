@@ -244,7 +244,7 @@ export:
 - **PyYAML**: Config file parsing
 
 ### Python Version
-- Requires Python 3.7+
+- Requires Python 3.10+
 
 ### Environment
 - **Virtual Environment**: Created with `uv` in `.venv/`
@@ -636,7 +636,7 @@ yamllint --strict .freecad_tools/export.yml
 
 **Ruff** (`pyproject.toml`)
 - Line length: 120 characters
-- Python version: 3.7+
+- Python version: 3.10+
 - Rules: Includes E, F, I (imports), N (naming), W, UP, B (bugbear), C4 (comprehensions)
 
 **Pylint** (`pyproject.toml`)

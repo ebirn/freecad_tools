@@ -252,6 +252,7 @@ export:
       pages: []              # Empty = export all TechDraw pages
       output_dir: docs       # Where to save exported files
       format: pdf            # Currently only 'pdf' supported
+      instructions: INSTRUCTIONS.md  # Optional: markdown rendered into PDF
 ```
 
 **How It Works**:
@@ -340,6 +341,7 @@ techdraw:                           # Optional: export technical drawings
                                     # - List page labels: ["Drawing1", "Assembly"]
   output_dir: docs                  # Where to save exported files
   format: pdf                       # Currently only 'pdf' supported
+  instructions: INSTRUCTIONS.md     # Optional: markdown file to include in PDF report
 ```
 
 ### BOM Generation Configuration
@@ -380,6 +382,7 @@ export:
       pages: []                   # All TechDraw pages
       output_dir: docs
       format: pdf
+      instructions: INSTRUCTIONS.md
 
     # Bill of materials
     bom:
@@ -632,10 +635,10 @@ freecad_tools/
 
 ### System Requirements
 
-- **Python**: 3.7 or higher
+- **Python**: 3.10 or higher
 - **FreeCAD**: v0.20+ (with Python support)
 - **OS**: macOS, Linux, or Windows
-- **Dependencies**: PyYAML, lib3mf (auto-installed)
+- **Dependencies**: PyYAML, lib3mf, pypdf, reportlab (auto-installed via `uv sync`)
 
 ---
 
