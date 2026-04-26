@@ -9,6 +9,8 @@ A comprehensive collection of Python utilities for converting FreeCAD designs to
 - **🎯 3MF Export**: Convert FreeCAD bodies to 3MF files with embedded mesh data, ready for PrusaSlicer
 - **🔄 Body Rotation & Positioning**: Specify exact orientation and position in config (no manual adjustment in slicer needed)
 - **📊 Metadata Embedding**: Embed project info, version, author, and git metadata directly in 3MF files
+- **📄 TechDraw Export**: Extract technical drawings to PDF for documentation
+- **📋 Bill of Materials**: Auto-generate BOM CSV from assemblies with custom fields
 - **🏷️ Body Marking**: Mark bodies in FreeCAD for automatic export detection
 - **⚙️ Parametric Variants**: Generate multiple design variations using FreeCAD macros
 - **📋 Template Support**: Preserve PrusaSlicer printer settings across exports
@@ -231,6 +233,169 @@ export:
 - Inspect mesh quality before printing
 - Use in other tools (Meshmixer, etc.)
 - Debug export issues
+
+---
+
+### 7. Export TechDraw Pages to PDF
+
+Extract technical drawings from your FreeCAD documents:
+
+```yaml
+export:
+  - name: Antenna
+    source: Antenna.FCStd
+    bodies:
+      - MainBody
+      - Feed001
+    output: prints/Antenna.3mf
+    techdraw:
+      pages: []              # Empty = export all TechDraw pages
+      output_dir: docs       # Where to save exported files
+      format: pdf            # Currently only 'pdf' supported
+```
+
+**How It Works**:
+TechDraw PDF export uses a two-step pipeline:
+1. FreeCAD GUI binary exports individual page PDFs via `TechDrawGui.exportPageAsPdf()`
+2. Pages are merged with optional cover page (metadata, TOC, BOM) and instructions
+
+This requires the FreeCAD GUI binary (not freecadcmd). On macOS it runs headlessly without displaying a window. Set `FREECAD_GUI_BINARY` environment variable if FreeCAD is not in a standard location.
+
+**Why use this**:
+- Keep technical drawings in sync with CAD model
+- Embed in documentation
+- Version control drawings alongside 3MF
+- PDF preserves all annotations, hatching, dimensions, and balloons
+
+---
+
+### 8. Generate Bill of Materials (BOM)
+
+Automatically extract parts lists from assemblies:
+
+```yaml
+export:
+  - name: Antenna
+    source: Antenna.FCStd
+    bodies:
+      - MainBody
+      - Feed001
+    output: prints/Antenna.3mf
+    bom:
+      source: auto          # auto/assembly/spreadsheet/parts
+      output: docs/Antenna_BOM.csv
+      fields:               # Optional custom fields
+        - material
+        - vendor
+        - price
+```
+
+**BOM Sources** (tried in order):
+
+1. **`assembly`** - FreeCAD 1.0+ native Assembly workbench
+   - Reads assembly tree and counts duplicates
+   - Most detailed and accurate
+
+2. **`spreadsheet`** - FreeCAD Spreadsheet workbench
+   - Reads cells from "BOM" spreadsheet
+   - Good for manual part lists
+
+3. **`parts`** - Fallback to Part/Body objects
+   - Lists all Part and Body objects in document
+   - Simple but less detailed
+
+**Custom Spreadsheet Name**:
+```yaml
+bom:
+  source: spreadsheet
+  spreadsheet_name: "ComponentList"  # If not named "BOM"
+  output: docs/parts.csv
+```
+
+**What gets generated**:
+- CSV file with columns: `label`, `quantity`, plus any custom fields
+- Example output:
+  ```
+  label,quantity,material,vendor,price
+  Bearing 608,4,Steel,SKF,2.50
+  Housing,1,Aluminum,Local,15.00
+  ```
+
+**Why use this**:
+- ✅ Track bill of materials alongside design
+- ✅ Pricing and vendor info
+- ✅ Auto-count duplicates in assemblies
+- ✅ Easy import to spreadsheets for procurement
+
+---
+
+## Full Configuration Reference
+
+### TechDraw Export Configuration
+
+```yaml
+techdraw:                           # Optional: export technical drawings
+  pages: []                         # Which pages to export
+                                    # - Empty/omitted = all pages
+                                    # - List page labels: ["Drawing1", "Assembly"]
+  output_dir: docs                  # Where to save exported files
+  format: pdf                       # Currently only 'pdf' supported
+```
+
+### BOM Generation Configuration
+
+```yaml
+bom:                                # Optional: generate bill of materials
+  source: auto                      # Where to get BOM data:
+                                    # - 'auto' = try assembly → spreadsheet → parts
+                                    # - 'assembly' = only Assembly
+                                    # - 'spreadsheet' = only Spreadsheet
+                                    # - 'parts' = only Part/Body objects
+  output: docs/bom.csv              # CSV output file path
+  spreadsheet_name: BOM             # (optional) Spreadsheet name if not "BOM"
+  fields:                           # (optional) Custom property names to extract
+    - material
+    - vendor
+    - price
+    - dimensions
+```
+
+### Complete Export Item with All Features
+
+```yaml
+export:
+  - name: CompleteProject
+    source: CompleteProject.FCStd
+
+    # 3MF export
+    bodies:
+      - MainAssembly
+      - Bracket
+    output: prints/Project.3mf
+    template: template_print_settings.3mf
+    keep_stl: false
+
+    # Technical drawings
+    techdraw:
+      pages: []                   # All TechDraw pages
+      output_dir: docs
+      format: pdf
+
+    # Bill of materials
+    bom:
+      source: auto                # Auto-detect from assembly
+      output: docs/bom.csv
+      fields:
+        - material
+        - vendor
+        - stock_code
+
+    # Metadata
+    metadata:
+      Project: "CompleteProject"
+      Version: "2.0"
+      Author: "Engineering Team"
+```
 
 ---
 
@@ -582,6 +747,8 @@ The tool auto-calculates based on object size (0.1% of max dimension). For finer
 | **Body rotation** | ❌ | ✅ |
 | **Body positioning** | ❌ | ✅ |
 | **Metadata embedding** | ❌ | ✅ |
+| **TechDraw export** | ❌ | ✅ |
+| **Bill of Materials** | ❌ | ✅ |
 | **Git integration** | ❌ | ✅ |
 | **Body marking** | ❌ | ✅ |
 | **Auto-export hooks** | ❌ | ✅ |

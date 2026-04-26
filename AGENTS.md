@@ -432,12 +432,28 @@ These features are not yet implemented and are good candidates for new `agent_` 
 - **3MF validation**: Use `unzip -l output.3mf` to inspect structure
 - **Mesh counting**: Parse 3D/3dmodel.model XML for vertex/triangle stats
 
+### Test Output Directory
+
+**All test/debug output goes in `test_output/` at the project root.**
+
+- This directory is git-ignored (has its own `.gitignore` that excludes everything)
+- **NEVER write test output into `examples/`** — that directory is for curated reference files only
+- Integration test configs (e.g., `examples/export_techdraw_test.yml`) should write output to `test_output/`
+- Pytest tests should use `tempfile.TemporaryDirectory()` or `test_output/`
+- Temporary research/debug scripts should NOT be committed to `examples/`
+
+```bash
+# Run integration test from project root
+python3 tools/export.py examples/export_techdraw_test.yml
+# Output goes to test_output/assembly_test.3mf, test_output/bom.csv, etc.
+```
+
 ### Testing
 See the testing section below for the complete testing strategy.
 
 Quick reference:
 1. **Unit tests**: `python -m pytest tests/test_git_utils.py tests/test_lib3mf_utils.py -v`
-2. **Integration tests**: Run from `examples/` directory with FreeCAD
+2. **Integration tests**: Run from project root with FreeCAD, output to `test_output/`
 3. **Regression**: Validate 3MF output structure
 
 ### Code Organization

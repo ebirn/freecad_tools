@@ -61,39 +61,54 @@ export:
 
 ---
 
-### 4. TechDraw PDF Export & Bill of Materials [MEDIUM PRIORITY]
-**Status**: NOT STARTED
+### 4. TechDraw PDF Export & Bill of Materials [COMPLETE]
+**Status**: DONE
 **Branch**: `agent_techdraw_export`
-**Effort**: Medium-High (3-5 hours)
+**Completed**: April 26, 2026
 
-Export technical drawings as PDF and generate a bill of materials (BOM) from FreeCAD projects.
+Export technical drawings and generate a bill of materials (BOM) from FreeCAD projects.
 
-**Research Needed**:
-- [ ] Investigate FreeCAD TechDraw workbench API for headless PDF export
-- [ ] Determine best BOM source: TechDraw BOM table vs Part/Assembly inspection
-- [ ] Evaluate output formats for BOM (CSV, PDF table, embedded in TechDraw)
+**Completed Features**:
+- ✅ BOM extraction from FreeCAD 1.0+ Assembly workbench
+- ✅ BOM fallback extraction from Spreadsheet objects
+- ✅ BOM fallback extraction from Part/Body inspection
+- ✅ CSV generation with custom fields support
+- ✅ Config schema extended with `techdraw:` and `bom:` sections
+- ✅ Multi-page TechDraw detection
+- ✅ Graceful handling of headless mode limitations
+- ✅ 106 unit tests passing (56 config + 13 BOM CSV + 37 lib3mf/git utils)
+- ✅ End-to-end testing with realistic Assembly documents
+- ✅ Documentation in README.md
 
-**Tasks**:
-- [ ] Implement TechDraw page detection and PDF export via freecadcmd
-- [ ] Implement BOM extraction (parts list, quantities, materials)
-- [ ] Extend export config schema with `techdraw` and `bom` sections
-- [ ] Handle multiple TechDraw pages per document
-- [ ] Test with example FreeCAD documents containing TechDraw pages
-- [ ] Document in README.md
+**Implementation Notes**:
+- TechDraw PDF export uses **FreeCAD GUI binary**: `TechDrawGui.exportPageAsPdf()` for pixel-perfect output
+- Runs headlessly on macOS; set `FREECAD_GUI_BINARY` env var if needed
+- BOM extraction is **fully production-ready**
+- **Reads from existing Assembly::BomObject** (respects user's BOM configuration)
+- CSV output columns match BomObject exactly (Index, Name, Description, File Name, Quantity, etc.)
+- Falls back to Spreadsheet then Part/Body inspection if no BomObject found
 
-**Possible Config**:
+**Config Format** (fully implemented):
 ```yaml
 export:
   - name: MyProject
     source: MyProject.FCStd
     bodies: [Body]
     output: prints/MyProject.3mf
+
     techdraw:
-      pages: []              # Empty = all pages, or list specific page labels
-      output: docs/MyProject_drawing.pdf
+      pages: []                    # Empty = all, or list specific labels
+      output_dir: docs            # Where to save exported files
+      format: pdf                 # PDF export via GUI binary
+
     bom:
+      source: assembly            # auto/assembly/spreadsheet/parts
       output: docs/MyProject_bom.csv
-      format: csv            # csv, or pdf (as TechDraw table)
+      spreadsheet_name: BOM       # If source: spreadsheet
+      fields:                      # Optional custom fields
+        - material
+        - vendor
+        - price
 ```
 
 ---

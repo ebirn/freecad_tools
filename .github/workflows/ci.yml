@@ -16,4 +16,11 @@ jobs:
       - run: uv run ruff format --check tools/ tests/ macros/
       - run: uv run yamllint -c .yamllint .pre-commit-hooks.yaml .pre-commit-config.yaml
       - run: uv run pylint --disable=all --enable=E,F tools/*.py
-      - run: uv run pytest tests/test_git_utils.py tests/test_lib3mf_utils.py tests/test_export_config.py -v
+      - run: >-
+          uv run pytest
+          tests/test_git_utils.py
+          tests/test_lib3mf_utils.py
+          tests/test_export_config.py
+          tests/test_techdraw_pdf.py
+          tests/test_bom_utils.py
+          -v

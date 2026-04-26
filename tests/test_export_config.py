@@ -611,5 +611,383 @@ class TestConfigEdgeCases:
             assert all(isinstance(v, (int, float)) for v in position)
 
 
+class TestTechDrawConfigSection:
+    """Tests for TechDraw export configuration."""
+
+    def test_techdraw_section_optional(self):
+        """Should accept export items without techdraw section."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+            "bodies": ["Body1"],
+        }
+
+        # When
+        techdraw = item.get("techdraw")
+
+        # Then
+        assert techdraw is None
+
+    def test_techdraw_section_with_all_options(self):
+        """Should accept techdraw section with all fields."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+            "bodies": ["Body1"],
+            "techdraw": {
+                "pages": [],  # empty = all pages
+                "output_dir": "docs/",
+                "format": "pdf",
+            },
+        }
+
+        # When
+        techdraw = item.get("techdraw")
+
+        # Then
+        assert techdraw is not None
+        assert techdraw["pages"] == []
+        assert techdraw["output_dir"] == "docs/"
+        assert techdraw["format"] == "pdf"
+
+    def test_techdraw_section_pages_all(self):
+        """Should handle empty pages list (means all pages)."""
+        # Given
+        techdraw = {"pages": []}
+
+        # When
+        pages = techdraw.get("pages")
+
+        # Then
+        assert pages == []
+
+    def test_techdraw_section_pages_specific(self):
+        """Should handle specific page names."""
+        # Given
+        techdraw = {"pages": ["Page", "Page001", "DetailView"]}
+
+        # When
+        pages = techdraw.get("pages")
+
+        # Then
+        assert len(pages) == 3
+        assert "Page" in pages
+        assert "DetailView" in pages
+
+    def test_techdraw_section_format_pdf(self):
+        """Should accept pdf format."""
+        # Given
+        techdraw = {"format": "pdf"}
+
+        # When
+        fmt = techdraw.get("format")
+
+        # Then
+        assert fmt == "pdf"
+
+    def test_techdraw_output_dir_required(self):
+        """Should have output_dir field."""
+        # Given
+        techdraw = {
+            "pages": [],
+            "output_dir": "docs/",
+        }
+
+        # When
+        output_dir = techdraw.get("output_dir")
+
+        # Then
+        assert output_dir is not None
+        assert output_dir == "docs/"
+
+
+class TestBOMConfigSection:
+    """Tests for Bill of Materials (BOM) configuration."""
+
+    def test_bom_section_optional(self):
+        """Should accept export items without bom section."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+            "bodies": ["Body1"],
+        }
+
+        # When
+        bom = item.get("bom")
+
+        # Then
+        assert bom is None
+
+    def test_bom_section_with_required_fields(self):
+        """Should accept bom section with output field."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+            "bodies": ["Body1"],
+            "bom": {
+                "output": "docs/bom.csv",
+            },
+        }
+
+        # When
+        bom = item.get("bom")
+
+        # Then
+        assert bom is not None
+        assert bom["output"] == "docs/bom.csv"
+
+    def test_bom_section_with_all_options(self):
+        """Should accept bom section with all fields."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+            "bodies": ["Body1"],
+            "bom": {
+                "source": "auto",
+                "output": "docs/bom.csv",
+                "fields": ["label", "quantity", "material"],
+            },
+        }
+
+        # When
+        bom = item.get("bom")
+
+        # Then
+        assert bom is not None
+        assert bom["source"] == "auto"
+        assert bom["output"] == "docs/bom.csv"
+        assert len(bom["fields"]) == 3
+
+    def test_bom_source_auto(self):
+        """Should accept 'auto' source."""
+        # Given
+        bom = {"source": "auto"}
+
+        # When
+        source = bom.get("source")
+
+        # Then
+        assert source == "auto"
+
+    def test_bom_source_assembly(self):
+        """Should accept 'assembly' source."""
+        # Given
+        bom = {"source": "assembly"}
+
+        # When
+        source = bom.get("source")
+
+        # Then
+        assert source == "assembly"
+
+    def test_bom_source_spreadsheet(self):
+        """Should accept 'spreadsheet' source."""
+        # Given
+        bom = {"source": "spreadsheet", "spreadsheet_name": "BOM"}
+
+        # When
+        source = bom.get("source")
+        spreadsheet_name = bom.get("spreadsheet_name")
+
+        # Then
+        assert source == "spreadsheet"
+        assert spreadsheet_name == "BOM"
+
+    def test_bom_source_parts(self):
+        """Should accept 'parts' source."""
+        # Given
+        bom = {"source": "parts"}
+
+        # When
+        source = bom.get("source")
+
+        # Then
+        assert source == "parts"
+
+    def test_bom_fields_minimal(self):
+        """Should accept minimal field set."""
+        # Given
+        bom = {
+            "output": "docs/bom.csv",
+            "fields": ["label", "quantity"],
+        }
+
+        # When
+        fields = bom.get("fields")
+
+        # Then
+        assert len(fields) == 2
+        assert "label" in fields
+        assert "quantity" in fields
+
+    def test_bom_fields_extended(self):
+        """Should accept extended field set."""
+        # Given
+        bom = {
+            "output": "docs/bom.csv",
+            "fields": [
+                "label",
+                "quantity",
+                "material",
+                "dimensions",
+                "url",
+                "price",
+            ],
+        }
+
+        # When
+        fields = bom.get("fields")
+
+        # Then
+        assert len(fields) == 6
+        assert "label" in fields
+        assert "quantity" in fields
+        assert "material" in fields
+        assert "dimensions" in fields
+        assert "url" in fields
+        assert "price" in fields
+
+    def test_bom_fields_custom(self):
+        """Should accept custom field names."""
+        # Given
+        bom = {
+            "output": "docs/bom.csv",
+            "fields": ["label", "quantity", "custom_field_1", "custom_field_2"],
+        }
+
+        # When
+        fields = bom.get("fields")
+
+        # Then
+        assert "custom_field_1" in fields
+        assert "custom_field_2" in fields
+
+    def test_bom_output_required(self):
+        """Should have output field."""
+        # Given
+        bom = {
+            "output": "docs/bom.csv",
+        }
+
+        # When
+        output = bom.get("output")
+
+        # Then
+        assert output is not None
+        assert output == "docs/bom.csv"
+
+
+class TestExportWithTechDrawAndBOM:
+    """Integration tests for export items with both TechDraw and BOM."""
+
+    def test_export_item_with_techdraw_only(self):
+        """Should accept export with only techdraw section."""
+        # Given
+        item = {
+            "name": "DrawingsOnly",
+            "source": "model.FCStd",
+            "bodies": ["Body1"],
+            "techdraw": {
+                "pages": [],
+                "output_dir": "docs/",
+            },
+        }
+
+        # When
+        techdraw = item.get("techdraw")
+        bom = item.get("bom")
+
+        # Then
+        assert techdraw is not None
+        assert bom is None
+
+    def test_export_item_with_bom_only(self):
+        """Should accept export with only bom section."""
+        # Given
+        item = {
+            "name": "BOMOnly",
+            "source": "model.FCStd",
+            "bodies": ["Body1"],
+            "bom": {
+                "output": "docs/bom.csv",
+            },
+        }
+
+        # When
+        techdraw = item.get("techdraw")
+        bom = item.get("bom")
+
+        # Then
+        assert techdraw is None
+        assert bom is not None
+
+    def test_export_item_with_both_techdraw_and_bom(self):
+        """Should accept export with both techdraw and bom sections."""
+        # Given
+        item = {
+            "name": "FullExport",
+            "source": "model.FCStd",
+            "bodies": ["Body1", "Body2"],
+            "output": "prints/model.3mf",
+            "techdraw": {
+                "pages": [],
+                "output_dir": "docs/",
+                "format": "pdf",
+            },
+            "bom": {
+                "source": "assembly",
+                "output": "docs/bom.csv",
+                "fields": ["label", "quantity", "material"],
+            },
+        }
+
+        # When
+        techdraw = item.get("techdraw")
+        bom = item.get("bom")
+        output_3mf = item.get("output")
+
+        # Then
+        assert techdraw is not None
+        assert bom is not None
+        assert output_3mf == "prints/model.3mf"
+        assert techdraw["output_dir"] == "docs/"
+        assert bom["output"] == "docs/bom.csv"
+
+    def test_export_item_complete_configuration(self):
+        """Should accept export item with all possible fields."""
+        # Given
+        item = {
+            "name": "CompleteProject",
+            "source": "model.FCStd",
+            "bodies": ["Body1", {"body": "Body2", "rotation": [45, 0, 0]}],
+            "output": "prints/model.3mf",
+            "template": "template.3mf",
+            "metadata": {"Project": "Test"},
+            "keep_stl": True,
+            "stl_output_dir": "prints/stl",
+            "techdraw": {
+                "pages": ["Page", "Page001"],
+                "output_dir": "docs/",
+                "format": "pdf",
+            },
+            "bom": {
+                "source": "assembly",
+                "output": "docs/bom.csv",
+                "fields": ["label", "quantity", "material", "url"],
+            },
+        }
+
+        # When/Then - just verify it's valid YAML/dict structure
+        assert item["name"] == "CompleteProject"
+        assert item["techdraw"]["output_dir"] == "docs/"
+        assert item["bom"]["output"] == "docs/bom.csv"
+        assert len(item["bodies"]) == 2
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

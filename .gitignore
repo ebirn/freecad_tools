@@ -5,3 +5,4 @@ examples/*.FCBak
 .DS_Store
 *.egg-info/
 .venv/
+test_output/

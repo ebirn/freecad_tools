@@ -400,6 +400,24 @@ def load_config():
                     logger.debug(f"Resolved {field} '{item[field]}' to: {resolved}")
                 item[field] = resolved
 
+        # Resolve nested paths in techdraw section
+        if "techdraw" in item and isinstance(item["techdraw"], dict):
+            td = item["techdraw"]
+            if "output_dir" in td and td["output_dir"]:
+                resolved = resolve_relative_path(td["output_dir"], base_dir)
+                if resolved != td["output_dir"]:
+                    logger.debug(f"Resolved techdraw.output_dir '{td['output_dir']}' to: {resolved}")
+                td["output_dir"] = resolved
+
+        # Resolve nested paths in bom section
+        if "bom" in item and isinstance(item["bom"], dict):
+            bom = item["bom"]
+            if "output" in bom and bom["output"]:
+                resolved = resolve_relative_path(bom["output"], base_dir)
+                if resolved != bom["output"]:
+                    logger.debug(f"Resolved bom.output '{bom['output']}' to: {resolved}")
+                bom["output"] = resolved
+
     return result
 
 
@@ -688,6 +706,487 @@ def export_bodies_to_3mf_with_template(
             temp_dir.cleanup()
 
 
+def _find_venv_python():
+    """Find the venv Python executable for subprocess calls."""
+    lib3mf_python = os.environ.get("FREECAD_TOOLS_LIB3MF_PYTHON")
+    if lib3mf_python:
+        return lib3mf_python
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    venv_python = os.path.join(os.path.dirname(script_dir), ".venv", "bin", "python3")
+    venv_python = os.path.abspath(venv_python)
+    if os.path.exists(venv_python):
+        return venv_python
+    return sys.executable
+
+
+def _find_freecad_gui_binary():
+    """
+    Find the FreeCAD GUI binary for TechDraw PDF export.
+
+    TechDrawGui.exportPageAsPdf() requires the GUI binary (not freecadcmd).
+    As of FreeCAD 1.1, there is no offline/headless API for pixel-perfect
+    TechDraw PDF export — check future FreeCAD releases for improvements.
+
+    Returns:
+        Path to FreeCAD GUI binary, or None if not found
+    """
+    gui_paths = [
+        # macOS
+        "/Applications/FreeCAD.app/Contents/MacOS/FreeCAD",
+        # Linux common locations
+        "/usr/bin/freecad",
+        "/usr/local/bin/freecad",
+        "/opt/freecad/bin/freecad",
+        # Snap/Flatpak
+        "/snap/freecad/current/bin/freecad",
+    ]
+
+    # Also check env var override
+    env_path = os.environ.get("FREECAD_GUI_BINARY")
+    if env_path and os.path.exists(env_path):
+        return env_path
+
+    for path in gui_paths:
+        if os.path.exists(path):
+            return path
+
+    return None
+
+
+def export_techdraw_to_pdf(doc, pages_to_export, output_path, bom_csv_path=None, instructions_path=None, metadata=None):
+    """
+    Export TechDraw pages to a multi-page PDF.
+
+    Two-step pipeline:
+    1. Export individual page PDFs via FreeCAD GUI binary (TechDrawGui.exportPageAsPdf)
+    2. Merge page PDFs + BOM table + instructions via venv subprocess (techdraw_pdf.py)
+
+    Args:
+        doc: FreeCAD document (used to get source path and page names)
+        pages_to_export: List of page names/labels (empty = all pages)
+        output_path: Path for the output PDF file
+        bom_csv_path: Optional path to BOM CSV to include in PDF
+        instructions_path: Optional path to instructions markdown to include in PDF
+        metadata: Optional dict with document metadata for cover page
+
+    Returns:
+        True on success, False on failure
+    """
+    try:
+        # Step 1: Export individual page PDFs via FreeCAD GUI binary
+        freecad_gui = _find_freecad_gui_binary()
+        if not freecad_gui:
+            logger.error(
+                "FreeCAD GUI binary not found. TechDraw PDF export requires the GUI binary. "
+                "Set FREECAD_GUI_BINARY environment variable or install FreeCAD in a standard location."
+            )
+            return False
+
+        # Get the source document path
+        source_path = doc.FileName
+        if not source_path:
+            logger.error("Document has no file path — save it first")
+            return False
+
+        # Create temp directory for individual page PDFs (cleaned up automatically)
+        with tempfile.TemporaryDirectory(prefix="techdraw_") as temp_dir:
+            return _run_techdraw_pipeline(
+                doc,
+                pages_to_export,
+                output_path,
+                temp_dir,
+                bom_csv_path=bom_csv_path,
+                instructions_path=instructions_path,
+                metadata=metadata,
+                freecad_gui=freecad_gui,
+            )
+
+    except Exception as e:
+        logger.exception(f"Error exporting TechDraw to PDF: {e}")
+        return False
+
+
+def _run_techdraw_pipeline(
+    doc,
+    pages_to_export,
+    output_path,
+    temp_dir,
+    bom_csv_path=None,
+    instructions_path=None,
+    metadata=None,
+    freecad_gui=None,
+):
+    """Inner pipeline for TechDraw PDF export, runs inside a TemporaryDirectory context."""
+    result_file = os.path.join(temp_dir, "result.json")
+
+    # Build config for techdraw_export.py
+    tools_dir = os.path.dirname(os.path.abspath(__file__))
+    export_script = os.path.join(tools_dir, "techdraw_export.py")
+
+    source_path = doc.FileName
+
+    export_config = {
+        "source": source_path,
+        "pages": pages_to_export if pages_to_export else None,
+        "output_dir": temp_dir,
+        "result_file": result_file,
+    }
+
+    config_path = os.path.join(temp_dir, "export_config.json")
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(export_config, f, indent=2)
+
+    cmd = [freecad_gui, export_script, config_path]
+    logger.info(f"Exporting TechDraw pages via GUI: {freecad_gui}")
+    logger.debug(f"Running: {' '.join(cmd)}")
+
+    gui_result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+
+    if gui_result.stdout:
+        logger.debug(f"GUI export stdout: {gui_result.stdout[:500]}")
+    if gui_result.stderr:
+        logger.debug(f"GUI export stderr: {gui_result.stderr[:500]}")
+
+    # Read result
+    if not os.path.exists(result_file):
+        logger.error(f"GUI export produced no result file. Exit code: {gui_result.returncode}")
+        return False
+
+    with open(result_file, encoding="utf-8") as f:
+        export_result = json.load(f)
+
+    if not export_result.get("success"):
+        logger.error(f"GUI export failed: {export_result.get('error', 'unknown error')}")
+        return False
+
+    page_pdfs = [p["pdf_path"] for p in export_result["pages"] if p.get("pdf_path")]
+    if not page_pdfs and not bom_csv_path and not instructions_path:
+        logger.warning("No TechDraw pages exported and no BOM/instructions to include")
+        return False
+
+    logger.info(f"Exported {len(page_pdfs)} TechDraw page PDF(s)")
+
+    # Step 2: Merge page PDFs + BOM + instructions via venv subprocess
+    pdf_script = os.path.join(tools_dir, "techdraw_pdf.py")
+    venv_python = _find_venv_python()
+
+    merge_config = {
+        "page_pdfs": page_pdfs,
+        "output_path": os.path.abspath(output_path),
+    }
+    if bom_csv_path:
+        merge_config["bom_csv_path"] = os.path.abspath(bom_csv_path)
+    if instructions_path:
+        merge_config["instructions_path"] = os.path.abspath(instructions_path)
+    if metadata:
+        merge_config["metadata"] = metadata
+
+    merge_config_path = os.path.join(temp_dir, "merge_config.json")
+    with open(merge_config_path, "w", encoding="utf-8") as f:
+        json.dump(merge_config, f, indent=2)
+
+    merge_cmd = [venv_python, pdf_script, merge_config_path]
+    logger.info(f"Merging PDF: {output_path}")
+    logger.debug(f"Running: {' '.join(merge_cmd)}")
+
+    merge_result = subprocess.run(merge_cmd, capture_output=True, text=True, timeout=120)
+
+    if merge_result.stdout:
+        logger.debug(f"PDF merger stdout: {merge_result.stdout[:500]}")
+    if merge_result.stderr:
+        logger.debug(f"PDF merger stderr: {merge_result.stderr[:500]}")
+
+    if merge_result.returncode != 0:
+        logger.error(f"PDF merge failed (exit code {merge_result.returncode})")
+        return False
+
+    if os.path.exists(output_path):
+        logger.info(f"PDF generated: {output_path} ({os.path.getsize(output_path)} bytes)")
+        return True
+
+    logger.error(f"PDF merge completed but file not found: {output_path}")
+    return False
+
+
+def _col_index_to_letter(col_idx):
+    """Convert a 1-based column index to Excel-style letter(s).
+
+    Examples: 1→A, 26→Z, 27→AA, 52→AZ, 53→BA, 702→ZZ
+    """
+    result = []
+    while col_idx > 0:
+        col_idx, remainder = divmod(col_idx - 1, 26)
+        result.append(chr(65 + remainder))
+    return "".join(reversed(result))
+
+
+def extract_bom_from_assembly(doc, custom_fields=None):
+    """
+    Extract Bill of Materials directly from Assembly::BomObject.
+
+    Reads the embedded spreadsheet in the Assembly::BomObject (native FreeCAD 1.0+).
+    This respects what the user explicitly configured in the BOM, rather than walking the tree.
+
+    Args:
+        doc: FreeCAD document
+        custom_fields: List of custom property names to extract (e.g., ["URL", "Price", "Material"])
+                      Note: These are inferred from BomObject columns if present.
+
+    Returns:
+        List of BOM row dicts with all columns from BomObject as keys
+        E.g., [{"Index": "1", "Name": "Sphere", "Description": "", "File Name": "...", "Quantity": "1"}, ...]
+    """
+    bom = []
+
+    if custom_fields is None:
+        custom_fields = []
+
+    try:
+        # Find Assembly::BomObject
+        bom_obj = None
+        for obj in doc.Objects:
+            if hasattr(obj, "TypeId") and "BomObject" in obj.TypeId:
+                bom_obj = obj
+                break
+
+        if bom_obj is None:
+            logger.info("No Assembly::BomObject found in document")
+            return bom
+
+        logger.info(f"Found Assembly::BomObject: {bom_obj.Name} (Label: {bom_obj.Label})")
+
+        # Access the embedded spreadsheet via cells property
+        cells = bom_obj.cells
+        if cells is None:
+            logger.warning("BomObject has no cells/spreadsheet")
+            return bom
+
+        # Extract column headers from row 1
+        headers = []
+        col_idx = 1
+        while True:
+            # Convert column index to letter: 1=A, 2=B, ..., 27=AA, etc.
+            col_letter = _col_index_to_letter(col_idx)
+
+            cell_addr = col_letter + "1"
+            try:
+                header = cells[cell_addr]
+                if header is None or header == "":
+                    break
+                # Remove leading apostrophe used by FreeCAD for text formatting
+                header = header.strip("'")
+                headers.append(header)
+                col_idx += 1
+            except Exception as e:
+                logger.debug(f"Error reading header {cell_addr}: {e}")
+                break
+
+        logger.info(f"Found {len(headers)} BOM columns: {headers}")
+
+        if not headers:
+            logger.warning("BomObject has no column headers")
+            return bom
+
+        # Extract data rows
+        row_idx = 2
+        while True:
+            row_data = {}
+            row_empty = True
+
+            for col_idx, header in enumerate(headers, start=1):
+                # Convert column index to letter
+                col_letter = _col_index_to_letter(col_idx)
+
+                cell_addr = col_letter + str(row_idx)
+                try:
+                    val = cells[cell_addr]
+                    if val is not None and val != "":
+                        row_empty = False
+                    # Convert to string first (cells may return int), then strip apostrophe
+                    val_str = str(val) if val is not None else ""
+                    val_str = val_str.strip("'").strip()
+                    row_data[header] = val_str
+                except Exception as e:
+                    logger.debug(f"Error reading cell {cell_addr}: {e}")
+                    row_data[header] = ""
+
+            if row_empty:
+                # End of data rows
+                break
+
+            bom.append(row_data)
+            logger.debug(f"Row {row_idx}: {row_data}")
+            row_idx += 1
+
+        logger.info(f"Extracted {len(bom)} rows from BomObject")
+
+    except Exception as e:
+        logger.exception(f"Error extracting BomObject: {e}")
+
+    return bom
+
+
+def extract_bom_from_spreadsheet(doc, spreadsheet_name=None, custom_fields=None):
+    """
+    Extract Bill of Materials from a FreeCAD Spreadsheet.
+
+    Reads cells from a spreadsheet object to build BOM.
+
+    Args:
+        doc: FreeCAD document
+        spreadsheet_name: Name/Label of spreadsheet to read (default: "BOM")
+        custom_fields: List of custom property names to extract
+
+    Returns:
+        List of BOM dicts
+    """
+    bom = []
+
+    if spreadsheet_name is None:
+        spreadsheet_name = "BOM"
+
+    if custom_fields is None:
+        custom_fields = []
+
+    try:
+        # Find spreadsheet object
+        sheet_obj = None
+        for obj in doc.Objects:
+            if hasattr(obj, "TypeId") and obj.TypeId == "Spreadsheet::Sheet":
+                if obj.Name == spreadsheet_name or (hasattr(obj, "Label") and obj.Label == spreadsheet_name):
+                    sheet_obj = obj
+                    break
+
+        if sheet_obj is None:
+            logger.warning(f"Spreadsheet '{spreadsheet_name}' not found")
+            return bom
+
+        logger.info(f"Reading BOM from spreadsheet: {spreadsheet_name}")
+
+        # Get non-empty cells range
+        try:
+            # Try getUsedRange() if available (newer FreeCAD)
+            if hasattr(sheet_obj, "getUsedRange"):
+                start_cell, end_cell = sheet_obj.getUsedRange()
+                logger.debug(f"Used range: {start_cell} to {end_cell}")
+            else:
+                # Fallback: assume data starts at A1
+                start_cell = "A1"
+                end_cell = None
+        except Exception as e:
+            logger.debug(f"Could not determine cell range: {e}")
+            # Assume standard BOM format with header in row 1
+            start_cell = "A1"
+
+        # Read spreadsheet cells (simplified: assumes standard BOM table format)
+        # Expected format: Column A = Label, Column B = Quantity, etc.
+        try:
+            # Get all non-empty cells
+            if hasattr(sheet_obj, "getNonEmptyCells"):
+                cells = sheet_obj.getNonEmptyCells()
+                logger.debug(f"Found {len(cells)} non-empty cells")
+
+                # Group by row and build BOM items
+                rows = {}
+                for cell_addr in cells:
+                    # Parse cell address (e.g., "A1" → (1, 'A'))
+                    # Extract row number
+                    row_num = int("".join(c for c in cell_addr if c.isdigit()))
+                    col_letter = "".join(c for c in cell_addr if c.isalpha())
+
+                    if row_num not in rows:
+                        rows[row_num] = {}
+                    try:
+                        cell_value = sheet_obj.getContents(cell_addr)
+                        rows[row_num][col_letter] = cell_value
+                    except Exception:
+                        pass
+
+                # Skip header row (row 1), build BOM from data rows
+                for row_num in sorted(rows.keys()):
+                    if row_num == 1:  # Skip header
+                        continue
+
+                    row = rows[row_num]
+                    # Assume: A=Label, B=Quantity, C+=custom fields
+                    if "A" in row:
+                        bom_item = {
+                            "label": str(row.get("A", "")),
+                            "quantity": int(row.get("B", "1")),
+                        }
+
+                        # Map remaining columns to custom fields
+                        col_letters = ["C", "D", "E", "F", "G", "H", "I", "J"]
+                        for i, field_name in enumerate(custom_fields):
+                            if i < len(col_letters) and col_letters[i] in row:
+                                bom_item[field_name.lower()] = str(row[col_letters[i]])
+
+                        bom.append(bom_item)
+
+        except Exception as e:
+            logger.warning(f"Error reading spreadsheet cells: {e}")
+
+        logger.info(f"Extracted {len(bom)} items from spreadsheet")
+
+    except Exception as e:
+        logger.exception(f"Error extracting Spreadsheet BOM: {e}")
+
+    return bom
+
+
+def extract_bom_from_parts(doc, custom_fields=None):
+    """
+    Extract Bill of Materials by inspecting Part and Body objects directly.
+
+    Fallback BOM generation when Assembly/Spreadsheet not available.
+
+    Args:
+        doc: FreeCAD document
+        custom_fields: List of custom property names to extract
+
+    Returns:
+        List of BOM dicts
+    """
+    bom = []
+
+    if custom_fields is None:
+        custom_fields = []
+
+    try:
+        # Find all Part and Body objects
+        part_bodies = [
+            obj
+            for obj in doc.Objects
+            if hasattr(obj, "TypeId") and obj.TypeId in ["PartDesign::Body", "Part::Feature", "Part::FeaturePython"]
+        ]
+
+        logger.info(f"Found {len(part_bodies)} Part/Body object(s)")
+
+        for obj in part_bodies:
+            bom_item = {
+                "label": obj.Label if hasattr(obj, "Label") else obj.Name,
+                "quantity": 1,
+            }
+
+            # Extract custom properties if present
+            for field in custom_fields:
+                try:
+                    value = getattr(obj, field, "")
+                    if value:
+                        bom_item[field.lower()] = str(value)
+                except Exception:
+                    pass
+
+            bom.append(bom_item)
+
+        logger.info(f"Extracted {len(bom)} parts from document")
+
+    except Exception as e:
+        logger.exception(f"Error extracting Parts BOM: {e}")
+
+    return bom
+
+
 def main():
     logger.info("=" * 60)
     logger.debug(f"Current working directory: {os.getcwd()}")
@@ -711,10 +1210,13 @@ def main():
         keep_stl = item.get("keep_stl", False)  # Keep STL files?
         stl_output_dir = item.get("stl_output_dir")  # Where to place STL files
         export_name = item.get("name", "export")  # Export item name (used for file prefixing)
+        techdraw_config = item.get("techdraw")  # Optional TechDraw export config
+        bom_config = item.get("bom")  # Optional BOM generation config
 
         logger.debug(
             f"Item {i}: name={export_name}, source={source}, output={output}, bodies={bodies}, "
-            f"template={template}, keep_stl={keep_stl}, stl_output_dir={stl_output_dir}"
+            f"template={template}, keep_stl={keep_stl}, stl_output_dir={stl_output_dir}, "
+            f"techdraw={techdraw_config}, bom={bom_config}"
         )
 
         if not source:
@@ -770,9 +1272,8 @@ def main():
                 success = export_full_doc(doc, output)
 
             logger.debug(f"Export success: {success}")
-            FreeCAD.closeDocument(doc_name)
-            logger.debug(f"Closed document {doc_name}")
             if not success:
+                FreeCAD.closeDocument(doc_name)
                 sys.exit(1)
 
             # Final validation: ensure output file exists
@@ -780,10 +1281,136 @@ def main():
             if not os.path.exists(output_abs):
                 logger.error(f"Export reported success but output file does not exist: {output_abs}")
                 logger.error("This is a critical issue - the export process completed but produced no file")
+                FreeCAD.closeDocument(doc_name)
                 sys.exit(1)
 
             file_size = os.path.getsize(output_abs)
             logger.info(f"Output file verified: {output_abs} ({file_size} bytes)")
+
+            # Process TechDraw pages if configured
+            if techdraw_config:
+                logger.info("Processing TechDraw export")
+                pages_to_export = techdraw_config.get("pages", [])
+                techdraw_output_dir = techdraw_config.get("output_dir", "docs")
+                techdraw_format = techdraw_config.get("format", "pdf")  # Default to PDF now
+
+                # Resolve output path
+                if not os.path.isabs(techdraw_output_dir):
+                    techdraw_output_dir = os.path.join(PROJECT_ROOT or os.getcwd(), techdraw_output_dir)
+                os.makedirs(techdraw_output_dir, exist_ok=True)
+
+                if techdraw_format == "pdf":
+                    try:
+                        pdf_output = os.path.join(techdraw_output_dir, f"{export_name}.pdf")
+                        # BOM CSV path will be available after BOM processing below
+                        # For now, collect it; PDF generation happens after BOM
+                        techdraw_pdf_pending = {
+                            "pages": pages_to_export,
+                            "output": pdf_output,
+                            "instructions": techdraw_config.get("instructions"),
+                        }
+                        logger.debug(f"TechDraw PDF generation pending: {pdf_output}")
+                    except Exception as e:
+                        logger.exception(f"Error preparing TechDraw PDF: {e}")
+                        techdraw_pdf_pending = None
+                else:
+                    logger.warning(f"TechDraw format '{techdraw_format}' not yet supported, skipping")
+                    techdraw_pdf_pending = None
+            else:
+                techdraw_pdf_pending = None
+
+            # Process BOM generation if configured
+            if bom_config:
+                logger.info("Processing BOM generation")
+                bom_source = bom_config.get("source", "auto")  # auto/assembly/spreadsheet/parts
+                bom_output = bom_config.get("output", f"docs/{export_name}_bom.csv")
+                bom_fields = bom_config.get("fields", [])  # Custom fields like material, url, price
+
+                try:
+                    # Generate default BOM output path if not specified
+                    # Path is already resolved by load_config() if relative
+                    if not os.path.isabs(bom_output):
+                        bom_output = os.path.join(PROJECT_ROOT or os.getcwd(), bom_output)
+
+                    # Extract BOM based on source priority (auto/assembly/spreadsheet/parts)
+                    bom_data = []
+                    if bom_source in ("auto", "assembly"):
+                        logger.debug("Attempting to extract BOM from Assembly")
+                        bom_data = extract_bom_from_assembly(doc, custom_fields=bom_fields)
+                        if bom_data:
+                            logger.info(f"Successfully extracted BOM from Assembly ({len(bom_data)} items)")
+
+                    if not bom_data and bom_source in ("auto", "spreadsheet"):
+                        spreadsheet_name = bom_config.get("spreadsheet_name", "BOM")
+                        logger.debug(f"Attempting to extract BOM from Spreadsheet '{spreadsheet_name}'")
+                        bom_data = extract_bom_from_spreadsheet(
+                            doc, spreadsheet_name=spreadsheet_name, custom_fields=bom_fields
+                        )
+                        if bom_data:
+                            logger.info(f"Successfully extracted BOM from Spreadsheet ({len(bom_data)} items)")
+
+                    if not bom_data and bom_source in ("auto", "parts"):
+                        logger.debug("Attempting to extract BOM from Parts")
+                        bom_data = extract_bom_from_parts(doc, custom_fields=bom_fields)
+                        if bom_data:
+                            logger.info(f"Successfully extracted BOM from Parts ({len(bom_data)} items)")
+
+                    if bom_data:
+                        # Write BOM CSV using shared utility
+                        os.makedirs(os.path.dirname(bom_output) or ".", exist_ok=True)
+
+                        from bom_utils import write_bom_csv  # pylint: disable=import-error
+
+                        # Determine fields: if BOM has custom fields from config, pass them;
+                        # otherwise let write_bom_csv auto-detect from data keys
+                        fields = None
+                        if bom_fields:
+                            fields = ["label", "quantity"] + bom_fields
+
+                        write_bom_csv(bom_data, bom_output, fields=fields)
+                    else:
+                        logger.warning("No BOM data extracted from document")
+
+                except Exception as e:
+                    logger.exception(f"Error generating BOM: {e}")
+
+            # Generate TechDraw PDF (after BOM so we can include BOM CSV)
+            if techdraw_pdf_pending:
+                try:
+                    pdf_output = techdraw_pdf_pending["output"]
+                    pages = techdraw_pdf_pending["pages"]
+                    instructions_path = techdraw_pdf_pending.get("instructions")
+
+                    # Resolve instructions path
+                    if instructions_path and not os.path.isabs(instructions_path):
+                        instructions_path = os.path.join(PROJECT_ROOT or os.getcwd(), instructions_path)
+
+                    # Use BOM CSV if it was generated
+                    bom_csv_for_pdf = bom_output if (bom_config and os.path.exists(bom_output)) else None
+
+                    # Build metadata for PDF cover page
+                    pdf_metadata = get_export_metadata(item, PROJECT_ROOT or os.getcwd())
+                    pdf_metadata["title"] = export_name
+                    pdf_metadata["source"] = os.path.basename(source)
+
+                    logger.info(f"Generating TechDraw PDF: {pdf_output}")
+                    pdf_success = export_techdraw_to_pdf(
+                        doc,
+                        pages,
+                        pdf_output,
+                        bom_csv_path=bom_csv_for_pdf,
+                        instructions_path=instructions_path,
+                        metadata=pdf_metadata,
+                    )
+                    if pdf_success:
+                        logger.info(f"TechDraw PDF generated: {pdf_output}")
+                    else:
+                        logger.warning("TechDraw PDF generation failed")
+                except Exception as e:
+                    logger.exception(f"Error generating TechDraw PDF: {e}")
+
+            FreeCAD.closeDocument(doc_name)
+            logger.debug(f"Closed document {doc_name}")
         except Exception as e:
             logger.exception(f"Exception during processing: {e}")
             sys.exit(1)
