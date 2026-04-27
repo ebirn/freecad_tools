@@ -633,7 +633,9 @@ freecad_tools/
 
 3. **Verify installation**:
    ```bash
-   python3 tools/export.py --help
+   python3 tools/export.py
+   # Looks for export_config.yml in current directory
+   # Or specify a config: python3 tools/export.py path/to/config.yml
    ```
 
 ### System Requirements
