@@ -248,6 +248,21 @@ bom:
 
 ---
 
+### 7. CLI Help and Argument Parsing [LOW PRIORITY]
+**Status**: NOT STARTED
+**Branch**: `agent_cli_help`
+**Effort**: Low (< 1 hour)
+
+Add `argparse` to `export.py` and `fc_export.py` so `--help` works and usage is self-documenting.
+
+**Tasks**:
+- [ ] Replace `sys.argv` handling with `argparse` in `export.py`
+- [ ] Add `--help` with description of config file discovery and usage
+- [ ] Consider useful flags: `--verbose`, `--dry-run`, `--config`
+- [ ] Update README.md with actual CLI usage
+
+---
+
 ## Notes
 
 - Feature branches use `agent_<feature_name>` naming convention
