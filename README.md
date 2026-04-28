@@ -1083,6 +1083,20 @@ make test-all     # Both unit and integration tests
 
 **Note**: Integration tests run via FreeCAD's Python (`freecadcmd`) and test actual FreeCAD document interactions. They mock the lib3mf subprocess calls, so lib3mf only needs to be installed in your venv, not in FreeCAD's Python.
 
+### Coverage Reports
+
+Generate HTML coverage reports for visual inspection:
+
+```bash
+# Unit tests with HTML coverage report
+python3 -m pytest tests/ --ignore=tests/test_fc_export_integration.py --cov=tools --cov-report=html -v
+
+# Open the report in browser
+open htmlcov/index.html
+```
+
+The `htmlcov/` directory contains interactive coverage reports and is git-ignored.
+
 ### Writing New Tests
 
 - Add **unit tests** in `tests/` for pure Python logic (no FreeCAD)
