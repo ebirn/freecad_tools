@@ -20,8 +20,8 @@ from pathlib import Path
 import lib3mf
 from lib3mf import get_wrapper
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="lib3mf_utils - %(levelname)s - %(message)s")
+# Configure logging - clean format without module name
+logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -347,7 +347,7 @@ def convert_stl_to_lib3mf_mesh(stl_file_path: str, mesh_object) -> dict:
             # Read triangle count (4 bytes, little-endian unsigned int)
             tri_count_bytes = f.read(4)
             tri_count = struct.unpack("<I", tri_count_bytes)[0]
-            logger.info(f"Processing {stl_path.name}: {tri_count} triangles")
+            logger.debug(f"Processing {stl_path.name}: {tri_count} triangles")
 
             # Maps (x, y, z) to vertex index for deduplication
             vertex_map = {}
@@ -390,7 +390,7 @@ def convert_stl_to_lib3mf_mesh(stl_file_path: str, mesh_object) -> dict:
                     logger.debug(f"  Processed {tri_idx + 1}/{tri_count} triangles")
 
             # Add all triangles to mesh
-            logger.info(f"Adding {len(triangle_data)} triangles to mesh")
+            logger.debug(f"Adding {len(triangle_data)} triangles to mesh")
             for v0, v1, v2 in triangle_data:
                 tri = lib3mf.Triangle()
                 tri.Indices[0] = v0
