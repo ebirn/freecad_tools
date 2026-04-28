@@ -790,12 +790,8 @@ def main():
             pass
 
         success, metrics = create_3mf_from_stls(stl_files, output_path, template_path)
-        if success and metrics:
-            print(
-                f"Quality Metrics: {metrics['total_vertex_count']} vertices, "
-                f"{metrics['total_triangle_count']} triangles, "
-                f"{metrics['output_file_size']} bytes"
-            )
+        if success:
+            print(format_quality_report(metrics))
         sys.exit(0 if success else 1)
 
     elif command == "create-from-json":
@@ -805,12 +801,8 @@ def main():
 
         config_path = sys.argv[2]
         success, metrics = create_from_json_config(config_path)
-        if success and metrics:
-            print(
-                f"Quality Metrics: {metrics['total_vertex_count']} vertices, "
-                f"{metrics['total_triangle_count']} triangles, "
-                f"{metrics['output_file_size']} bytes"
-            )
+        if success:
+            print(format_quality_report(metrics))
         sys.exit(0 if success else 1)
 
     else:
