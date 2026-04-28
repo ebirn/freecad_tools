@@ -24,20 +24,36 @@ Process multiple export jobs with parallel execution and per-job error handling.
 
 ---
 
-### 2. Quality Metrics [MEDIUM PRIORITY]
+### 2. Multi-Document Support [LOW PRIORITY]
 **Status**: NOT STARTED
-**Branch**: `agent_quality_metrics`
-**Effort**: Low (1-2 hours)
+**Branch**: `agent_multi_document`
+**Effort**: Medium (2-3 hours)
 
-Report mesh statistics (vertex/triangle counts, file sizes) and validate 3MF output structure.
+Export bodies from multiple FCStd files in a single export config.
 
-**Tasks**:
-- [ ] Add vertex/triangle counting in `tools/lib3mf_utils.py`
-- [ ] Implement file size reporting
-- [ ] Add 3MF structure validation
-- [ ] Generate quality report after export
-- [ ] Test with sample models
-- [ ] Document in README.md
+**Possible Config**:
+```yaml
+export:
+  - name: Combined
+    documents:
+      - source: project1.FCStd
+        bodies: [Body1, Body2]
+      - source: project2.FCStd
+        bodies: [Body3, Body4]
+```
+
+---
+
+### 3. Printables.com Upload & Publishing [LOW PRIORITY]
+**Status**: NOT STARTED
+**Branch**: `agent_printables_upload`
+**Effort**: High (5-10 hours)
+
+Upload exported project artifacts (3MF, STL, PDF, BOM) to Printables.com, including build/assembly instructions from a project markdown file.
+
+**Key Constraint**: Printables.com has **no public API** (as of 2026).
+
+Recommendation: Start with preparation-only mode (package everything into a zip/folder for manual upload).
 
 ---
 
