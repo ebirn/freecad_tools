@@ -25,30 +25,150 @@ logging.basicConfig(level=logging.INFO, format="lib3mf_utils - %(levelname)s - %
 logger = logging.getLogger(__name__)
 
 
-def create_euler_transform(
-    rotation_deg: list[float] | None = None, position: list[float] | None = None
-) -> "lib3mf.Transform":
+def _axis_angle_to_matrix(axis, angle_deg, position=None):
     """
-    Create a 3MF transformation matrix from Euler angles and position.
+    Create a 3MF transformation matrix from axis+angle rotation and position.
 
     Args:
-        rotation_deg: List of [X, Y, Z] rotation angles in degrees (optional).
-                     Applied in intrinsic order: X -> Y -> Z
+        axis: List of [X, Y, Z] axis vector (will be normalized)
+        angle_deg: Rotation angle in degrees
         position: List of [X, Y, Z] position offsets in mm (optional)
 
     Returns:
         lib3mf.Transform object with combined rotation and translation
 
     Notes:
-        - Rotation uses intrinsic (body-relative) XYZ order
+        - Uses Rodrigues' rotation formula for axis+angle conversion
+        - Axis is normalized before calculation
+        - Angle is in degrees and converted to radians internally
+    """
+    # Normalize axis
+    axis_length = math.sqrt(axis[0] ** 2 + axis[1] ** 2 + axis[2] ** 2)
+    if axis_length == 0:
+        # Zero axis is invalid, use identity
+        logger.warning(f"Zero-length rotation axis: {axis}")
+        axis = [0, 0, 1]  # Default to Z-axis
+        axis_length = 1
+    else:
+        axis = [axis[i] / axis_length for i in range(3)]
+
+    # Convert angle to radians
+    rad_theta = math.radians(angle_deg)
+
+    # Rodrigues' rotation formula: R = I + sin(theta)*K + (1-cos(theta))*K^2
+    # where K is the cross-product matrix of the unit axis vector
+    theta = rad_theta
+    c = math.cos(theta)
+    s = math.sin(theta)
+    t = 1 - c
+
+    # Cross-product matrix elements for normalized axis [ux, uy, uz]
+    ux, uy, uz = axis[0], axis[1], axis[2]
+
+    # Rotation matrix (3x3)
+    # R[0][0] = t*ux*ux + c
+    # R[0][1] = t*ux*uy - s*uz
+    # R[0][2] = t*ux*uz + s*uy
+    # R[1][0] = t*uy*ux + s*uz
+    # R[1][1] = t*uy*uy + c
+    # R[1][2] = t*uy*uz - s*ux
+    # R[2][0] = t*uz*ux - s*uy
+    # R[2][1] = t*uz*uy + s*ux
+    # R[2][2] = t*uz*uz + c
+
+    transform = lib3mf.Transform()
+
+    # Row 0 (X-axis output)
+    transform.Fields[0][0] = t * ux * ux + c
+    transform.Fields[0][1] = t * ux * uy - s * uz
+    transform.Fields[0][2] = t * ux * uz + s * uy
+    transform.Fields[0][3] = position[0] if position else 0
+
+    # Row 1 (Y-axis output)
+    transform.Fields[1][0] = t * uy * ux + s * uz
+    transform.Fields[1][1] = t * uy * uy + c
+    transform.Fields[1][2] = t * uy * uz - s * ux
+    transform.Fields[1][3] = position[1] if position else 0
+
+    # Row 2 (Z-axis output)
+    transform.Fields[2][0] = t * uz * ux - s * uy
+    transform.Fields[2][1] = t * uz * uy + s * ux
+    transform.Fields[2][2] = t * uz * uz + c
+    transform.Fields[2][3] = position[2] if position else 0
+
+    return transform
+
+
+def create_euler_transform(
+    rotation_deg: list[float] | dict | None = None, position: list[float] | None = None
+) -> "lib3mf.Transform":
+    """
+    Create a 3MF transformation matrix from rotation and position.
+
+    Supports two rotation formats for backward compatibility:
+    - Euler angles: [x_deg, y_deg, z_deg] (list of 3 numbers, existing format)
+    - Axis+Angle: {"axis": [x, y, z], "angle": deg} (dict format, matches FreeCAD GUI)
+
+    Args:
+        rotation_deg: Rotation specification (optional). Can be:
+                     - List of [X, Y, Z] Euler angles in degrees (intrinsic XYZ order)
+                     - Dict with {"axis": [x, y, z], "angle": deg} for axis+angle rotation
+        position: List of [X, Y, Z] position offsets in mm (optional)
+
+    Returns:
+        lib3mf.Transform object with combined rotation and translation
+
+    Notes:
+        - Euler rotation: intrinsic (body-relative) XYZ order
+        - Axis+Angle: Uses Rodrigues' rotation formula, matches FreeCAD rotation display
         - Angles are in degrees and will be converted to radians internally
         - Identity transform is used if no rotation/position specified
     """
-    # Default to zeros if not provided
-    if rotation_deg is None:
-        rotation_deg = [0, 0, 0]
     if position is None:
         position = [0, 0, 0]
+
+    # Detect rotation format
+    if rotation_deg is None:
+        # No rotation - return identity with position
+        transform = lib3mf.Transform()
+        transform.Fields[0][0] = 1
+        transform.Fields[0][1] = 0
+        transform.Fields[0][2] = 0
+        transform.Fields[0][3] = position[0]
+        transform.Fields[1][0] = 0
+        transform.Fields[1][1] = 1
+        transform.Fields[1][2] = 0
+        transform.Fields[1][3] = position[1]
+        transform.Fields[2][0] = 0
+        transform.Fields[2][1] = 0
+        transform.Fields[2][2] = 1
+        transform.Fields[2][3] = position[2]
+        return transform
+
+    if isinstance(rotation_deg, dict):
+        # Axis+Angle format: {"axis": [x, y, z], "angle": deg}
+        axis = rotation_deg.get("axis", [0, 0, 1])
+        angle = rotation_deg.get("angle", 0)
+        return _axis_angle_to_matrix(axis, angle, position)
+
+    # Euler angle format: [x, y, z] list
+    if not isinstance(rotation_deg, (list, tuple)) or len(rotation_deg) != 3:
+        logger.warning(f"Invalid Euler rotation format (expected 3-element list): {rotation_deg}")
+        # Fall back to identity
+        transform = lib3mf.Transform()
+        transform.Fields[0][0] = 1
+        transform.Fields[0][1] = 0
+        transform.Fields[0][2] = 0
+        transform.Fields[0][3] = position[0]
+        transform.Fields[1][0] = 0
+        transform.Fields[1][1] = 1
+        transform.Fields[1][2] = 0
+        transform.Fields[1][3] = position[1]
+        transform.Fields[2][0] = 0
+        transform.Fields[2][1] = 0
+        transform.Fields[2][2] = 1
+        transform.Fields[2][3] = position[2]
+        return transform
 
     # Convert degrees to radians
     rad_x = math.radians(rotation_deg[0])

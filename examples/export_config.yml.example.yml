@@ -1,7 +1,9 @@
 export:
   # Basic export example - simple body list
+  # body_source: config is inferred from bodies list presence (backward compatible)
   - name: Moxon_OE1EBG
     source: Moxon_OE1EBG.FCStd
+    body_source: config      # Explicit: bodies listed in config
     # Can specify bodies by Name (Body) or Label (Feed001, Cover001, etc) - more user-friendly
     bodies:
       - Feed001           # Actual Label: Feed001 (Name: Body)
@@ -23,39 +25,71 @@ export:
       Author: "John Doe"
       # Git metadata is automatically added if available (GitCommit, GitBranch, etc)
 
-  # Advanced example: Bodies with orientation and positioning
-  - name: Moxon_With_Orientation
+  # Advanced example: Bodies with Euler rotation (existing format - backward compatible)
+  - name: Moxon_With_Euler_Rotation
     source: Moxon_OE1EBG.FCStd
-    # Bodies can be specified as strings (simple format) or objects with transforms
+    body_source: config
+    # Bodies can be strings or objects with transforms
     bodies:
       # Simple string format - no transforms
       - Feed001
-      # Object format - with optional rotation and position
+      # Object format - with Euler rotation [X, Y, Z] degrees, intrinsic XYZ order
       - body: "Angle Round"
-        # Optional: rotation in degrees [X, Y, Z]
-        # Rotations are applied in intrinsic order: X -> Y -> Z
-        rotation: [0, 0, 45]
+        rotation: [0, 0, 45]    # Euler: 45° around Z
       # Same body with different position
       - body: "Angle Round"
-        rotation: [0, 0, 225]
-        # Optional: position offset in mm [X, Y, Z]
-        position: [10, 0, 0]
-    output: prints/Moxon_With_Orientation.3mf
+        rotation: [0, 0, 225]  # Euler: 225° around Z
+        position: [10, 0, 0]    # Position offset in mm [X, Y, Z]
+    output: prints/Moxon_With_Euler_Rotation.3mf
     metadata:
-      Project: "Moxon_OE1EBG_Oriented"
-      Version: "1.0"
-      Author: "Jane Doe"
+      Project: "Moxon_OE1EBG_Euler"
+      RotationFormat: "Euler XYZ"
 
-  # Advanced example: Export only marked bodies
-  - name: SelectiveExport
-    source: AnotherDesign.FCStd
-    # To use automatic body selection, mark bodies with the ExportTo3MF custom property set to True
-    # If bodies list is empty, all bodies marked with ExportTo3MF=True will be exported
-    bodies: []
-    output: prints/SelectiveExport.3mf
+  # NEW! Example: Bodies with axis+angle rotation (matches FreeCAD GUI display)
+  - name: Moxon_With_AxisAngle_Rotation
+    source: Moxon_OE1EBG.FCStd
+    body_source: config
+    # Using axis+angle format: {axis: [x, y, z], angle: degrees}
+    bodies:
+      - Feed001
+      - body: "Angle Round"
+        rotation:
+          axis: [0, 0, 1]      # Z-axis direction
+          angle: 45           # 45 degrees around that axis
+      - body: "Angle Round"
+        rotation:
+          axis: [0, 0, 1]
+          angle: 225
+        position: [10, 0, 0]
+    output: prints/Moxon_With_AxisAngle_Rotation.3mf
+    metadata:
+      Project: "Moxon_OE1EBG_AxisAngle"
+      RotationFormat: "AxisAngle"
+
+  # NEW! Example: Property-based body selection
+  - name: PropertyExport
+    source: AnotherDesign.FcsTd
+    body_source: properties   # Use FreeCAD properties instead of config list
+    # When body_source is 'properties', bodies list is not used
+    # Bodies with ExportTo3MF=True custom property will be exported
+    # Use macros/set_export_properties.py to set these properties
+    output: prints/PropertyExport.3mf
     metadata:
       Project: "AnotherDesign"
-      Version: "2.1"
+      Version: "1.0"
+
+  # NEW! Example: Property-based with count and rotation
+  # When using body_source: properties, each body's ExportCount and ExportRotation
+  # properties are automatically read and applied:
+  # - ExportCount: Number of copies to export
+  # - ExportRotation: Axis+angle rotation for each copy
+  - name: PropertyExportWithTransforms
+    source: AnotherDesign.FCStd
+    body_source: properties
+    output: prints/PropertyExportWithTransforms.3mf
+    metadata:
+      Project: "AnotherDesign"
+      Notes: "Bodies are marked with ExportTo3MF=True and can have ExportCount > 1 and ExportRotation"
 
   # TechDraw + BOM export example
   - name: AssemblyProject

@@ -461,7 +461,13 @@ class TestConfigWithExampleFiles:
         for item in config.get("export", []):
             assert "name" in item
             assert "source" in item
-            assert "bodies" in item
+            # bodies is optional when body_source: properties
+            # But if body_source is config or not specified, bodies should be present or empty
+            body_source = item.get("body_source")
+            if body_source == "properties":
+                assert "bodies" not in item or item.get("bodies") == []
+            else:
+                assert "bodies" in item
 
     def test_example_config_bodies_are_parseable(self, example_config_file):
         """Should be able to parse body specs from example config."""
@@ -1043,6 +1049,278 @@ class TestExportWithTechDrawAndBOM:
         assert item["techdraw"]["output_dir"] == "docs/"
         assert item["bom"]["output"] == "docs/bom.csv"
         assert len(item["bodies"]) == 2
+
+
+class TestBodySourceValidation:
+    """Tests for body_source configuration validation."""
+
+    def test_body_source_config_mode_valid(self):
+        """Should accept valid body_source: config with bodies list."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+            "body_source": "config",
+            "bodies": ["Body1", "Body2"],
+        }
+
+        # When
+        is_valid, body_source, warning = fc_export.validate_body_source_config(item)
+
+        # Then
+        assert is_valid is True
+        assert body_source == "config"
+        assert warning is None
+
+    def test_body_source_properties_mode_valid(self):
+        """Should accept valid body_source: properties without bodies list."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+            "body_source": "properties",
+        }
+
+        # When
+        is_valid, body_source, warning = fc_export.validate_body_source_config(item)
+
+        # Then
+        assert is_valid is True
+        assert body_source == "properties"
+        assert warning is None
+
+    def test_body_source_properties_with_empty_bodies_valid(self):
+        """Should accept body_source: properties with empty bodies list."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+            "body_source": "properties",
+            "bodies": [],
+        }
+
+        # When
+        is_valid, body_source, warning = fc_export.validate_body_source_config(item)
+
+        # Then
+        assert is_valid is True
+        assert body_source == "properties"
+        assert warning is None
+
+    def test_body_source_invalid_value(self):
+        """Should reject invalid body_source value."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+            "body_source": "invalid_mode",
+        }
+
+        # When
+        is_valid, body_source, warning = fc_export.validate_body_source_config(item)
+
+        # Then
+        assert is_valid is False
+        assert "Invalid body_source" in warning
+
+    def test_body_source_config_without_bodies_invalid(self):
+        """Should reject body_source: config without bodies list."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+            "body_source": "config",
+        }
+
+        # When
+        is_valid, body_source, warning = fc_export.validate_body_source_config(item)
+
+        # Then
+        assert is_valid is False
+        assert "no bodies list provided" in warning
+
+    def test_body_source_properties_with_bodies_invalid(self):
+        """Should reject body_source: properties with bodies list."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+            "body_source": "properties",
+            "bodies": ["Body1"],
+        }
+
+        # When
+        is_valid, body_source, warning = fc_export.validate_body_source_config(item)
+
+        # Then
+        assert is_valid is False
+        assert "bodies list is also provided" in warning
+
+    def test_backward_compat_with_bodies_infers_config(self):
+        """Should infer body_source: config when bodies present but body_source omitted."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+            "bodies": ["Body1", "Body2"],
+        }
+
+        # When
+        is_valid, body_source, warning = fc_export.validate_body_source_config(item)
+
+        # Then
+        assert is_valid is True
+        assert body_source == "config"
+        assert warning is not None
+        assert "inferring 'config'" in warning
+
+    def test_backward_compat_without_bodies_infers_properties(self):
+        """Should infer body_source: properties when no bodies list and body_source omitted."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+        }
+
+        # When
+        is_valid, body_source, warning = fc_export.validate_body_source_config(item)
+
+        # Then
+        assert is_valid is True
+        assert body_source == "properties"
+        assert warning is not None
+        assert "defaulting to 'properties'" in warning
+
+
+class TestParseBodySpecsAxisAngle:
+    """Tests for parse_body_specs with axis+angle rotation format."""
+
+    def test_parse_body_with_axis_angle_rotation(self):
+        """Should parse body with axis+angle rotation format."""
+        # Given
+        bodies = [{"body": "Body1", "rotation": {"axis": [0, 0, 1], "angle": 45}}]
+
+        # When
+        parsed = fc_export.parse_body_specs(bodies)
+
+        # Then
+        assert len(parsed) == 1
+        body_id, rotation, position = parsed[0]
+        assert body_id == "Body1"
+        assert rotation == {"axis": [0, 0, 1], "angle": 45}
+        assert position is None
+
+    def test_parse_body_with_axis_angle_and_position(self):
+        """Should parse body with both axis+angle rotation and position."""
+        # Given
+        bodies = [
+            {
+                "body": "Body1",
+                "rotation": {"axis": [0, 0, 1], "angle": 90},
+                "position": [10, 20, 30],
+            }
+        ]
+
+        # When
+        parsed = fc_export.parse_body_specs(bodies)
+
+        # Then
+        assert len(parsed) == 1
+        body_id, rotation, position = parsed[0]
+        assert body_id == "Body1"
+        assert rotation == {"axis": [0, 0, 1], "angle": 90}
+        assert position == [10, 20, 30]
+
+    def test_parse_mixed_euler_and_axis_angle(self):
+        """Should handle mix of Euler and axis+angle rotation formats."""
+        # Given
+        bodies = [
+            {"body": "Body1", "rotation": [45, 0, 0]},  # Euler
+            {"body": "Body2", "rotation": {"axis": [0, 0, 1], "angle": 90}},  # Axis+Angle
+            "Body3",  # No rotation
+        ]
+
+        # When
+        parsed = fc_export.parse_body_specs(bodies)
+
+        # Then
+        assert len(parsed) == 3
+        # Body1: Euler format
+        assert parsed[0] == ("Body1", [45, 0, 0], None)
+        # Body2: Axis+Angle format
+        assert parsed[1] == ("Body2", {"axis": [0, 0, 1], "angle": 90}, None)
+        # Body3: No rotation
+        assert parsed[2] == ("Body3", None, None)
+
+    def test_parse_invalid_axis_angle_missing_axis(self):
+        """Should reject axis+angle rotation missing axis key."""
+        # Given
+        bodies = [{"body": "Body1", "rotation": {"angle": 45}}]
+
+        # When
+        parsed = fc_export.parse_body_specs(bodies)
+
+        # Then
+        assert len(parsed) == 1
+        body_id, rotation, position = parsed[0]
+        assert body_id == "Body1"
+        assert rotation is None  # Invalid, so None
+
+    def test_parse_invalid_axis_angle_missing_angle(self):
+        """Should reject axis+angle rotation missing angle key."""
+        # Given
+        bodies = [{"body": "Body1", "rotation": {"axis": [0, 0, 1]}}]
+
+        # When
+        parsed = fc_export.parse_body_specs(bodies)
+
+        # Then
+        assert len(parsed) == 1
+        body_id, rotation, position = parsed[0]
+        assert body_id == "Body1"
+        assert rotation is None  # Invalid, so None
+
+    def test_parse_invalid_axis_not_list(self):
+        """Should reject axis+angle rotation with non-list axis."""
+        # Given
+        bodies = [{"body": "Body1", "rotation": {"axis": "not-a-list", "angle": 45}}]
+
+        # When
+        parsed = fc_export.parse_body_specs(bodies)
+
+        # Then
+        assert len(parsed) == 1
+        body_id, rotation, position = parsed[0]
+        assert body_id == "Body1"
+        assert rotation is None
+
+    def test_parse_invalid_axis_wrong_length(self):
+        """Should reject axis+angle rotation with wrong axis length."""
+        # Given
+        bodies = [{"body": "Body1", "rotation": {"axis": [0, 0], "angle": 45}}]
+
+        # When
+        parsed = fc_export.parse_body_specs(bodies)
+
+        # Then
+        assert len(parsed) == 1
+        body_id, rotation, position = parsed[0]
+        assert body_id == "Body1"
+        assert rotation is None
+
+    def test_parse_euler_rotation_still_works(self):
+        """Should verify existing Euler rotation format still works."""
+        # Given
+        bodies = [{"body": "Body1", "rotation": [45, 0, 0]}]
+
+        # When
+        parsed = fc_export.parse_body_specs(bodies)
+
+        # Then
+        assert len(parsed) == 1
+        body_id, rotation, position = parsed[0]
+        assert body_id == "Body1"
+        assert rotation == [45, 0, 0]
 
 
 if __name__ == "__main__":

@@ -93,6 +93,111 @@ python3 tools/export.py --help
 
 ---
 
+## Body Selection Modes
+
+**NEW!** Explicitly control how bodies are selected for export with the `body_source` field.
+
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `config` | Bodies explicitly listed in config | Full control, reproducible exports |
+| `properties` | Bodies marked with `ExportTo3MF` property in FreeCAD | Flexible, visual selection |
+
+### Config Mode: `body_source: config`
+
+Bodies are specified explicitly in the YAML config. This is the default mode when `bodies` list is provided.
+
+```yaml
+export:
+  - name: ExplicitExport
+    source: MyDesign.FCStd
+    body_source: config      # Required when using explicit bodies list
+    bodies:
+      - Body1
+      - Body2
+    output: prints/output.3mf
+```
+
+**When to use**:
+- Reproducible exports (same bodies every time)
+- CI/CD pipelines
+- Multiple export configs for same document
+- Version-controlled body selection
+
+### Properties Mode: `body_source: properties`
+
+Bodies are selected automatically based on FreeCAD custom properties. No `bodies` list needed.
+
+```yaml
+export:
+  - name: PropertyExport
+    source: MyDesign.FCStd
+    body_source: properties   # No bodies list - use properties
+    output: prints/output.3mf
+```
+
+**Required Properties** (added automatically by `macros/set_export_properties.py`):
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `ExportTo3MF` | App::PropertyBool | false | Set to `True` to export this body |
+| `ExportCount` | App::PropertyInteger | 1 | Number of copies to export |
+| `ExportRotation` | App::PropertyRotation | identity | Orientation (axis+angle format) |
+
+**All properties are grouped under `freecad_tools` in the FreeCAD Properties panel.**
+
+**Axis+Angle Rotation Format** (matches FreeCAD GUI display):
+```yaml
+rotation:
+  axis: [0, 0, 1]   # X, Y, Z direction vector (normalized automatically)
+  angle: 45         # Degrees (positive = counter-clockwise)
+```
+
+**Example**: Rotate 90° around X-axis:
+```yaml
+rotation:
+  axis: [1, 0, 0]
+  angle: 90
+```
+
+**Why Axis+Angle?**
+- Unambiguous (no Euler angle convention confusion)
+- No gimbal lock issues
+- Matches what FreeCAD displays in Properties panel
+- `FreeCAD.Rotation` objects use this format natively
+
+### Backward Compatibility
+
+If `body_source` is not specified, it is inferred from the `bodies` list:
+- **With `bodies` list**: defaults to `config` mode (with deprecation warning)
+- **Without `bodies` list**: defaults to `properties` mode (with deprecation warning)
+
+**Migration**: Add `body_source: config` or `body_source: properties` to your configs to suppress warnings.
+
+---
+
+### Setting Properties via Macro
+
+Use the `macros/set_export_properties.py` macro to set export properties on bodies:
+
+**GUI Mode** (run from FreeCAD Macro menu):
+1. Select bodies in the 3D view
+2. Run the macro
+3. All selected bodies get export properties with `ExportTo3MF=True`
+
+**CLI Mode**:
+```bash
+/Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd \
+  /path/to/freecad_tools/macros/set_export_properties.py \
+  MyDesign.FCStd Body1 --count 3 --rotation-axis 0 0 1 --rotation-angle 45
+```
+
+**List all objects and their properties**:
+```bash
+freecadcmd /path/to/freecad_tools/macros/set_export_properties.py MyDesign.FCStd --list
+```
+
+---
+
 ## Common Use Cases
 
 ### 1. Simple Export (Basic)
@@ -119,7 +224,23 @@ export:
 
 ### 2. Export with Orientation (NEW!)
 
-Position bodies exactly where they should be without manual adjustment:
+Position bodies exactly where they should be without manual adjustment.
+
+**Two rotation formats supported:**
+
+**Euler Format** (existing, backward compatible):
+```yaml
+rotation: [0, 0, 45]  # [X, Y, Z] degrees, intrinsic XYZ order
+```
+
+**Axis+Angle Format** (NEW - matches FreeCAD GUI):
+```yaml
+rotation:
+  axis: [0, 0, 1]   # Direction vector (normalized automatically)
+  angle: 45        # Degrees around that axis
+```
+
+**Example with both formats:**
 
 ```yaml
 export:
@@ -129,13 +250,15 @@ export:
       # Simple bodies (no rotation)
       - Feed001
 
-      # Body rotated 45 degrees around Z-axis
+      # Euler rotation: 45 degrees around Z-axis
       - body: "Mounting Bracket"
         rotation: [0, 0, 45]
 
-      # Body rotated and moved
+      # Axis+Angle rotation: 90 degrees around X-axis
       - body: "Cable Guide"
-        rotation: [90, 0, 0]
+        rotation:
+          axis: [1, 0, 0]
+          angle: 90
         position: [10, 0, 5]  # X, Y, Z in mm
     output: prints/Antenna_Positioned.3mf
 ```
@@ -145,12 +268,13 @@ export:
 - ✅ Save time in PrusaSlicer
 - ✅ Consistent orientation across exports
 - ✅ Supports multiple copies with different positions
+- ✅ Axis+Angle format matches FreeCAD Properties panel display
 
 **Rotation Details**:
-- `rotation: [X, Y, Z]` - degrees around each axis
-- Applied in intrinsic order: X → Y → Z
-- Example: `[45, 0, 0]` = 45° around body's X-axis
-- Example: `[0, 0, 90]` = 90° around body's Z-axis
+- Euler: `rotation: [X, Y, Z]` - degrees around each axis, intrinsic XYZ order
+- Axis+Angle: `rotation: {axis: [x, y, z], angle: deg}` - direction vector + angle
+- Example Euler: `[45, 0, 0]` = 45° around body's X-axis
+- Example Axis+Angle: `{axis: [0, 0, 1], angle: 90}` = 90° around Z-axis
 
 **Position Details**:
 - `position: [X, Y, Z]` - millimeter offset from origin
