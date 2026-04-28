@@ -279,6 +279,12 @@ def resolve_template_path(template_name):
     return None
 
 
+# Body source mode options
+BODY_SOURCE_CONFIG = "config"  # Bodies specified explicitly in config
+BODY_SOURCE_PROPERTIES = "properties"  # Bodies selected via FreeCAD properties
+BODY_SOURCE_OPTIONS = (BODY_SOURCE_CONFIG, BODY_SOURCE_PROPERTIES)
+
+
 def resolve_object_identifier(doc, identifier):
     """
     Resolve a FreeCAD object by Name or Label.
@@ -308,6 +314,186 @@ def resolve_object_identifier(doc, identifier):
     return None, None, None
 
 
+def find_exportable_bodies(doc):
+    """
+    Find all bodies in a FreeCAD document that have ExportTo3MF property set to True.
+
+    This function scans all objects in the document and returns those that have
+    the custom 'ExportTo3MF' property (App::PropertyBool) set to True.
+
+    These bodies are used when body_source: properties is specified in the config.
+
+    Args:
+        doc: FreeCAD document
+
+    Returns:
+        List of FreeCAD objects that should be exported (have ExportTo3MF=True)
+    """
+    exportable = []
+    try:
+        for obj in doc.Objects:
+            # Check for ExportTo3MF property
+            if hasattr(obj, "ExportTo3MF"):
+                export_flag = obj.ExportTo3MF
+                if export_flag:
+                    logger.debug(f"Found exportable body: {obj.Name} (Label: {getattr(obj, 'Label', 'N/A')})")
+                    exportable.append(obj)
+            # Also check with getattr for cases where property might not be directly accessible
+            elif hasattr(obj, "getPropertyByName"):
+                try:
+                    export_flag = obj.getPropertyByName("ExportTo3MF")
+                    if export_flag:
+                        logger.debug(f"Found exportable body (via getPropertyByName): {obj.Name}")
+                        exportable.append(obj)
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.warning(f"Error scanning for exportable bodies: {e}")
+
+    logger.info(f"Found {len(exportable)} bodies with ExportTo3MF=True")
+    return exportable
+
+
+def get_body_export_properties(obj):
+    """
+    Read export-related properties from a FreeCAD body object.
+
+    Reads the following custom properties:
+    - ExportTo3MF (App::PropertyBool): Whether to export this body
+    - ExportCount (App::PropertyInteger): Number of copies to export (default: 1)
+    - ExportRotation (App::PropertyRotation): Orientation for export (FreeCAD.Rotation)
+
+    Args:
+        obj: FreeCAD object (typically a Part or Body)
+
+    Returns:
+        Dictionary with keys:
+        - count: int (number of copies, default 1)
+        - rotation: dict with {axis: [x, y, z], angle: deg} or None
+        - position: list [x, y, z] or None (not yet implemented for properties)
+    """
+    props = {
+        "count": 1,
+        "rotation": None,
+        "position": None,
+    }
+
+    try:
+        # Read ExportCount
+        if hasattr(obj, "ExportCount"):
+            count = obj.ExportCount
+            if isinstance(count, (int, float)) and count > 0:
+                props["count"] = int(count)
+                logger.debug(f"Body {obj.Name}: ExportCount = {props['count']}")
+        elif hasattr(obj, "getPropertyByName"):
+            try:
+                count = obj.getPropertyByName("ExportCount")
+                if isinstance(count, (int, float)) and count > 0:
+                    props["count"] = int(count)
+                    logger.debug(f"Body {obj.Name}: ExportCount (via getPropertyByName) = {props['count']}")
+            except Exception:
+                pass
+
+        # Read ExportRotation (FreeCAD.Rotation object)
+        if hasattr(obj, "ExportRotation"):
+            rotation_obj = obj.ExportRotation
+            if rotation_obj is not None:
+                # FreeCAD.Rotation has .Axis (Vector) and .Angle (degrees)
+                try:
+                    axis = rotation_obj.Axis
+                    angle_deg = rotation_obj.Angle
+                    # Convert FreeCAD Vector to list
+                    axis_list = [axis.x, axis.y, axis.z]
+                    props["rotation"] = {
+                        "axis": axis_list,
+                        "angle": float(angle_deg),
+                    }
+                    logger.debug(f"Body {obj.Name}: ExportRotation = axis={axis_list}, angle={angle_deg}°")
+                except Exception as e:
+                    logger.warning(f"Failed to read ExportRotation from {obj.Name}: {e}")
+        elif hasattr(obj, "getPropertyByName"):
+            try:
+                rotation_obj = obj.getPropertyByName("ExportRotation")
+                if rotation_obj is not None:
+                    axis = rotation_obj.Axis
+                    angle_deg = rotation_obj.Angle
+                    axis_list = [axis.x, axis.y, axis.z]
+                    props["rotation"] = {
+                        "axis": axis_list,
+                        "angle": float(angle_deg),
+                    }
+                    logger.debug(
+                        f"Body {obj.Name}: ExportRotation (via getPropertyByName) = axis={axis_list}, angle={angle_deg}°"
+                    )
+            except Exception:
+                pass
+
+    except Exception as e:
+        logger.warning(f"Error reading export properties from {obj.Name}: {e}")
+
+    return props
+
+
+def validate_body_source_config(item):
+    """
+    Validate body_source configuration for an export item.
+
+    Checks:
+    - body_source is one of the valid options (config, properties)
+    - If body_source is 'config', bodies list should be present
+    - If body_source is 'properties', bodies list should be absent or empty
+    - Issues deprecation warning if body_source is omitted
+
+    Args:
+        item: Export configuration item dict
+
+    Returns:
+        Tuple (is_valid: bool, body_source: str, warning_message: str or None)
+    """
+    body_source = item.get("body_source")
+    bodies = item.get("bodies", [])
+
+    if body_source is not None:
+        # Validate body_source value
+        if body_source not in BODY_SOURCE_OPTIONS:
+            return False, body_source, f"Invalid body_source '{body_source}'. Must be one of: {BODY_SOURCE_OPTIONS}"
+
+        # Check for conflicts
+        if body_source == BODY_SOURCE_CONFIG and not bodies:
+            return False, body_source, "body_source is 'config' but no bodies list provided"
+
+        if body_source == BODY_SOURCE_PROPERTIES and bodies:
+            return (
+                False,
+                body_source,
+                "body_source is 'properties' but bodies list is also provided. "
+                "Remove bodies list when using properties mode.",
+            )
+
+        return True, body_source, None
+
+    # body_source not specified - backward compatibility
+    # Infer from bodies presence
+    if bodies:
+        inferred_source = BODY_SOURCE_CONFIG
+        warning = (
+            "body_source not specified, inferring 'config' from bodies list. "
+            "Explicitly set body_source: 'config' or body_source: 'properties' "
+            "to avoid this warning."
+        )
+        return True, inferred_source, warning
+
+    # No body_source and no bodies - use properties mode
+    inferred_source = BODY_SOURCE_PROPERTIES
+    warning = (
+        "body_source not specified and no bodies list provided, "
+        "defaulting to 'properties' mode. Bodies with ExportTo3MF=True will be exported. "
+        "Explicitly set body_source: 'config' or body_source: 'properties' "
+        "to avoid this warning."
+    )
+    return True, inferred_source, warning
+
+
 def parse_body_specs(bodies_config):
     """
     Parse body specifications from config, handling both simple and complex formats.
@@ -316,12 +502,20 @@ def parse_body_specs(bodies_config):
     - String: Simple body identifier (Name or Label)
     - Dict: Object with 'body' field and optional 'rotation' and 'position' transforms
 
+    Rotation can be specified in two formats:
+    - Euler angles: [x_deg, y_deg, z_deg] (list of 3 numbers, existing format)
+    - Axis+Angle: {"axis": [x, y, z], "angle": deg} (dict format, matches FreeCAD GUI)
+
     Args:
         bodies_config: List of body specifications (strings or dicts)
 
     Returns:
-        List of tuples: (body_identifier, rotation_deg, position_mm)
-        where rotation_deg and position_mm are None if not specified
+        List of tuples: (body_identifier, rotation_deg_or_dict, position_mm)
+        where rotation can be:
+        - None if not specified
+        - [x, y, z] list for Euler angles (degrees)
+        - {"axis": [x, y, z], "angle": deg} dict for axis+angle
+        position is always a [x, y, z] list or None
     """
     parsed = []
 
@@ -339,13 +533,53 @@ def parse_body_specs(bodies_config):
             rotation = body_spec.get("rotation")
             position = body_spec.get("position")
 
-            # Validate rotation/position if provided
-            if rotation and len(rotation) != 3:
-                logger.warning(f"Invalid rotation (expected 3 values): {rotation}")
-                rotation = None
-            if position and len(position) != 3:
-                logger.warning(f"Invalid position (expected 3 values): {position}")
-                position = None
+            # Validate rotation if provided
+            if rotation is not None:
+                if isinstance(rotation, dict):
+                    # Axis+Angle format: {"axis": [x, y, z], "angle": deg}
+                    if "axis" in rotation and "angle" in rotation:
+                        axis = rotation.get("axis")
+                        angle = rotation.get("angle")
+                        if isinstance(axis, (list, tuple)) and len(axis) == 3:
+                            if isinstance(angle, (int, float)):
+                                # Valid axis+angle format, keep as-is
+                                pass
+                            else:
+                                logger.warning(f"Invalid rotation angle (expected number): {angle}")
+                                rotation = None
+                        else:
+                            logger.warning(f"Invalid rotation axis (expected 3-element list): {axis}")
+                            rotation = None
+                    else:
+                        logger.warning(f"Invalid rotation dict (expected 'axis' and 'angle' keys): {rotation}")
+                        rotation = None
+                elif isinstance(rotation, (list, tuple)):
+                    # Euler angle format: [x, y, z]
+                    if len(rotation) != 3:
+                        logger.warning(f"Invalid rotation (expected 3 values): {rotation}")
+                        rotation = None
+                    # Validate all are numbers
+                    else:
+                        try:
+                            _ = [float(v) for v in rotation]
+                        except (TypeError, ValueError):
+                            logger.warning(f"Invalid rotation values (expected numbers): {rotation}")
+                            rotation = None
+                else:
+                    logger.warning(f"Invalid rotation type (expected list or dict): {type(rotation)}")
+                    rotation = None
+
+            # Validate position if provided
+            if position is not None:
+                if isinstance(position, (list, tuple)) and len(position) == 3:
+                    try:
+                        _ = [float(v) for v in position]
+                    except (TypeError, ValueError):
+                        logger.warning(f"Invalid position values (expected numbers): {position}")
+                        position = None
+                else:
+                    logger.warning(f"Invalid position (expected 3-element list): {position}")
+                    position = None
 
             parsed.append((body_id, rotation, position))
         else:
@@ -504,6 +738,16 @@ def load_config():
                 if resolved != bom["output"]:
                     logger.debug(f"Resolved bom.output '{bom['output']}' to: {resolved}")
                 bom["output"] = resolved
+
+        # Validate body_source configuration
+        is_valid, body_source_resolved, warning_msg = validate_body_source_config(item)
+        if warning_msg:
+            logger.warning(f"Export item '{item.get('name', 'unnamed')}': {warning_msg}")
+        if not is_valid:
+            logger.error(f"Export item '{item.get('name', 'unnamed')}': {warning_msg}")
+            sys.exit(1)
+        # Store resolved body_source in item for later use
+        item["_body_source"] = body_source_resolved
 
     return result
 
@@ -1392,6 +1636,38 @@ def main():
                 f"Document objects: {[(obj.Name, obj.Label if hasattr(obj, 'Label') else 'N/A') for obj in doc.Objects]}"
             )
             FreeCAD.setActiveDocument(doc_name)
+
+            # Determine bodies to export based on body_source mode
+            body_source = item.get("_body_source", BODY_SOURCE_CONFIG)
+
+            if body_source == BODY_SOURCE_PROPERTIES:
+                # Find bodies with ExportTo3MF property set to True
+                exportable_bodies = find_exportable_bodies(doc)
+                if not exportable_bodies:
+                    logger.warning("No bodies with ExportTo3MF=True found in document. Nothing to export.")
+                    bodies = []
+                else:
+                    # Build body specs from properties, including count and rotation
+                    bodies = []
+                    for body_obj in exportable_bodies:
+                        body_name = body_obj.Name
+                        props = get_body_export_properties(body_obj)
+
+                        # If count > 1, add multiple entries
+                        for copy_idx in range(props["count"]):
+                            body_spec = {
+                                "body": body_name,
+                            }
+                            if props["rotation"]:
+                                body_spec["rotation"] = props["rotation"]
+                            if props["position"]:
+                                body_spec["position"] = props["position"]
+                            # Add copy suffix if count > 1
+                            if props["count"] > 1:
+                                body_spec["_copy"] = copy_idx + 1
+                            bodies.append(body_spec)
+
+                logger.info(f"Exporting {len(bodies)} bodies from properties with export name '{export_name}'")
 
             if bodies:
                 logger.info(f"Exporting bodies {bodies} with export name '{export_name}'")

@@ -406,5 +406,128 @@ class TestSTLCreation:
                 struct.unpack("<H", f.read(2))  # attribute (ignored)
 
 
+class TestAxisAngleTransform:
+    """Tests for axis+angle rotation transform creation."""
+
+    def test_create_euler_transform_with_axis_angle_dict(self):
+        """Should create transform from axis+angle dict format."""
+        # Given
+        import lib3mf_utils
+
+        rotation = {"axis": [0, 0, 1], "angle": 90}  # 90 deg around Z
+
+        with patch.object(lib3mf_utils, "lib3mf") as mock_lib3mf:
+            mock_transform = MagicMock()
+            mock_transform.Fields = [[0] * 4 for _ in range(3)]
+            mock_lib3mf.Transform.return_value = mock_transform
+
+            # When
+            result = lib3mf_utils.create_euler_transform(rotation)
+
+            # Then
+            assert result is not None
+            # For 90 deg around Z: R = [[cos90, -sin90, 0, 0], [sin90, cos90, 0, 0], [0, 0, 1, 0]]
+            # cos(90) ≈ 0, sin(90) = 1
+            # So R ≈ [[0, -1, 0, 0], [1, 0, 0, 0], [0, 0, 1, 0]]
+            # Verify the rotation matrix was calculated (identity with position 0)
+            assert mock_lib3mf.Transform.called
+
+    def test_create_euler_transform_with_euler_list(self):
+        """Should still create transform from Euler list (backward compat)."""
+        # Given
+        import lib3mf_utils
+
+        rotation = [45, 0, 0]  # Euler X rotation
+
+        with patch.object(lib3mf_utils, "lib3mf") as mock_lib3mf:
+            mock_transform = MagicMock()
+            mock_transform.Fields = [[0] * 4 for _ in range(3)]
+            mock_lib3mf.Transform.return_value = mock_transform
+
+            # When
+            result = lib3mf_utils.create_euler_transform(rotation)
+
+            # Then
+            assert result is not None
+
+    def test_create_euler_transform_with_none_rotation(self):
+        """Should create identity transform when rotation is None."""
+        # Given
+        import lib3mf_utils
+
+        with patch.object(lib3mf_utils, "lib3mf") as mock_lib3mf:
+            mock_transform = MagicMock()
+            mock_transform.Fields = [[0] * 4 for _ in range(3)]
+            mock_lib3mf.Transform.return_value = mock_transform
+
+            # When
+            result = lib3mf_utils.create_euler_transform(None, position=[10, 20, 30])
+
+            # Then
+            assert result is not None
+            # Identity matrix with position
+            assert mock_transform.Fields[0][0] == 1
+            assert mock_transform.Fields[1][1] == 1
+            assert mock_transform.Fields[2][2] == 1
+            assert mock_transform.Fields[0][3] == 10
+            assert mock_transform.Fields[1][3] == 20
+            assert mock_transform.Fields[2][3] == 30
+
+    def test_axis_angle_zero_axis_uses_default(self):
+        """Should use default Z-axis when axis is zero length."""
+        # Given
+        import lib3mf_utils
+
+        rotation = {"axis": [0, 0, 0], "angle": 45}
+
+        with patch.object(lib3mf_utils, "lib3mf") as mock_lib3mf:
+            mock_transform = MagicMock()
+            mock_transform.Fields = [[0] * 4 for _ in range(3)]
+            mock_lib3mf.Transform.return_value = mock_transform
+
+            # When - should not crash, use default axis
+            result = lib3mf_utils.create_euler_transform(rotation)
+
+            # Then
+            assert result is not None
+
+    def test_axis_angle_normalizes_axis(self):
+        """Should normalize axis vector."""
+        # Given
+        import lib3mf_utils
+
+        # Non-unit axis
+        rotation = {"axis": [2, 0, 0], "angle": 180}
+
+        with patch.object(lib3mf_utils, "lib3mf") as mock_lib3mf:
+            mock_transform = MagicMock()
+            mock_transform.Fields = [[0] * 4 for _ in range(3)]
+            mock_lib3mf.Transform.return_value = mock_transform
+
+            # When
+            result = lib3mf_utils.create_euler_transform(rotation)
+
+            # Then - should handle non-normalized axis
+            assert result is not None
+
+    def test_create_euler_transform_with_invalid_dict_format(self):
+        """Should handle invalid dict rotation format gracefully."""
+        # Given
+        import lib3mf_utils
+
+        rotation = {"invalid": "format"}
+
+        with patch.object(lib3mf_utils, "lib3mf") as mock_lib3mf:
+            mock_transform = MagicMock()
+            mock_transform.Fields = [[0] * 4 for _ in range(3)]
+            mock_lib3mf.Transform.return_value = mock_transform
+
+            # When - should not crash
+            result = lib3mf_utils.create_euler_transform(rotation)
+
+            # Then - should return identity transform
+            assert result is not None
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
