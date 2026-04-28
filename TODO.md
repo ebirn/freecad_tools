@@ -96,6 +96,55 @@ printables:
 
 ---
 
+### 4. Body Screenshot Generation [MEDIUM PRIORITY]
+**Status**: NOT STARTED
+**Branch**: `agent_body_screenshots`
+**Effort**: Medium (4-6 hours)
+
+Generate publication-ready screenshots of exported bodies for Thingiverse, Printables.com, and similar platforms.
+
+**Requirements**:
+- Support multiple view angles (isometric, front, top, right, back, bottom, left)
+- Configurable resolution (1920x1080 default)
+- PNG/JPG format options
+- Clean background (configurable color)
+- Composite or per-body rendering
+
+**Implementation**:
+- New `tools/body_screenshot.py` module (runs via FreeCAD GUI binary)
+- Uses FreeCAD's `ActiveView.saveImage()`
+- Config section in export.yml under `screenshots:`
+- Integration into main export pipeline (post-3MF generation)
+- Non-blocking: screenshot failures don't prevent main export
+
+**Config Example**:
+```yaml
+export:
+  - name: MyProject
+    source: project.FCStd
+    bodies: [Body1, Body2]
+    screenshots:
+      enabled: true
+      output_dir: docs/images/
+      views: [isometric, front, top]
+      resolution: [1920, 1080]
+      background: [255, 255, 255, 255]
+      format: png
+      composite: true
+```
+
+**Tasks**:
+- [ ] Create `tools/body_screenshot.py` with camera control and image capture
+- [ ] Extend config parsing in `fc_export.py` for screenshots section
+- [ ] Integrate screenshot subprocess into export pipeline
+- [ ] Add CLI flag `--screenshots-only` for standalone screenshot generation
+- [ ] Add unit tests for config parsing and default values
+- [ ] Add integration tests with example.FCStd
+- [ ] Update README.md with usage documentation
+- [ ] Update example config file
+
+---
+
 ## Notes
 
 - Feature branches use `agent_<feature_name>` naming convention
