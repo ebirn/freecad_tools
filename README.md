@@ -1040,6 +1040,58 @@ Auto-exporting antenna design...
 
 ---
 
+## Testing
+
+The project has comprehensive unit and integration tests.
+
+### Running Tests
+
+**Unit Tests** (no FreeCAD required, fast):
+```bash
+# Run all unit tests
+make test
+# or: python3 -m pytest tests/ --ignore=tests/test_fc_export_integration.py
+
+# Run specific test file
+python3 -m pytest tests/test_export_config.py -v
+```
+
+**Integration Tests** (require FreeCAD):
+```bash
+# Run integration tests with FreeCAD
+make test-integration
+
+# Run a specific integration test
+/FreeCAD.app/Contents/Resources/bin/freecadcmd -c "import sys; sys.path.insert(0, 'tests'); sys.path.insert(0, 'tools'); import pytest; pytest.main(['-v', 'tests/test_fc_export_integration.py'])"
+```
+
+**All Tests**:
+```bash
+make test-unit   # Unit tests only
+make test-integration  # Integration tests only
+make test-all     # Both unit and integration tests
+```
+
+### Makefile Targets
+
+| Target | Description | Requires FreeCAD |
+|--------|-------------|------------------|
+| `test` | All unit tests | No |
+| `test-unit` | Unit tests only | No |
+| `test-integration` | Integration tests only | Yes |
+| `test-all` | Unit + integration | Yes |
+
+**Note**: Integration tests run via FreeCAD's Python (`freecadcmd`) and test actual FreeCAD document interactions. They mock the lib3mf subprocess calls, so lib3mf only needs to be installed in your venv, not in FreeCAD's Python.
+
+### Writing New Tests
+
+- Add **unit tests** in `tests/` for pure Python logic (no FreeCAD)
+- Add **integration tests** in `tests/test_fc_export_integration.py` for FreeCAD-dependent code
+- Use `@skip_if_no_freecad` decorator for tests requiring FreeCAD
+- See `tests/conftest.py` for shared fixtures
+
+---
+
 ## Support & Contributing
 
 ### Questions?

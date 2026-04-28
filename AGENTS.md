@@ -708,26 +708,51 @@ tests/
 ├── __init__.py              # Package marker
 ├── conftest.py              # Shared fixtures (examples_dir, sample files)
 ├── test_3mf.py              # 3MF file validation (standalone)
+├── test_bom_utils.py        # BOM extraction utilities
 ├── test_export.py           # FreeCAD document inspection (requires FreeCAD)
 ├── test_export_config.py    # Config parsing, body specs, path resolution
-├── test_yaml.py             # YAML config parsing (requires config)
+├── test_fc_export_functions.py    # fc_export.py utility functions (unit tests)
+├── test_fc_export_integration.py # fc_export.py FreeCAD-dependent functions
 ├── test_git_utils.py        # Git utilities (unit tests)
-└── test_lib3mf_utils.py     # 3MF creation utilities (unit tests)
+├── test_lib3mf_utils.py     # 3MF creation utilities (unit tests)
+├── test_techdraw_pdf.py      # TechDraw PDF generation
+└── test_yaml.py             # YAML config parsing (requires config)
 ```
 
 ### Test Categories
 
-**Unit Tests (no external dependencies)** - Run anywhere:
-- `test_git_utils.py` - Git metadata extraction
-- `test_lib3mf_utils.py` - STL parsing, metadata functions
+**Unit Tests (no FreeCAD required)** - Run anywhere:
+- `test_bom_utils.py` - BOM utilities
 - `test_export_config.py` - Config parsing, body specs, path resolution, metadata
+- `test_fc_export_functions.py` - Utility functions from fc_export.py
+- `test_git_utils.py` - Git metadata extraction
+- `test_lib3mf_utils.py` - STL parsing, metadata functions, 3MF creation
+- `test_techdraw_pdf.py` - PDF generation utilities
+- `test_yaml.py` - YAML config parsing
 
 ```bash
-python -m pytest tests/test_git_utils.py tests/test_lib3mf_utils.py tests/test_export_config.py -v
+# Run all unit tests
+make test
+# or: python -m pytest tests/ --ignore=tests/test_fc_export_integration.py -v
+
+# Run specific module
+python -m pytest tests/test_export_config.py -v
 ```
 
-**Integration Tests (requires FreeCAD + lib3mf)**:
+**Integration Tests (require FreeCAD)** - Test FreeCAD document interactions:
 - `test_export.py` - Opens example.FCStd, inspects objects
+- `test_fc_export_integration.py` - fc_export.py functions with real FreeCAD objects
+
+**Note**: Integration tests run via FreeCAD's Python (`freecadcmd`), bypassing the venv.
+The conftest.py auto-detects FreeCAD environment and skips mocking when appropriate.
+
+```bash
+# Run integration tests
+make test-integration
+
+# Run both unit and integration
+make test-all
+```
 - `test_3mf.py` - Validates generated 3MF files
 
 ```bash
