@@ -634,6 +634,30 @@ def generate_pdf(page_pdfs, output_path, bom_csv_path=None, instructions_path=No
         # 4. Stamp consistent footer on every page
         _stamp_page_footers(writer, metadata=metadata, resolved_date=resolved_date)
 
+        # 5. Add PDF document metadata
+        if metadata:
+            if "title" in metadata:
+                writer.add_metadata({"/Title": metadata["title"]})
+            if "Author" in metadata or "author" in metadata:
+                author = metadata.get("Author") or metadata.get("author", "")
+                if author:
+                    writer.add_metadata({"/Author": author})
+            if "Version" in metadata or "version" in metadata:
+                version = metadata.get("Version") or metadata.get("version", "")
+                if version:
+                    writer.add_metadata({"/Subject": f"Version: {version}"})
+            if "License" in metadata or "license" in metadata:
+                license_info = metadata.get("License") or metadata.get("license", "")
+                if license_info:
+                    writer.add_metadata({"/Keywords": license_info})
+            # Add creation date
+            if "date" in metadata or "Date" in metadata:
+                date_str = metadata.get("date") or metadata.get("Date", "")
+                if date_str:
+                    writer.add_metadata({"/CreationDate": f"D:{date_str}"})
+            # Add generator
+            writer.add_metadata({"/Producer": "FreeCAD Tools", "/Creator": "FreeCAD Tools"})
+
         with open(output_path, "wb") as f:
             writer.write(f)
 
