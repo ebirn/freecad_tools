@@ -1423,6 +1423,19 @@ def extract_bom_from_assembly(doc, custom_fields=None, assembly_name=None):
             logger.warning("BomObject has no column headers")
             return bom
 
+        # Map BomObject column names to standard BOM field names for consistency
+        # Common BomObject columns: Index, Name, Description, File Name, Quantity, etc.
+        # Standard BOM fields: label, quantity, description, file_name, index, name, etc.
+        column_mapping = {
+            "Name": "label",
+            "Index": "index",
+            "Quantity": "quantity",
+            "Description": "description",
+            "File Name": "file_name",
+            "Part Number": "part_number",
+            "Material": "material",
+        }
+
         # Extract data rows
         row_idx = 2
         while True:
@@ -1441,10 +1454,14 @@ def extract_bom_from_assembly(doc, custom_fields=None, assembly_name=None):
                     # Convert to string first (cells may return int), then strip apostrophe
                     val_str = str(val) if val is not None else ""
                     val_str = val_str.strip("'").strip()
-                    row_data[header] = val_str
+
+                    # Map header to standard field name
+                    mapped_header = column_mapping.get(header, header)
+                    row_data[mapped_header] = val_str
                 except Exception as e:
                     logger.debug(f"Error reading cell {cell_addr}: {e}")
-                    row_data[header] = ""
+                    mapped_header = column_mapping.get(header, header)
+                    row_data[mapped_header] = ""
 
             if row_empty:
                 # End of data rows
