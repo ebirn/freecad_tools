@@ -1029,7 +1029,7 @@ def export_bodies_to_3mf_with_template(
 
         # Log subprocess output
         if result.stdout:
-            logger.debug(f"lib3mf STDOUT:\n{result.stdout}")
+            logger.info(f"lib3mf: {result.stdout.strip()}")
         if result.stderr:
             logger.debug(f"lib3mf STDERR:\n{result.stderr}")
 
