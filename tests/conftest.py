@@ -1,20 +1,38 @@
 """Pytest configuration and shared fixtures for freecad_tools tests."""
 
+import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
-# Mock FreeCAD and related modules before any code imports them
-# This prevents import errors when running tests without FreeCAD installed
-sys.modules["FreeCAD"] = MagicMock()
-sys.modules["FreeCADGui"] = MagicMock()
-sys.modules["Mesh"] = MagicMock()
-sys.modules["Part"] = MagicMock()
-sys.modules["Draft"] = MagicMock()
-sys.modules["Sketcher"] = MagicMock()
-sys.modules["Spreadsheet"] = MagicMock()
+# Check if we're running in FreeCAD's Python environment
+# If FreeCAD is already in sys.modules (from freecadcmd initialization), we're in FreeCAD
+_in_freecad = "FreeCAD" in sys.modules
+
+# If FreeCAD is in sys.modules, verify it's real (not a mock)
+if _in_freecad:
+    from unittest.mock import MagicMock
+
+    if isinstance(sys.modules["FreeCAD"], MagicMock):
+        _in_freecad = False
+
+# Only set test mode and mock FreeCAD if we're NOT in FreeCAD's Python
+if not _in_freecad:
+    # Set test mode environment variable before any imports
+    # This tells fc_export.py to skip FreeCAD auto-detection
+    os.environ["FREECAD_TOOLS_TEST_MODE"] = "1"
+
+    # Mock FreeCAD and related modules before any code imports them
+    # This prevents import errors when running tests without FreeCAD installed
+    sys.modules["FreeCAD"] = MagicMock()
+    sys.modules["FreeCADGui"] = MagicMock()
+    sys.modules["Mesh"] = MagicMock()
+    sys.modules["Part"] = MagicMock()
+    sys.modules["Draft"] = MagicMock()
+    sys.modules["Sketcher"] = MagicMock()
+    sys.modules["Spreadsheet"] = MagicMock()
 
 
 # Mock sys.exit to prevent fc_export.py from calling sys.exit() during import

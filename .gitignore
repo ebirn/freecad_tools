@@ -6,3 +6,5 @@ examples/*.FCBak
 *.egg-info/
 .venv/
 test_output/
+.coverage
+htmlcov/

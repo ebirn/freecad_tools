@@ -250,6 +250,12 @@ export:
 - **Virtual Environment**: Created with `uv` in `.venv/`
 - **FreeCAD**: External tool, invoked via `/Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd` (macOS) or system `freecadcmd`
 
+**IMPORTANT**: NEVER modify FreeCAD's embedded Python environment (`/Applications/FreeCAD.app/.../bin/python`).
+- FreeCAD's Python is managed by the FreeCAD application and has its own dependencies
+- Our virtual environment (`.venv/`) is separate and contains project-specific dependencies like pytest, lib3mf, etc.
+- Integration tests should work with FreeCAD's Python as-is, using only what FreeCAD already provides
+- lib3mf is a C++ library with Python bindings — the venv has it for Python 3.13, FreeCAD's Python 3.11 may have its own version
+
 ---
 
 ## Workflow: User Perspective

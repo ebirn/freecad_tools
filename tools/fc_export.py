@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from unittest.mock import MagicMock
 
 import yaml
 
@@ -144,6 +145,29 @@ if not CONFIG_FILE:
             logger.info(f"Auto-discovered legacy config: {CONFIG_FILE}")
         else:
             logger.warning("Config not found. Will try to auto-discover in subprocess.")
+
+# Check for test mode - skip FreeCAD detection and subprocess re-execution
+_test_mode = os.environ.get("FREECAD_TOOLS_TEST_MODE", "").lower() in ("1", "true", "yes")
+if _test_mode:
+    logger.debug("Test mode enabled - skipping FreeCAD detection")
+    # Define mock exit function
+
+    def mock_exit(code=0):
+        """Mock sys.exit for testing."""
+        pass
+
+    # Mock FreeCAD for testing purposes
+    if "FreeCAD" not in sys.modules:
+        sys.modules["FreeCAD"] = MagicMock()
+    if "FreeCADGui" not in sys.modules:
+        sys.modules["FreeCADGui"] = MagicMock()
+    if "Mesh" not in sys.modules:
+        sys.modules["Mesh"] = MagicMock()
+    if "Part" not in sys.modules:
+        sys.modules["Part"] = MagicMock()
+    # Replace sys.exit if not already mocked
+    if sys.exit.__code__ is not mock_exit.__code__:
+        sys.exit = mock_exit
 
 freecad_found = False
 try:
@@ -1858,14 +1882,10 @@ def main():
     sys.exit(0)
 
 
-if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        logger.exception(f"Exception in main: {e}")
-        sys.exit(1)
-else:
-    # When run via freecadcmd, __name__ is not '__main__', but we still want to run main()
+# Only run main() if not in test mode
+_run_main_on_import = os.environ.get("FREECAD_TOOLS_TEST_MODE", "").lower() not in ("1", "true", "yes")
+
+if __name__ == "__main__" or (_run_main_on_import and __name__ != "__main__"):
     try:
         main()
     except Exception as e:
