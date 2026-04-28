@@ -51,39 +51,6 @@ export:
 
 Upload exported project artifacts (3MF, STL, PDF, BOM) to Printables.com, including build/assembly instructions from a project markdown file.
 
-**Key Constraint**: Printables.com has **no public API** (as of 2026).
-
-Recommendation: Start with preparation-only mode (package everything into a zip/folder for manual upload).
-
----
-
-### 3. Multi-Document Support [LOW PRIORITY]
-**Status**: NOT STARTED
-**Branch**: `agent_multi_document`
-**Effort**: Medium (2-3 hours)
-
-Export bodies from multiple FCStd files in a single export config.
-
-**Possible Config**:
-```yaml
-export:
-  - name: Combined
-    documents:
-      - source: project1.FCStd
-        bodies: [Body1, Body2]
-      - source: project2.FCStd
-        bodies: [Body3, Body4]
-```
-
----
-
-### 4. Printables.com Upload & Publishing [LOW PRIORITY]
-**Status**: NOT STARTED
-**Branch**: `agent_printables_upload`
-**Effort**: High (5-10 hours)
-
-Upload exported project artifacts (3MF, STL, PDF, BOM) to Printables.com, including build/assembly instructions from a project markdown file.
-
 **Key Constraint**: Printables.com has **no public API** (as of 2026). Options:
 1. **Browser automation** (Selenium/Playwright) - fragile, breaks on site changes
 2. **Undocumented GraphQL API** - reverse-engineer, no stability guarantee
