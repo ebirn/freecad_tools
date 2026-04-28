@@ -310,8 +310,59 @@ export:
 5. **Quality Metrics**: Report mesh stats (vertex count, triangle count, file size)
 6. **Template Creator Tool**: GUI to generate templates from existing prints
 
-*Last Updated: April 25, 2026*
 *Agents Note: This project is actively maintained. Check git log for recent changes.*
+
+---
+
+## For Agents: Release Procedure
+
+### Version Numbering
+- Follow [Semantic Versioning 2.0](https://semver.org/) (MAJOR.MINOR.PATCH)
+- `pyproject.toml` is the source of truth for version
+- Git tags follow format: `vMAJOR.MINOR.PATCH` (e.g., `v0.3.0`)
+- CHANGELOG.md uses `[vMAJOR.MINOR.PATCH] - YYYY-MM-DD` format
+
+### Release Steps
+
+1. **Update Version in pyproject.toml**
+   ```toml
+   version = "X.Y.Z"
+   ```
+
+2. **Update CHANGELOG.md**
+   - Move `[Unreleased]` section to `[vX.Y.Z] - YYYY-MM-DD`
+   - Add release date
+   - Ensure all changes since last release are documented
+
+3. **Run Full Test Suite**
+   ```bash
+   make test           # Run all unit + integration tests
+   ruff check          # Code quality
+   ruff format         # Code formatting
+   ```
+
+4. **Commit Documentation Changes**
+   ```bash
+   git add pyproject.toml CHANGELOG.md
+   git commit -m "chore(release): prepare vX.Y.Z"
+   ```
+
+5. **Create Annotated Tag**
+   ```bash
+   git tag -a vX.Y.Z -m "Release vX.Y.Z"
+   git push origin vX.Y.Z
+   ```
+
+6. **Create GitHub Release** (Optional)
+   - Go to: https://github.com/ebirn/freecad_tools/releases/new
+   - Tag: `vX.Y.Z`
+   - Title: `vX.Y.Z`
+   - Description: Copy from CHANGELOG.md `[vX.Y.Z]` section
+
+7. **Post-Release**
+   - Update TODO.md if needed
+   - Announce in appropriate channels
+   - Open PR for next version development
 
 ---
 
@@ -954,5 +1005,4 @@ When working on this project:
 
 ---
 
-*Last Updated: April 25, 2026*
 *Agents Note: This project is actively maintained. Check git log for recent changes.*

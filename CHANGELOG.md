@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.3.0] - 2026-04-28
+
 ### Added
 
 - **Explicit Body Selection Mode** (Task #1): Add `body_source` config field and FreeCAD property-based body selection
@@ -38,6 +40,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   - `format_quality_report()` generates human-readable quality report with totals and per-body breakdown
   - Quality metrics logged at INFO level after successful exports
   - Added 5 new unit tests for quality metrics functions
+- **BOM Assembly Column Mapping**: Fixed BOM extraction from Assembly::BomObject to map FreeCAD column names to standard fields
+  - Maps BomObject columns (Index, Name, Description, File Name, Quantity) to standard names (index, label, description, file_name, quantity)
+  - Ensures BOM data populates CSV correctly with config-specified field names
+  - BOM CSV always created with headers, even when no data exists
+  - BOM section always shown in PDF (displays "No BOM data available" if empty)
+- **PDF Document Metadata**: Added metadata to PDF document properties
+  - Title, Author, Subject (Version), Keywords (License), CreationDate fields
+  - Producer and Creator set to "FreeCAD Tools"
+  - Metadata extracted from config metadata and git info
+  - Supports additional fields: License, Project, Description
+- **Improved Console Logging**: Cleaner, more readable output
+  - Section headers with `===` separators for major operations
+  - Symbol indicators: → (action), ✓ (success), ✗ (failure), ⚠ (warning)
+  - Removed module name prefix from console log format
+  - File logging retains detailed format with timestamps and module names
+- **Enhanced Test Coverage**: Added tests for BOM and PDF content verification
+  - Tests verify BOM data appears in CSV files
+  - Tests verify metadata and BOM appear in PDF text content
+  - Tests verify PDF document metadata properties
 
 ### Fixed
 
