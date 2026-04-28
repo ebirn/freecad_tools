@@ -234,3 +234,97 @@ class TestGeneratePdf:
 
             reader = PdfReader(output)
             assert len(reader.pages) == 2
+
+
+class TestPdfContent:
+    """Tests that verify actual content (text) in generated PDFs."""
+
+    def _get_pdf_text(self, pdf_path):
+        """Extract all text from a PDF file."""
+        from pypdf import PdfReader
+
+        reader = PdfReader(pdf_path)
+        text = ""
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
+        return text
+
+    def test_bom_content_in_pdf(self):
+        """BOM data should appear in the generated PDF."""
+        with tempfile.TemporaryDirectory() as td:
+            # Create BOM CSV with specific test data
+            bom_path = os.path.join(td, "bom.csv")
+            with open(bom_path, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["Index", "Name", "Quantity"])
+                writer.writerow(["1", "Sphere", "1"])
+                writer.writerow(["2", "Cube", "2"])
+
+            pdf_path = os.path.join(td, "output.pdf")
+            result = generate_pdf([], pdf_path, bom_csv_path=bom_path, metadata={})
+            assert result is True
+
+            text = self._get_pdf_text(pdf_path)
+
+            # Verify BOM section and data are in the PDF
+            assert "Bill of Materials" in text
+            assert "Index" in text
+            assert "Name" in text
+            assert "Quantity" in text
+            assert "Sphere" in text
+            assert "Cube" in text
+
+    def test_metadata_content_in_pdf(self):
+        """Metadata should appear in the generated PDF cover page."""
+        with tempfile.TemporaryDirectory() as td:
+            bom_path = os.path.join(td, "bom.csv")
+            with open(bom_path, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["Part", "Qty"])
+
+            pdf_path = os.path.join(td, "output.pdf")
+            metadata = {
+                "title": "My Project",
+                "Author": "John Doe",
+                "Version": "1.0",
+                "License": "CC-BY-SA-4.0",
+                "Project": "Test Project",
+                "Description": "A test description",
+            }
+            result = generate_pdf([], pdf_path, bom_csv_path=bom_path, metadata=metadata)
+            assert result is True
+
+            text = self._get_pdf_text(pdf_path)
+
+            # Verify metadata is in the PDF
+            assert "My Project" in text
+            assert "John Doe" in text
+            assert "1.0" in text
+            assert "CC-BY-SA-4.0" in text
+            assert "Test Project" in text
+            assert "A test description" in text
+
+    def test_bom_and_metadata_together_in_pdf(self):
+        """Both BOM and metadata should appear when provided together."""
+        with tempfile.TemporaryDirectory() as td:
+            bom_path = os.path.join(td, "bom.csv")
+            with open(bom_path, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["Item", "Count"])
+                writer.writerow(["Part1", "5"])
+
+            pdf_path = os.path.join(td, "output.pdf")
+            metadata = {"title": "Combined Test", "Author": "Tester", "Version": "2.0"}
+            result = generate_pdf([], pdf_path, bom_csv_path=bom_path, metadata=metadata)
+            assert result is True
+
+            text = self._get_pdf_text(pdf_path)
+
+            # Verify both BOM and metadata
+            assert "Bill of Materials" in text
+            assert "Part1" in text
+            assert "Combined Test" in text
+            assert "Tester" in text
+            assert "2.0" in text

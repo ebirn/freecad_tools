@@ -73,7 +73,7 @@ class TestBOMCSVGeneration:
         assert rows[1]["url"] == ""  # restval empty string
 
     def test_write_bom_csv_empty_data(self, tmp_path):
-        """Should handle empty BOM data gracefully."""
+        """Should handle empty BOM data gracefully - creates CSV with default headers."""
         # Given
         bom_data = []
         output_file = tmp_path / "bom.csv"
@@ -83,6 +83,12 @@ class TestBOMCSVGeneration:
 
         # Then
         assert success is True
+        # File should be created with headers even if no data
+        assert output_file.exists()
+        with open(str(output_file)) as f:
+            content = f.read()
+            assert "label" in content
+            assert "quantity" in content
 
     def test_write_bom_csv_field_order(self, tmp_path):
         """Should respect field order in CSV."""
