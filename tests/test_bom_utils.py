@@ -90,6 +90,35 @@ class TestBOMCSVGeneration:
             assert "label" in content
             assert "quantity" in content
 
+    def test_write_bom_csv_with_content(self, tmp_path):
+        """Should create CSV with actual BOM data content, not just headers."""
+        # Given
+        bom_data = [
+            {"label": "Sphere", "quantity": "1"},
+            {"label": "Cube", "quantity": "2"},
+        ]
+        output_file = tmp_path / "bom_with_content.csv"
+
+        # When
+        success = bom_utils.write_bom_csv(bom_data, str(output_file))
+
+        # Then
+        assert success is True
+        assert output_file.exists()
+        with open(str(output_file)) as f:
+            content = f.read()
+            # Verify headers
+            assert "label" in content
+            assert "quantity" in content
+            # Verify data content (not just headers)
+            assert "Sphere" in content
+            assert "Cube" in content
+            assert "1" in content
+            assert "2" in content
+            # Verify it has data rows (more than just header row)
+            lines = content.strip().split("\n")
+            assert len(lines) >= 2  # At least header + 1 data row
+
     def test_write_bom_csv_field_order(self, tmp_path):
         """Should respect field order in CSV."""
         # Given
