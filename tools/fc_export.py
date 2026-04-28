@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import json
 import logging
 import os
@@ -20,21 +21,75 @@ except ImportError:
     except ImportError:
         git_utils = None
 
-# Configure logging to both console and file
-# Allow overriding log level via environment variable
-log_level_name = os.environ.get("FREECAD_TOOLS_LOG_LEVEL", "INFO")
-try:
-    log_level = getattr(logging, log_level_name.upper())
-except AttributeError:
-    log_level = logging.INFO
 
-log_file = "fc_export.log"
-logging.basicConfig(
-    level=log_level,
-    format="%(name)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler(log_file), logging.StreamHandler(sys.stderr)],
-)
-logger = logging.getLogger(__name__)
+def parse_args():
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        prog="python3 fc_export.py",
+        description="Export FreeCAD documents to 3MF format (FreeCAD-internal script)",
+    )
+    parser.add_argument(
+        "config_file",
+        nargs="?",
+        default=None,
+        help="Path to YAML export config file (default: auto-discover)",
+    )
+    parser.add_argument(
+        "--config",
+        "-c",
+        type=str,
+        default=None,
+        help="Path to YAML export config file",
+    )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Enable verbose/debug logging",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate config without performing export",
+    )
+    return parser.parse_args()
+
+
+def configure_logging(verbose=False, log_level_env=None):
+    """Configure logging with optional verbose override."""
+    if verbose:
+        log_level = logging.DEBUG
+    elif log_level_env:
+        try:
+            log_level = getattr(logging, log_level_env.upper())
+        except AttributeError:
+            log_level = logging.INFO
+    else:
+        log_level = logging.INFO
+
+    log_file = "fc_export.log"
+    logging.basicConfig(
+        level=log_level,
+        format="%(name)s - %(levelname)s - %(message)s",
+        handlers=[logging.FileHandler(log_file), logging.StreamHandler(sys.stderr)],
+    )
+    return logging.getLogger(__name__)
+
+
+# Parse command-line arguments early so we can respect --verbose before imports
+args = parse_args()
+
+# Check for verbose flag from CLI or environment
+verbose_cli = args.verbose
+dry_run_mode = args.dry_run
+
+# Check environment for verbose/log level (set by export.py)
+log_level_env = os.environ.get("FREECAD_TOOLS_LOG_LEVEL")
+if os.environ.get("FREECAD_TOOLS_DRY_RUN", "").lower() == "true":
+    dry_run_mode = True
+
+# Configure logging (respects --verbose or env var)
+logger = configure_logging(verbose=verbose_cli, log_level_env=log_level_env)
 
 logger.info("=" * 60)
 logger.debug("Script starting")
@@ -45,31 +100,50 @@ logger.debug(f"Current directory: {os.getcwd()}")
 CONFIG_FILE = None
 PROJECT_ROOT = None
 
-# Check if PROJECT_ROOT and CONFIG_FILE were passed via environment variables from parent process
+# Determine config file priority: env var > CLI --config > CLI positional > auto-discovery
+# Environment variables take precedence because export.py passes config via env vars,
+# and CLI args may contain freecadcmd-specific paths that should be ignored.
+
+# Always check for PROJECT_ROOT and CONFIG_FILE from environment first (set by export.py)
 if "FREECAD_TOOLS_PROJECT_ROOT" in os.environ:
     PROJECT_ROOT = os.environ["FREECAD_TOOLS_PROJECT_ROOT"]
     logger.info(f"PROJECT_ROOT restored from environment: {PROJECT_ROOT}")
 
 if "FREECAD_TOOLS_CONFIG" in os.environ:
+    # Config passed via environment variable (from export.py) - takes highest priority
     CONFIG_FILE = os.environ["FREECAD_TOOLS_CONFIG"]
     logger.info(f"CONFIG_FILE restored from environment: {CONFIG_FILE}")
-# Otherwise, try to set CONFIG_FILE via command-line or auto-discovery
-elif len(sys.argv) > 1:
-    CONFIG_FILE = sys.argv[1]
-    logger.debug(f"CONFIG_FILE from command-line argument: {CONFIG_FILE}")
-else:
-    # Auto-discover config file
-    project_config = ".freecad_tools/export.yml"
-    legacy_config = "export_config.yml"
 
-    if os.path.exists(project_config):
-        CONFIG_FILE = project_config
-        logger.info(f"Auto-discovered per-project config: {CONFIG_FILE}")
-    elif os.path.exists(legacy_config):
-        CONFIG_FILE = legacy_config
-        logger.info(f"Auto-discovered legacy config: {CONFIG_FILE}")
+# If not set from environment, try CLI arguments
+config_from_cli = args.config if args.config else args.config_file
+if not CONFIG_FILE and config_from_cli:
+    # Config explicitly provided via command line
+    CONFIG_FILE = config_from_cli
+    logger.debug(f"CONFIG_FILE from CLI: {CONFIG_FILE}")
+    # Also set PROJECT_ROOT from config file directory if not already set
+    if not PROJECT_ROOT:
+        PROJECT_ROOT = os.path.dirname(os.path.abspath(CONFIG_FILE))
+        logger.debug(f"Derived PROJECT_ROOT from config file: {PROJECT_ROOT}")
+
+# If still no config, try command-line argument (legacy support) or auto-discovery
+if not CONFIG_FILE:
+    if len(sys.argv) > 1 and not config_from_cli:
+        # Legacy: sys.argv[1] might be config file (when not using argparse)
+        CONFIG_FILE = sys.argv[1]
+        logger.debug(f"CONFIG_FILE from legacy command-line argument: {CONFIG_FILE}")
     else:
-        logger.warning("Config not found. Will try to auto-discover in subprocess.")
+        # Auto-discover config file
+        project_config = ".freecad_tools/export.yml"
+        legacy_config = "export_config.yml"
+
+        if os.path.exists(project_config):
+            CONFIG_FILE = project_config
+            logger.info(f"Auto-discovered per-project config: {CONFIG_FILE}")
+        elif os.path.exists(legacy_config):
+            CONFIG_FILE = legacy_config
+            logger.info(f"Auto-discovered legacy config: {CONFIG_FILE}")
+        else:
+            logger.warning("Config not found. Will try to auto-discover in subprocess.")
 
 freecad_found = False
 try:
@@ -104,7 +178,7 @@ except ImportError as e:
     if freecad_interpreter:
         logger.info(f"Re-executing script with FreeCAD interpreter: {freecad_interpreter}")
 
-        # Pass CONFIG_FILE and PROJECT_ROOT to subprocess via environment variables
+        # Pass CONFIG_FILE, PROJECT_ROOT, and mode flags to subprocess via environment variables
         env = os.environ.copy()
         if CONFIG_FILE:
             env["FREECAD_TOOLS_CONFIG"] = CONFIG_FILE
@@ -112,8 +186,19 @@ except ImportError as e:
         if PROJECT_ROOT:
             env["FREECAD_TOOLS_PROJECT_ROOT"] = PROJECT_ROOT
             logger.debug(f"Passing PROJECT_ROOT via environment: {PROJECT_ROOT}")
+        # Pass dry-run and verbose flags to subprocess
+        if dry_run_mode:
+            env["FREECAD_TOOLS_DRY_RUN"] = "true"
+            logger.debug("Passing FREECAD_TOOLS_DRY_RUN=true to subprocess")
+        if verbose_cli or log_level_env:
+            log_level_pass = "DEBUG" if verbose_cli else log_level_env
+            env["FREECAD_TOOLS_LOG_LEVEL"] = log_level_pass
+            logger.debug(f"Passing FREECAD_TOOLS_LOG_LEVEL={log_level_pass} to subprocess")
 
         # Run the script with the found interpreter
+        # Note: Do NOT pass command-line arguments, as freecadcmd will try to parse them
+        # and fail on unrecognized options like --dry-run.
+        # Instead, all necessary information is passed via environment variables.
         result = subprocess.run([freecad_interpreter, __file__], env=env, capture_output=True, text=True)
         logger.info(f"Subprocess returned exit code: {result.returncode}")
         if result.stdout:
@@ -376,10 +461,12 @@ def load_config():
         logger.info(f"Detected project root from config location: {base_dir}")
 
     logger.debug(f"Base directory for path resolution: {base_dir}")
+    logger.info(f"Loading YAML config from: {CONFIG_FILE}")
 
     with open(CONFIG_FILE) as f:
         content = f.read()
         logger.debug(f"Config file content:\n{content}")
+        logger.info(f"Config file has {len(content)} characters")
         config = yaml.safe_load(content)
     logger.debug(f"Loaded config: {config}")
     if config is None:
@@ -1193,6 +1280,43 @@ def main():
     logger.debug(f"PROJECT_ROOT: {PROJECT_ROOT}")
     logger.debug(f"CONFIG_FILE: {CONFIG_FILE}")
     logger.debug("Starting main()")
+
+    # Handle dry-run mode: validate config and exit without exporting
+    if dry_run_mode:
+        logger.info("DRY-RUN MODE: Validating config without performing export")
+        try:
+            exports = load_config()
+            if not exports:
+                logger.warning("No exports defined in config - exports list is empty or None")
+                sys.exit(0)
+
+            logger.info(f"Found {len(exports)} export(s) in config:")
+            for i, item in enumerate(exports):
+                source = item.get("source")
+                output = item.get("output")
+                bodies = item.get("bodies", [])
+                export_name = item.get("name", "export")
+
+                logger.info(f"  Export #{i}: {export_name}")
+                logger.info(f"    Source: {source}")
+                if source and not os.path.exists(source):
+                    logger.error(f"    ERROR: Source file does not exist: {source}")
+                    sys.exit(1)
+                logger.info(f"    Output: {output or f'prints/{export_name}.3mf (default)'}")
+                logger.info(f"    Bodies: {bodies if bodies else '(all)'}")
+
+                # Validate bodies if specified
+                if bodies:
+                    for body in bodies:
+                        logger.info(f"      - {body}")
+
+            logger.info("\nConfig validation passed. Run without --dry-run to perform export.")
+            sys.exit(0)
+
+        except Exception as e:
+            logger.error(f"Config validation failed: {e}")
+            sys.exit(1)
+
     exports = load_config()
     logger.debug(f"Loaded {len(exports)} exports")
     if not exports:

@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- **CLI Help and Argument Parsing** (Task #7): Added comprehensive command-line interface to `export.py` and `fc_export.py`
+  - `argparse` integration with `--help` for self-documenting usage
+  - `--config/-c PATH` flag to specify config file path
+  - `--verbose/-v` flag for debug logging output
+  - `--dry-run` flag to validate config without performing export
+  - Config file auto-discovery from `.freecad_tools/export.yml` or `export_config.yml`
+  - Backward compatible with existing positional config file argument
+
 ### Fixed
 
 - README: Python version corrected from 3.7 to 3.10+ (matches pyproject.toml)

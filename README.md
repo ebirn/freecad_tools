@@ -55,6 +55,44 @@ That's it! Your 3MF file is ready for printing.
 
 ---
 
+## Command-Line Interface
+
+### Quick Reference
+
+```bash
+# Auto-discover config in current directory
+python3 tools/export.py
+
+# Specify config file
+python3 tools/export.py path/to/config.yml
+python3 tools/export.py --config path/to/config.yml
+
+# Validate config without exporting
+python3 tools/export.py path/to/config.yml --dry-run
+
+# Verbose logging
+python3 tools/export.py path/to/config.yml --verbose
+python3 tools/export.py path/to/config.yml -v
+
+# Show help
+python3 tools/export.py --help
+```
+
+### Available Options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--config PATH` | `-c PATH` | Specify YAML config file path |
+| `--verbose` | `-v` | Enable debug logging output |
+| `--dry-run` | | Validate config without performing export |
+| `--help` | `-h` | Show usage information |
+
+**Config File Discovery** (when not specified):
+1. `.freecad_tools/export.yml` (per-project config)
+2. `export_config.yml` (legacy config in current directory)
+
+---
+
 ## Common Use Cases
 
 ### 1. Simple Export (Basic)
