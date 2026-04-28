@@ -215,39 +215,6 @@ printables:
 
 ---
 
-### 6. BOM Assembly Selection [LOW PRIORITY]
-**Status**: NOT STARTED
-**Branch**: `agent_bom_assembly_selection`
-**Effort**: Low (1-2 hours)
-
-Allow specifying which assembly (or assemblies) to generate BOMs from. Currently `extract_bom_from_assembly()` finds the first `Assembly::BomObject` in the document. Documents with multiple assemblies need a way to target specific ones.
-
-**Possible Config**:
-```yaml
-bom:
-  source: assembly
-  assembly: "MainAssembly"          # Target specific assembly by label
-  output: docs/main_bom.csv
-
-# Or multiple BOMs from different assemblies:
-bom:
-  - source: assembly
-    assembly: "MainAssembly"
-    output: docs/main_bom.csv
-  - source: assembly
-    assembly: "SubAssembly"
-    output: docs/sub_bom.csv
-```
-
-**Tasks**:
-- [ ] Add `assembly` field to bom config (label or name of target assembly)
-- [ ] Update `extract_bom_from_assembly()` to accept optional assembly identifier
-- [ ] Support multiple bom sections (list of bom configs)
-- [ ] Test with multi-assembly documents
-- [ ] Document in README.md
-
----
-
 ## Notes
 
 - Feature branches use `agent_<feature_name>` naming convention

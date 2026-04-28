@@ -1007,7 +1007,7 @@ def _col_index_to_letter(col_idx):
     return "".join(reversed(result))
 
 
-def extract_bom_from_assembly(doc, custom_fields=None):
+def extract_bom_from_assembly(doc, custom_fields=None, assembly_name=None):
     """
     Extract Bill of Materials directly from Assembly::BomObject.
 
@@ -1018,6 +1018,8 @@ def extract_bom_from_assembly(doc, custom_fields=None):
         doc: FreeCAD document
         custom_fields: List of custom property names to extract (e.g., ["URL", "Price", "Material"])
                       Note: These are inferred from BomObject columns if present.
+        assembly_name: Optional name or label of the assembly to extract BOM from.
+                       If None, uses the first BomObject found.
 
     Returns:
         List of BOM row dicts with all columns from BomObject as keys
@@ -1033,14 +1035,39 @@ def extract_bom_from_assembly(doc, custom_fields=None):
         bom_obj = None
         for obj in doc.Objects:
             if hasattr(obj, "TypeId") and "BomObject" in obj.TypeId:
-                bom_obj = obj
-                break
+                # If assembly_name is specified, match against Name or Label
+                if assembly_name:
+                    obj_name = obj.Name
+                    obj_label = obj.Label if hasattr(obj, "Label") else None
+                    # Try to find the parent assembly of this BomObject
+                    # BomObject is typically a child of an Assembly object
+                    if hasattr(obj, "Parent"):
+                        parent_obj = obj.Parent
+                        parent_name = parent_obj.Name if hasattr(parent_obj, "Name") else None
+                        parent_label = parent_obj.Label if hasattr(parent_obj, "Label") else None
+                        # Match against parent assembly name or label
+                        if parent_name == assembly_name or parent_label == assembly_name:
+                            bom_obj = obj
+                            break
+                        # Also check if the BomObject itself matches
+                        elif obj_name == assembly_name or obj_label == assembly_name:
+                            bom_obj = obj
+                            break
+                else:
+                    # No specific assembly requested, use first found (backward compatible)
+                    bom_obj = obj
+                    break
 
         if bom_obj is None:
-            logger.info("No Assembly::BomObject found in document")
+            if assembly_name:
+                logger.info(f"No Assembly::BomObject found for assembly '{assembly_name}' in document")
+            else:
+                logger.info("No Assembly::BomObject found in document")
             return bom
 
         logger.info(f"Found Assembly::BomObject: {bom_obj.Name} (Label: {bom_obj.Label})")
+        if assembly_name:
+            logger.info(f"  (matched assembly: {assembly_name})")
 
         # Access the embedded spreadsheet via cells property
         cells = bom_obj.cells
@@ -1444,59 +1471,71 @@ def main():
                 techdraw_pdf_pending = None
 
             # Process BOM generation if configured
+            # Support both single dict config and list of configs
+            last_bom_csv = None  # Track the last generated BOM CSV for TechDraw
             if bom_config:
-                logger.info("Processing BOM generation")
-                bom_source = bom_config.get("source", "auto")  # auto/assembly/spreadsheet/parts
-                bom_output = bom_config.get("output", f"docs/{export_name}_bom.csv")
-                bom_fields = bom_config.get("fields", [])  # Custom fields like material, url, price
+                # Normalize to list: if bom_config is a dict, wrap it in a list
+                bom_configs = [bom_config] if isinstance(bom_config, dict) else bom_config
 
-                try:
-                    # Generate default BOM output path if not specified
-                    # Path is already resolved by load_config() if relative
-                    if not os.path.isabs(bom_output):
-                        bom_output = os.path.join(PROJECT_ROOT or os.getcwd(), bom_output)
+                for i, single_bom_config in enumerate(bom_configs):
+                    logger.info(f"Processing BOM generation #{i}")
+                    bom_source = single_bom_config.get("source", "auto")  # auto/assembly/spreadsheet/parts
+                    bom_output = single_bom_config.get("output", f"docs/{export_name}_bom.csv")
+                    bom_fields = single_bom_config.get("fields", [])  # Custom fields like material, url, price
+                    bom_assembly = single_bom_config.get("assembly")  # Optional assembly identifier
 
-                    # Extract BOM based on source priority (auto/assembly/spreadsheet/parts)
-                    bom_data = []
-                    if bom_source in ("auto", "assembly"):
-                        logger.debug("Attempting to extract BOM from Assembly")
-                        bom_data = extract_bom_from_assembly(doc, custom_fields=bom_fields)
+                    try:
+                        # Generate default BOM output path if not specified
+                        # Path is already resolved by load_config() if relative
+                        if not os.path.isabs(bom_output):
+                            bom_output = os.path.join(PROJECT_ROOT or os.getcwd(), bom_output)
+
+                        # Extract BOM based on source priority (auto/assembly/spreadsheet/parts)
+                        bom_data = []
+                        if bom_source in ("auto", "assembly"):
+                            logger.debug("Attempting to extract BOM from Assembly")
+                            bom_data = extract_bom_from_assembly(
+                                doc, custom_fields=bom_fields, assembly_name=bom_assembly
+                            )
+                            if bom_data:
+                                logger.info(f"Successfully extracted BOM from Assembly ({len(bom_data)} items)")
+
+                        if not bom_data and bom_source in ("auto", "spreadsheet"):
+                            spreadsheet_name = single_bom_config.get("spreadsheet_name", "BOM")
+                            logger.debug(f"Attempting to extract BOM from Spreadsheet '{spreadsheet_name}'")
+                            bom_data = extract_bom_from_spreadsheet(
+                                doc, spreadsheet_name=spreadsheet_name, custom_fields=bom_fields
+                            )
+                            if bom_data:
+                                logger.info(f"Successfully extracted BOM from Spreadsheet ({len(bom_data)} items)")
+
+                        if not bom_data and bom_source in ("auto", "parts"):
+                            logger.debug("Attempting to extract BOM from Parts")
+                            bom_data = extract_bom_from_parts(doc, custom_fields=bom_fields)
+                            if bom_data:
+                                logger.info(f"Successfully extracted BOM from Parts ({len(bom_data)} items)")
+
                         if bom_data:
-                            logger.info(f"Successfully extracted BOM from Assembly ({len(bom_data)} items)")
+                            # Write BOM CSV using shared utility
+                            os.makedirs(os.path.dirname(bom_output) or ".", exist_ok=True)
 
-                    if not bom_data and bom_source in ("auto", "spreadsheet"):
-                        spreadsheet_name = bom_config.get("spreadsheet_name", "BOM")
-                        logger.debug(f"Attempting to extract BOM from Spreadsheet '{spreadsheet_name}'")
-                        bom_data = extract_bom_from_spreadsheet(
-                            doc, spreadsheet_name=spreadsheet_name, custom_fields=bom_fields
-                        )
-                        if bom_data:
-                            logger.info(f"Successfully extracted BOM from Spreadsheet ({len(bom_data)} items)")
+                            from bom_utils import write_bom_csv  # pylint: disable=import-error
 
-                    if not bom_data and bom_source in ("auto", "parts"):
-                        logger.debug("Attempting to extract BOM from Parts")
-                        bom_data = extract_bom_from_parts(doc, custom_fields=bom_fields)
-                        if bom_data:
-                            logger.info(f"Successfully extracted BOM from Parts ({len(bom_data)} items)")
+                            # Determine fields: if BOM has custom fields from config, pass them;
+                            # otherwise let write_bom_csv auto-detect from data keys
+                            fields = None
+                            if bom_fields:
+                                fields = ["label", "quantity"] + bom_fields
 
-                    if bom_data:
-                        # Write BOM CSV using shared utility
-                        os.makedirs(os.path.dirname(bom_output) or ".", exist_ok=True)
+                            write_bom_csv(bom_data, bom_output, fields=fields)
+                            logger.info(f"BOM written to: {bom_output}")
+                            # Track this for TechDraw integration
+                            last_bom_csv = bom_output
+                        else:
+                            logger.warning(f"No BOM data extracted from document for config #{i}")
 
-                        from bom_utils import write_bom_csv  # pylint: disable=import-error
-
-                        # Determine fields: if BOM has custom fields from config, pass them;
-                        # otherwise let write_bom_csv auto-detect from data keys
-                        fields = None
-                        if bom_fields:
-                            fields = ["label", "quantity"] + bom_fields
-
-                        write_bom_csv(bom_data, bom_output, fields=fields)
-                    else:
-                        logger.warning("No BOM data extracted from document")
-
-                except Exception as e:
-                    logger.exception(f"Error generating BOM: {e}")
+                    except Exception as e:
+                        logger.exception(f"Error generating BOM #{i}: {e}")
 
             # Generate TechDraw PDF (after BOM so we can include BOM CSV)
             if techdraw_pdf_pending:
@@ -1509,8 +1548,8 @@ def main():
                     if instructions_path and not os.path.isabs(instructions_path):
                         instructions_path = os.path.join(PROJECT_ROOT or os.getcwd(), instructions_path)
 
-                    # Use BOM CSV if it was generated
-                    bom_csv_for_pdf = bom_output if (bom_config and os.path.exists(bom_output)) else None
+                    # Use BOM CSV if it was generated (use last one if multiple)
+                    bom_csv_for_pdf = last_bom_csv if (last_bom_csv and os.path.exists(last_bom_csv)) else None
 
                     # Build metadata for PDF cover page
                     pdf_metadata = get_export_metadata(item, PROJECT_ROOT or os.getcwd())

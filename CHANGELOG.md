@@ -14,6 +14,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   - `--dry-run` flag to validate config without performing export
   - Config file auto-discovery from `.freecad_tools/export.yml` or `export_config.yml`
   - Backward compatible with existing positional config file argument
+- **BOM Assembly Selection** (Task #6): Allow specifying which assembly to extract BOM from
+  - Added `assembly` field to bom config to target specific assembly by name or label
+  - Supports multiple BOM sections (list of config dicts) for multi-assembly documents
+  - Backward compatible with existing single dict config
+  - `extract_bom_from_assembly()` now accepts optional `assembly_name` parameter
 
 ### Fixed
 

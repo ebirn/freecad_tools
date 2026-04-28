@@ -394,6 +394,7 @@ bom:                                # Optional: generate bill of materials
                                     # - 'assembly' = only Assembly
                                     # - 'spreadsheet' = only Spreadsheet
                                     # - 'parts' = only Part/Body objects
+  assembly: MainAssembly            # (optional) Specific assembly name/label for 'assembly' source
   output: docs/bom.csv              # CSV output file path
   spreadsheet_name: BOM             # (optional) Spreadsheet name if not "BOM"
   fields:                           # (optional) Custom property names to extract
@@ -401,6 +402,15 @@ bom:                                # Optional: generate bill of materials
     - vendor
     - price
     - dimensions
+```
+
+**Multiple BOMs from Different Assemblies**:
+```yaml
+bom:
+  - assembly: MainAssembly
+    output: docs/main_bom.csv
+  - assembly: SubAssembly
+    output: docs/sub_bom.csv
 ```
 
 ### Complete Export Item with All Features
