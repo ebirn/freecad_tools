@@ -69,11 +69,21 @@ def configure_logging(verbose=False, log_level_env=None):
         log_level = logging.INFO
 
     log_file = "fc_export.log"
+    # Clean console format: LEVEL - message (no module name)
+    console_format = "%(levelname)s - %(message)s"
+    file_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     logging.basicConfig(
         level=log_level,
-        format="%(name)s - %(levelname)s - %(message)s",
-        handlers=[logging.FileHandler(log_file), logging.StreamHandler(sys.stderr)],
+        format=console_format,
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler(sys.stderr),
+        ],
     )
+    # Set file handler to use more detailed format
+    for handler in logging.root.handlers:
+        if isinstance(handler, logging.FileHandler):
+            handler.setFormatter(logging.Formatter(file_format))
     return logging.getLogger(__name__)
 
 
@@ -91,6 +101,50 @@ if os.environ.get("FREECAD_TOOLS_DRY_RUN", "").lower() == "true":
 
 # Configure logging (respects --verbose or env var)
 logger = configure_logging(verbose=verbose_cli, log_level_env=log_level_env)
+
+
+# --- Logging Helper Functions for Cleaner Console Output ---
+def log_section(title: str) -> None:
+    """Log a section header with visual separators."""
+    separator = "=" * 60
+    logger.info(separator)
+    logger.info(f"  {title}")
+    logger.info(separator)
+
+
+def log_subsection(title: str) -> None:
+    """Log a subsection header."""
+    logger.info(f"\n--- {title} ---")
+
+
+def log_action(message: str) -> None:
+    """Log an action/step with arrow symbol."""
+    logger.info(f"→ {message}")
+
+
+def log_success(message: str) -> None:
+    """Log a success with checkmark symbol."""
+    logger.info(f"✓ {message}")
+
+
+def log_failure(message: str) -> None:
+    """Log a failure with X symbol."""
+    logger.error(f"✗ {message}")
+
+
+def log_warning_msg(message: str) -> None:
+    """Log a warning with exclamation symbol."""
+    logger.warning(f"⚠ {message}")
+
+
+def _format_bytes(num_bytes: int) -> str:
+    """Format bytes as human-readable string."""
+    for unit in ["B", "KB", "MB", "GB"]:
+        if abs(num_bytes) < 1024:
+            return f"{num_bytes:.1f} {unit}"
+        num_bytes /= 1024
+    return f"{num_bytes:.1f} TB"
+
 
 logger.info("=" * 60)
 logger.debug("Script starting")
@@ -1615,11 +1669,14 @@ def main():
     exports = load_config()
     logger.debug(f"Loaded {len(exports)} exports")
     if not exports:
-        logger.warning("No exports defined in config - exports list is empty or None")
+        log_warning_msg("No exports defined in config - exports list is empty or None")
         sys.exit(0)
-    logger.info(f"Beginning processing of {len(exports)} export(s)")
+
+    log_section(f"Starting Export - {len(exports)} item(s) to process")
+
     for i, item in enumerate(exports):
-        logger.info(f"=== Processing item {i} ===")
+        export_name = item.get("name", "export")
+        log_subsection(f"Export Item {i}: {export_name}")
         logger.debug(f"Item content: {item}")
 
         source = item.get("source")
@@ -1628,7 +1685,6 @@ def main():
         template = item.get("template")  # Optional template 3MF file
         keep_stl = item.get("keep_stl", False)  # Keep STL files?
         stl_output_dir = item.get("stl_output_dir")  # Where to place STL files
-        export_name = item.get("name", "export")  # Export item name (used for file prefixing)
         techdraw_config = item.get("techdraw")  # Optional TechDraw export config
         bom_config = item.get("bom")  # Optional BOM generation config
 
@@ -1639,19 +1695,19 @@ def main():
         )
 
         if not source:
-            logger.error("Missing 'source' in config item.")
+            log_failure("Missing 'source' in config item")
             sys.exit(1)
 
         # Generate default output filename if not specified
         if not output:
             output = f"prints/{export_name}.3mf"
-            logger.info(f"No output specified, using default: {output}")
+            log_action(f"Using default output: {output}")
 
         if not os.path.exists(source):
-            logger.error(f"Source file '{source}' not found.")
+            log_failure(f"Source file not found: {source}")
             sys.exit(1)
 
-        logger.debug(f"Opening document {source}")
+        log_action(f"Opening document: {source}")
         try:
             doc = FreeCAD.open(source)
             doc_name = doc.Name  # Save the name before closing
@@ -1660,6 +1716,7 @@ def main():
                 f"Document objects: {[(obj.Name, obj.Label if hasattr(obj, 'Label') else 'N/A') for obj in doc.Objects]}"
             )
             FreeCAD.setActiveDocument(doc_name)
+            log_success(f"Document opened: {doc_name}")
 
             # Determine bodies to export based on body_source mode
             body_source = item.get("_body_source", BODY_SOURCE_CONFIG)
@@ -1691,10 +1748,10 @@ def main():
                                 body_spec["_copy"] = copy_idx + 1
                             bodies.append(body_spec)
 
-                logger.info(f"Exporting {len(bodies)} bodies from properties with export name '{export_name}'")
+                log_action(f"Exporting {len(bodies)} bodies from properties (name: {export_name})")
 
             if bodies:
-                logger.info(f"Exporting bodies {bodies} with export name '{export_name}'")
+                log_action(f"Exporting {len(bodies)} bodies")
                 # Try to resolve template path (uses config value or falls back to default)
                 resolved_template = resolve_template_path(template)
 
@@ -1703,7 +1760,7 @@ def main():
 
                 # Use template-based export if template is available
                 if resolved_template:
-                    logger.info(f"Using template: {resolved_template}")
+                    log_action(f"Using template: {os.path.basename(resolved_template)}")
                     success = export_bodies_to_3mf_with_template(
                         doc,
                         bodies,
@@ -1716,10 +1773,10 @@ def main():
                     )
                 else:
                     # Fallback to STL export if no template available
-                    logger.info("No template specified or available, exporting bodies to 3MF without template")
+                    log_warning_msg("No template - exporting without template")
                     success = export_bodies(doc, bodies, output)
             else:
-                logger.info("Exporting full document")
+                log_action("Exporting full document")
                 success = export_full_doc(doc, output)
 
             logger.debug(f"Export success: {success}")
@@ -1736,11 +1793,11 @@ def main():
                 sys.exit(1)
 
             file_size = os.path.getsize(output_abs)
-            logger.info(f"Output file verified: {output_abs} ({file_size} bytes)")
+            log_success(f"Output verified: {os.path.basename(output_abs)} ({_format_bytes(file_size)})")
 
             # Process TechDraw pages if configured
             if techdraw_config:
-                logger.info("Processing TechDraw export")
+                log_action("Processing TechDraw export")
                 pages_to_export = techdraw_config.get("pages", [])
                 techdraw_output_dir = techdraw_config.get("output_dir", "docs")
                 techdraw_format = techdraw_config.get("format", "pdf")  # Default to PDF now
@@ -1765,7 +1822,7 @@ def main():
                         logger.exception(f"Error preparing TechDraw PDF: {e}")
                         techdraw_pdf_pending = None
                 else:
-                    logger.warning(f"TechDraw format '{techdraw_format}' not yet supported, skipping")
+                    log_warning_msg(f"TechDraw format '{techdraw_format}' not yet supported, skipping")
                     techdraw_pdf_pending = None
             else:
                 techdraw_pdf_pending = None
@@ -1778,7 +1835,7 @@ def main():
                 bom_configs = [bom_config] if isinstance(bom_config, dict) else bom_config
 
                 for i, single_bom_config in enumerate(bom_configs):
-                    logger.info(f"Processing BOM generation #{i}")
+                    log_action(f"Processing BOM generation #{i}")
                     bom_source = single_bom_config.get("source", "auto")  # auto/assembly/spreadsheet/parts
                     bom_output = single_bom_config.get("output", f"docs/{export_name}_bom.csv")
                     bom_fields = single_bom_config.get("fields", [])  # Custom fields like material, url, price
@@ -1798,7 +1855,7 @@ def main():
                                 doc, custom_fields=bom_fields, assembly_name=bom_assembly
                             )
                             if bom_data:
-                                logger.info(f"Successfully extracted BOM from Assembly ({len(bom_data)} items)")
+                                log_success(f"Extracted BOM from Assembly ({len(bom_data)} items)")
 
                         if not bom_data and bom_source in ("auto", "spreadsheet"):
                             spreadsheet_name = single_bom_config.get("spreadsheet_name", "BOM")
@@ -1807,13 +1864,13 @@ def main():
                                 doc, spreadsheet_name=spreadsheet_name, custom_fields=bom_fields
                             )
                             if bom_data:
-                                logger.info(f"Successfully extracted BOM from Spreadsheet ({len(bom_data)} items)")
+                                log_success(f"Extracted BOM from Spreadsheet ({len(bom_data)} items)")
 
                         if not bom_data and bom_source in ("auto", "parts"):
                             logger.debug("Attempting to extract BOM from Parts")
                             bom_data = extract_bom_from_parts(doc, custom_fields=bom_fields)
                             if bom_data:
-                                logger.info(f"Successfully extracted BOM from Parts ({len(bom_data)} items)")
+                                log_success(f"Extracted BOM from Parts ({len(bom_data)} items)")
 
                         if bom_data:
                             # Write BOM CSV using shared utility
@@ -1828,11 +1885,11 @@ def main():
                                 fields = ["label", "quantity"] + bom_fields
 
                             write_bom_csv(bom_data, bom_output, fields=fields)
-                            logger.info(f"BOM written to: {bom_output}")
+                            log_success(f"BOM written to: {bom_output}")
                             # Track this for TechDraw integration
                             last_bom_csv = bom_output
                         else:
-                            logger.warning(f"No BOM data extracted from document for config #{i}")
+                            log_warning_msg(f"No BOM data extracted from document for config #{i}")
 
                     except Exception as e:
                         logger.exception(f"Error generating BOM #{i}: {e}")
@@ -1856,7 +1913,7 @@ def main():
                     pdf_metadata["title"] = export_name
                     pdf_metadata["source"] = os.path.basename(source)
 
-                    logger.info(f"Generating TechDraw PDF: {pdf_output}")
+                    log_action(f"Generating TechDraw PDF: {os.path.basename(pdf_output)}")
                     pdf_success = export_techdraw_to_pdf(
                         doc,
                         pages,
@@ -1866,9 +1923,9 @@ def main():
                         metadata=pdf_metadata,
                     )
                     if pdf_success:
-                        logger.info(f"TechDraw PDF generated: {pdf_output}")
+                        log_success(f"TechDraw PDF generated: {os.path.basename(pdf_output)}")
                     else:
-                        logger.warning("TechDraw PDF generation failed")
+                        log_warning_msg("TechDraw PDF generation failed")
                 except Exception as e:
                     logger.exception(f"Error generating TechDraw PDF: {e}")
 
@@ -1878,7 +1935,7 @@ def main():
             logger.exception(f"Exception during processing: {e}")
             sys.exit(1)
 
-    logger.info("Export completed successfully.")
+    log_section("Export Completed Successfully")
     sys.exit(0)
 
 
