@@ -743,6 +743,8 @@ Shared fixtures in `tests/conftest.py` provide paths to all test data.
 
 ### Writing New Tests
 
+**IMPORTANT**: Every new feature MUST include corresponding unit or integration tests. Tests should be created BEFORE the feature implementation (TDD approach) or immediately after for bug fixes.
+
 Use Given-When-Then pattern:
 ```python
 import pytest
@@ -758,6 +760,68 @@ class TestModuleName:
         result = function_to_test(input_data)
         # Then
         assert result == expected_value
+```
+
+### Test Coverage
+
+This project uses **pytest-cov** for code coverage reporting. Coverage helps identify untested code paths and ensures new features are properly tested.
+
+**Installation** (already in dev dependencies):
+```bash
+uv pip install pytest-cov
+```
+
+**Running Tests with Coverage**:
+```bash
+# Run unit tests with coverage
+python -m pytest tests/test_git_utils.py tests/test_lib3mf_utils.py tests/test_export_config.py --cov=tools --cov-report=term-missing -v
+
+# Full test run with coverage
+python -m pytest tests/ --cov=tools --cov-report=term-missing -v
+
+# Generate HTML coverage report
+python -m pytest tests/ --cov=tools --cov-report=html -v
+# Open report: open htmlcov/index.html
+```
+
+**Coverage Report Options**:
+- `term`: Terminal output (default)
+- `term-missing`: Terminal output with line numbers of untested code
+- `html`: Interactive HTML report in `htmlcov/` directory
+- `xml`: Cobertura XML format for CI integration
+
+**Target & Requirements**:
+- **Minimum requirement**: Every new feature PR MUST include tests that cover at least the main functionality
+- **Target coverage**: Aim for **80%+ overall** for the tools/ directory
+- **Critical paths**: 100% coverage required for:
+  - Configuration parsing (`load_config()` functions)
+  - Error handling and validation
+  - New public API functions
+- **Focus areas**:
+  - New functions and methods
+  - Edge cases and error handling
+  - Configuration parsing and validation
+  - All code paths in new features
+
+**Coverage Threshold**: Add minimum threshold in `pyproject.toml`:
+```toml
+[tool.pytest.ini_options]
+addopts = "--cov=tools --cov-fail-under=80"
+```
+
+**CI Integration**: Coverage is integrated into CI workflow (`.github/workflows/ci.yml`):
+- Automatically generates coverage XML report on every push/PR
+- Uploads to Codecov for historical tracking
+- Terminal output shows missing lines during CI runs
+
+To view coverage locally:
+```bash
+# View coverage report in terminal
+uv run pytest tests/test_git_utils.py tests/test_lib3mf_utils.py tests/test_export_config.py --cov=tools --cov-report=term-missing -v
+
+# Generate and view HTML report
+uv run pytest tests/ --cov=tools --cov-report=html -v
+open htmlcov/index.html
 ```
 
 ### Running All Tests

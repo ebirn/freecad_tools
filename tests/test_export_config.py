@@ -881,6 +881,62 @@ class TestBOMConfigSection:
         assert output is not None
         assert output == "docs/bom.csv"
 
+    def test_bom_with_assembly_field(self):
+        """Should accept bom section with assembly field for specific assembly targeting."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+            "bodies": ["Body1"],
+            "bom": {
+                "source": "assembly",
+                "assembly": "MainAssembly",
+                "output": "docs/main_bom.csv",
+            },
+        }
+
+        # When
+        bom = item.get("bom")
+
+        # Then
+        assert bom is not None
+        assert bom["source"] == "assembly"
+        assert bom["assembly"] == "MainAssembly"
+        assert bom["output"] == "docs/main_bom.csv"
+
+    def test_bom_multiple_assemblies_list(self):
+        """Should accept list of bom configs for multiple assemblies."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+            "bodies": ["Body1"],
+            "bom": [
+                {
+                    "source": "assembly",
+                    "assembly": "MainAssembly",
+                    "output": "docs/main_bom.csv",
+                },
+                {
+                    "source": "assembly",
+                    "assembly": "SubAssembly",
+                    "output": "docs/sub_bom.csv",
+                },
+            ],
+        }
+
+        # When
+        bom_configs = item.get("bom")
+
+        # Then
+        assert bom_configs is not None
+        assert isinstance(bom_configs, list)
+        assert len(bom_configs) == 2
+        assert bom_configs[0]["assembly"] == "MainAssembly"
+        assert bom_configs[0]["output"] == "docs/main_bom.csv"
+        assert bom_configs[1]["assembly"] == "SubAssembly"
+        assert bom_configs[1]["output"] == "docs/sub_bom.csv"
+
 
 class TestExportWithTechDrawAndBOM:
     """Integration tests for export items with both TechDraw and BOM."""

@@ -16,6 +16,7 @@ dev = [
     "yamllint==1.38.0",
     "pylint==4.0.5",
     "pytest>=7.0",
+    "pytest-cov>=5.0",
 ]
 
 [tool.pytest.ini_options]
@@ -23,6 +24,18 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+[tool.coverage.run]
+source = ["tools"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
 
 [build-system]
 requires = ["setuptools"]
