@@ -314,13 +314,19 @@ def merge_metadata(template_metadata: dict | None, export_metadata: dict | None,
     return result
 
 
-def convert_stl_to_lib3mf_mesh(stl_file_path: str, mesh_object) -> None:
+def convert_stl_to_lib3mf_mesh(stl_file_path: str, mesh_object) -> dict:
     """
     Parse a binary STL file and add its mesh data to a lib3mf mesh object.
 
     Args:
         stl_file_path: Path to binary STL file
         mesh_object: lib3mf mesh object to populate with vertices and triangles
+
+    Returns:
+        Dictionary with quality metrics:
+        - vertex_count: Number of unique vertices
+        - triangle_count: Number of triangles
+        - file_size: Size of STL file in bytes
 
     Raises:
         FileNotFoundError: If STL file doesn't exist
@@ -329,6 +335,9 @@ def convert_stl_to_lib3mf_mesh(stl_file_path: str, mesh_object) -> None:
     stl_path = Path(stl_file_path)
     if not stl_path.exists():
         raise FileNotFoundError(f"STL file not found: {stl_file_path}")
+
+    # Get file size for metrics
+    file_size = stl_path.stat().st_size
 
     try:
         with open(stl_path, "rb") as f:
@@ -391,6 +400,13 @@ def convert_stl_to_lib3mf_mesh(stl_file_path: str, mesh_object) -> None:
 
             logger.info(f"STL conversion complete: {vertex_count} vertices, {len(triangle_data)} triangles")
 
+            # Return quality metrics
+            return {
+                "vertex_count": vertex_count,
+                "triangle_count": len(triangle_data),
+                "file_size": file_size,
+            }
+
     except struct.error as e:
         logger.error(f"Invalid STL format in {stl_file_path}: {e}")
         raise
@@ -426,7 +442,7 @@ def create_3mf_from_stls(
     template_path: str | None = None,
     metadata: dict | None = None,
     transforms: list[dict] | None = None,
-) -> bool:
+) -> tuple[bool, dict]:
     """
     Create a 3MF file with embedded meshes from STL files using lib3mf.
 
@@ -442,10 +458,21 @@ def create_3mf_from_stls(
                    - "position": [x_mm, y_mm, z_mm] (millimeters, optional)
 
     Returns:
-        True on success, False on failure
+        Tuple of (success: bool, quality_metrics: dict) where quality_metrics contains:
+        - total_vertex_count: Sum of all vertices across all meshes
+        - total_triangle_count: Sum of all triangles across all meshes
+        - total_stl_size: Sum of all STL file sizes
+        - per_body: Dict with per-body metrics (body_label -> {vertex_count, triangle_count, file_size})
+        - output_file_size: Size of generated 3MF file in bytes
     """
     try:
         logger.info(f"Creating 3MF with {len(stl_files)} meshes")
+
+        # Track quality metrics
+        total_vertex_count = 0
+        total_triangle_count = 0
+        total_stl_size = 0
+        per_body_metrics = {}
 
         # Read template metadata BEFORE creating the main model
         # This avoids potential conflicts with lib3mf's wrapper state
@@ -467,8 +494,16 @@ def create_3mf_from_stls(
             mesh_obj = model.AddMeshObject()
             mesh_obj.SetName(body_label)
 
-            # Convert STL to mesh with vertex/triangle data
-            convert_stl_to_lib3mf_mesh(stl_file_path, mesh_obj)
+            # Convert STL to mesh with vertex/triangle data and get metrics
+            metrics = convert_stl_to_lib3mf_mesh(stl_file_path, mesh_obj)
+            total_vertex_count += metrics["vertex_count"]
+            total_triangle_count += metrics["triangle_count"]
+            total_stl_size += metrics["file_size"]
+            per_body_metrics[body_label] = {
+                "vertex_count": metrics["vertex_count"],
+                "triangle_count": metrics["triangle_count"],
+                "file_size": metrics["file_size"],
+            }
 
             # Get transform for this body (or use identity if not provided)
             if transforms and i < len(transforms) and transforms[i]:
@@ -498,18 +533,36 @@ def create_3mf_from_stls(
         writer = model.QueryWriter("3mf")
         writer.WriteToFile(output_path)
 
+        # Get output file size
+        output_file_size = Path(output_path).stat().st_size
+
+        # Build quality metrics report
+        quality_metrics = {
+            "total_vertex_count": total_vertex_count,
+            "total_triangle_count": total_triangle_count,
+            "total_stl_size": total_stl_size,
+            "output_file_size": output_file_size,
+            "per_body": per_body_metrics,
+        }
+
         logger.info(f"Successfully created 3MF file: {output_path}")
-        return True
+        logger.info(
+            f"Quality Metrics: {total_vertex_count} vertices, "
+            f"{total_triangle_count} triangles, "
+            f"{total_stl_size} bytes STL input, "
+            f"{output_file_size} bytes 3MF output"
+        )
+        return True, quality_metrics
 
     except Exception as e:
         logger.error(f"Failed to create 3MF: {e}")
         import traceback
 
         logger.debug(traceback.format_exc())
-        return False
+        return False, {}
 
 
-def create_from_json_config(config_path: str) -> bool:
+def create_from_json_config(config_path: str) -> tuple[bool, dict]:
     """
     Create 3MF from a JSON configuration file.
 
@@ -538,7 +591,8 @@ def create_from_json_config(config_path: str) -> bool:
         config_path: Path to JSON configuration file
 
     Returns:
-        True on success, False on failure
+        Tuple of (success: bool, quality_metrics: dict)
+        quality_metrics contains vertex/triangle counts, file sizes, per-body metrics
     """
     try:
         with open(config_path) as f:
@@ -552,11 +606,11 @@ def create_from_json_config(config_path: str) -> bool:
 
         if not output_path:
             logger.error("output_path not specified in config")
-            return False
+            return False, {}
 
         if not stl_files_config:
             logger.error("No stl_files specified in config")
-            return False
+            return False, {}
 
         # Convert config to list of tuples
         stl_files = [(item["label"], item["path"]) for item in stl_files_config]
@@ -568,10 +622,140 @@ def create_from_json_config(config_path: str) -> bool:
         raise
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON in {config_path}: {e}")
-        return False
+        return False, {}
     except Exception as e:
         logger.error(f"Failed to process config {config_path}: {e}")
-        return False
+        return False, {}
+
+
+def validate_3mf_file(three_mf_path: str) -> dict:
+    """
+    Validate a 3MF file structure and extract basic info.
+
+    3MF files are ZIP archives containing XML and optionally resources.
+
+    Args:
+        three_mf_path: Path to the 3MF file
+
+    Returns:
+        Dictionary with validation results:
+        - is_valid: bool (True if file is a valid ZIP archive with 3MF structure)
+        - has_model: bool (True if 3dmodel.model file exists)
+        - has_metadata: bool (True if model has metadata)
+        - file_size: int (size of 3MF file in bytes)
+        - error: str (error message if validation failed)
+        - mesh_count: int (number of mesh objects if valid)
+    """
+    import zipfile
+
+    result = {
+        "is_valid": False,
+        "has_model": False,
+        "has_metadata": False,
+        "file_size": 0,
+        "error": None,
+        "mesh_count": 0,
+    }
+
+    try:
+        path = Path(three_mf_path)
+        result["file_size"] = path.stat().st_size
+
+        # Check it's a valid ZIP file
+        with zipfile.ZipFile(three_mf_path, "r") as zf:
+            # Check for required files
+            file_list = zf.namelist()
+
+            # 3MF requires 3dmodel.model - can be in root or in 3D/ directory
+            has_model = (
+                "3dmodel.model" in file_list or "3D/3dmodel.model" in file_list or "3d/3dmodel.model" in file_list
+            )
+            if not has_model:
+                result["error"] = "Missing required file: 3dmodel.model (in root or 3D/ directory)"
+                return result
+
+            result["has_model"] = True
+
+            # Check for metadata file (optional)
+            if any(f.startswith("metadata/") or f.startswith("Metadata/") for f in file_list):
+                result["has_metadata"] = True
+
+            # Count mesh files (optional, but useful for quality checks)
+            mesh_files = [f for f in file_list if (f.startswith("3D/") or f.startswith("3d/") or "mesh" in f.lower())]
+            result["mesh_count"] = len(mesh_files)
+
+            result["is_valid"] = True
+
+    except zipfile.BadZipFile as e:
+        result["error"] = f"Invalid ZIP/3MF file: {e}"
+    except Exception as e:
+        result["error"] = f"Validation error: {e}"
+
+    return result
+
+
+def format_quality_report(quality_metrics: dict) -> str:
+    """
+    Format quality metrics as a human-readable report.
+
+    Args:
+        quality_metrics: Dictionary from create_3mf_from_stls or create_from_json_config
+
+    Returns:
+        Formatted string report
+    """
+    if not quality_metrics:
+        return "No quality metrics available (export may have failed)."
+
+    lines = []
+    lines.append("=" * 60)
+    lines.append("3MF Export Quality Report")
+    lines.append("=" * 60)
+    lines.append("")
+
+    # Overall totals
+    lines.append("SUMMARY")
+    lines.append("-" * 40)
+
+    total_vertices = quality_metrics.get("total_vertex_count", 0)
+    total_triangles = quality_metrics.get("total_triangle_count", 0)
+    total_stl_size = quality_metrics.get("total_stl_size", 0)
+    output_size = quality_metrics.get("output_file_size", 0)
+
+    lines.append(f"Total Vertices:     {total_vertices:,}")
+    lines.append(f"Total Triangles:    {total_triangles:,}")
+    lines.append(f"Input STL Size:     {_format_bytes(total_stl_size)}")
+    lines.append(f"Output 3MF Size:    {_format_bytes(output_size)}")
+
+    if output_size > 0 and total_stl_size > 0:
+        ratio = output_size / total_stl_size
+        lines.append(f"Compression Ratio:  {ratio:.2f}x")
+
+    lines.append("")
+
+    # Per-body breakdown
+    per_body = quality_metrics.get("per_body", {})
+    if per_body:
+        lines.append("PER-BODY BREAKDOWN")
+        lines.append("-" * 40)
+        for body_name, body_metrics in sorted(per_body.items()):
+            v_count = body_metrics.get("vertex_count", 0)
+            t_count = body_metrics.get("triangle_count", 0)
+            f_size = body_metrics.get("file_size", 0)
+            lines.append(f"  {body_name}: {v_count:,} vertices, {t_count:,} triangles, {_format_bytes(f_size)}")
+        lines.append("")
+
+    lines.append("=" * 60)
+    return "\n".join(lines)
+
+
+def _format_bytes(num_bytes: int) -> str:
+    """Format bytes as human-readable string."""
+    for unit in ["B", "KB", "MB", "GB"]:
+        if abs(num_bytes) < 1024:
+            return f"{num_bytes:.1f} {unit}"
+        num_bytes /= 1024
+    return f"{num_bytes:.1f} TB"
 
 
 def main():
@@ -605,7 +789,13 @@ def main():
         except (ValueError, IndexError):
             pass
 
-        success = create_3mf_from_stls(stl_files, output_path, template_path)
+        success, metrics = create_3mf_from_stls(stl_files, output_path, template_path)
+        if success and metrics:
+            print(
+                f"Quality Metrics: {metrics['total_vertex_count']} vertices, "
+                f"{metrics['total_triangle_count']} triangles, "
+                f"{metrics['output_file_size']} bytes"
+            )
         sys.exit(0 if success else 1)
 
     elif command == "create-from-json":
@@ -614,7 +804,13 @@ def main():
             sys.exit(1)
 
         config_path = sys.argv[2]
-        success = create_from_json_config(config_path)
+        success, metrics = create_from_json_config(config_path)
+        if success and metrics:
+            print(
+                f"Quality Metrics: {metrics['total_vertex_count']} vertices, "
+                f"{metrics['total_triangle_count']} triangles, "
+                f"{metrics['output_file_size']} bytes"
+            )
         sys.exit(0 if success else 1)
 
     else:

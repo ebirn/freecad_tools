@@ -77,11 +77,16 @@ class TestConvertSTLToLib3MFMesh:
             mock_lib3mf.Position.return_value = mock_pos
 
             # When
-            lib3mf_utils.convert_stl_to_lib3mf_mesh(str(stl_path), mock_mesh)
+            metrics = lib3mf_utils.convert_stl_to_lib3mf_mesh(str(stl_path), mock_mesh)
 
             # Then
             # Should have 3 unique vertices for the triangle
             assert mock_mesh.AddVertex.call_count >= 3
+            # Should return metrics dict
+            assert isinstance(metrics, dict)
+            assert "vertex_count" in metrics
+            assert "triangle_count" in metrics
+            assert metrics["vertex_count"] >= 3
 
     def test_deduplicates_vertices(self, tmp_path):
         """Should deduplicate identical vertices."""
@@ -102,10 +107,13 @@ class TestConvertSTLToLib3MFMesh:
             mock_lib3mf.Position.return_value = mock_pos
 
             # When
-            lib3mf_utils.convert_stl_to_lib3mf_mesh(str(stl_path), mock_mesh)
+            metrics = lib3mf_utils.convert_stl_to_lib3mf_mesh(str(stl_path), mock_mesh)
 
             # Then - vertices should be deduplicated to 1
             assert mock_mesh.AddVertex.call_count == 1
+            # Should return metrics dict
+            assert isinstance(metrics, dict)
+            assert metrics["vertex_count"] == 1
 
 
 class TestAddMetadataToModel:
@@ -174,13 +182,29 @@ class Test3MFCreateFromSTLs:
         output_file = tmp_path / "output.3mf"
         stl_files = [("TestMesh", str(stl_file))]
 
-        # Mock STL conversion to avoid actual lib3mf calls
-        with patch.object(lib3mf_utils, "convert_stl_to_lib3mf_mesh"):
+        # Mock STL conversion to avoid actual lib3mf calls and return metrics
+        mock_metrics = {"vertex_count": 3, "triangle_count": 1, "file_size": 148}
+        # Mock Path.stat to return a fake file size (for output_file_size in metrics)
+        mock_stat = MagicMock()
+        mock_stat.st_size = 500
+        with (
+            patch.object(lib3mf_utils, "convert_stl_to_lib3mf_mesh", return_value=mock_metrics),
+            patch("lib3mf_utils.Path") as mock_path,
+        ):
+            mock_path_instance = MagicMock()
+            mock_path_instance.stat.return_value = mock_stat
+            mock_path.return_value = mock_path_instance
+
             # When
-            result = lib3mf_utils.create_3mf_from_stls(stl_files, str(output_file))
+            success, metrics = lib3mf_utils.create_3mf_from_stls(stl_files, str(output_file))
 
             # Then
-            assert result is True
+            assert success is True
+            assert "total_vertex_count" in metrics
+            assert "total_triangle_count" in metrics
+            assert metrics["total_vertex_count"] == 3
+            assert metrics["total_triangle_count"] == 1
+            assert metrics["output_file_size"] == 500
             mock_model.AddMeshObject.assert_called_once()
             mock_writer.WriteToFile.assert_called_once_with(str(output_file))
 
@@ -209,12 +233,29 @@ class Test3MFCreateFromSTLs:
         output_file = tmp_path / "output.3mf"
         stl_files = [("TestMesh", str(stl_file))]
 
+        # Mock STL conversion to return metrics
+        mock_metrics = {"vertex_count": 3, "triangle_count": 1, "file_size": 148}
+        # Mock Path.stat for output file size
+        mock_stat = MagicMock()
+        mock_stat.st_size = 500
         # When - template path is passed
-        with patch.object(lib3mf_utils, "convert_stl_to_lib3mf_mesh"):
-            result = lib3mf_utils.create_3mf_from_stls(stl_files, str(output_file), template_path=str(template_file))
+        with (
+            patch.object(lib3mf_utils, "convert_stl_to_lib3mf_mesh", return_value=mock_metrics),
+            patch("lib3mf_utils.Path") as mock_path,
+        ):
+            mock_path_instance = MagicMock()
+            mock_path_instance.stat.return_value = mock_stat
+            mock_path.return_value = mock_path_instance
+
+            success, metrics = lib3mf_utils.create_3mf_from_stls(
+                stl_files, str(output_file), template_path=str(template_file)
+            )
 
         # Then - template parameter is accepted
-        assert result is True
+        assert success is True
+        assert "total_vertex_count" in metrics
+        assert metrics["total_vertex_count"] == 3
+        assert metrics["output_file_size"] == 500
 
 
 class TestCreateFromJsonConfig:
@@ -239,8 +280,8 @@ class TestCreateFromJsonConfig:
         config_file.write_text('{"stl_files": []}')
 
         # When/Then
-        result = lib3mf_utils.create_from_json_config(str(config_file))
-        assert result is False
+        success, metrics = lib3mf_utils.create_from_json_config(str(config_file))
+        assert success is False
 
     def test_rejects_empty_stl_files(self, tmp_path):
         """Should reject config without stl_files."""
@@ -251,8 +292,8 @@ class TestCreateFromJsonConfig:
         config_file.write_text('{"output_path": "output.3mf"}')
 
         # When/Then
-        result = lib3mf_utils.create_from_json_config(str(config_file))
-        assert result is False
+        success, metrics = lib3mf_utils.create_from_json_config(str(config_file))
+        assert success is False
 
     def test_parses_valid_config(self, tmp_path):
         """Should parse valid JSON configuration."""
@@ -267,8 +308,8 @@ class TestCreateFromJsonConfig:
         config_file.write_text(json.dumps(config))
 
         # When/Then - should attempt to create (will fail on missing STL but validates JSON parsing)
-        result = lib3mf_utils.create_from_json_config(str(config_file))
-        assert result is False  # Fails because STL doesn't exist, but JSON was valid
+        success, metrics = lib3mf_utils.create_from_json_config(str(config_file))
+        assert success is False  # Fails because STL doesn't exist, but JSON was valid
 
 
 class TestMetadataFunctions:
@@ -527,6 +568,113 @@ class TestAxisAngleTransform:
 
             # Then - should return identity transform
             assert result is not None
+
+
+class TestQualityMetrics:
+    """Tests for quality metrics functions (vertex/triangle counting, 3MF validation)."""
+
+    def test_convert_stl_returns_metrics(self, tmp_path):
+        """Should return vertex/triangle/file_size metrics."""
+        import lib3mf_utils
+
+        # Create test STL file with 1 triangle
+        stl_path = tmp_path / "test.stl"
+        create_minimal_binary_stl(stl_path, [[(0, 0, 0), (1, 0, 0), (0, 1, 0)]])
+
+        mock_mesh = MagicMock()
+        mock_mesh.AddVertex = MagicMock()
+        mock_mesh.AddTriangle = MagicMock()
+
+        with patch.object(lib3mf_utils, "lib3mf"):
+            # When
+            metrics = lib3mf_utils.convert_stl_to_lib3mf_mesh(str(stl_path), mock_mesh)
+
+            # Then
+            assert isinstance(metrics, dict)
+            assert "vertex_count" in metrics
+            assert "triangle_count" in metrics
+            assert "file_size" in metrics
+            assert metrics["vertex_count"] == 3
+            assert metrics["triangle_count"] == 1
+            assert metrics["file_size"] > 0
+
+    def test_validate_3mf_file_valid(self, tmp_path):
+        """Should validate a real 3MF file."""
+        import lib3mf_utils
+
+        # Use the example 3MF file
+        example_3mf = Path(__file__).parent.parent / "examples" / "example.3mf"
+        if example_3mf.exists():
+            result = lib3mf_utils.validate_3mf_file(str(example_3mf))
+            assert result["is_valid"] is True
+            assert result["has_model"] is True
+            assert result["file_size"] > 0
+
+    def test_validate_3mf_file_missing(self, tmp_path):
+        """Should handle missing file."""
+        import lib3mf_utils
+
+        result = lib3mf_utils.validate_3mf_file("/nonexistent/file.3mf")
+        assert result["is_valid"] is False
+        assert result["file_size"] == 0
+
+    def test_validate_3mf_file_not_zip(self, tmp_path):
+        """Should handle non-ZIP file."""
+        import lib3mf_utils
+
+        # Create a fake file
+        fake_file = tmp_path / "fake.3mf"
+        fake_file.write_text("not a zip file")
+
+        result = lib3mf_utils.validate_3mf_file(str(fake_file))
+        assert result["is_valid"] is False
+        assert result["error"] is not None
+
+    def test_create_3mf_from_stls_returns_metrics(self, tmp_path):
+        """Should return quality metrics when creating 3MF from STL files."""
+        import lib3mf_utils
+
+        # Mock the lib3mf wrapper
+        with patch("lib3mf_utils.get_wrapper") as mock_get_wrapper:
+            mock_wrapper = MagicMock()
+            mock_model = MagicMock()
+            mock_writer = MagicMock()
+
+            mock_wrapper.CreateModel.return_value = mock_model
+            mock_model.QueryWriter.return_value = mock_writer
+
+            mock_get_wrapper.return_value = mock_wrapper
+
+            # Create test STL file
+            stl_file = tmp_path / "test.stl"
+            create_minimal_binary_stl(stl_file, [[(0, 0, 0), (1, 0, 0), (0, 1, 0)]])
+
+            output_file = tmp_path / "output.3mf"
+            stl_files = [("TestMesh", str(stl_file))]
+
+            # Mock STL conversion metrics and Path.stat
+            mock_stl_metrics = {"vertex_count": 3, "triangle_count": 1, "file_size": 148}
+            mock_stat = MagicMock()
+            mock_stat.st_size = 500
+            with (
+                patch.object(lib3mf_utils, "convert_stl_to_lib3mf_mesh", return_value=mock_stl_metrics),
+                patch("lib3mf_utils.Path") as mock_path,
+            ):
+                mock_path_instance = MagicMock()
+                mock_path_instance.stat.return_value = mock_stat
+                mock_path.return_value = mock_path_instance
+
+                # When
+                success, metrics = lib3mf_utils.create_3mf_from_stls(stl_files, str(output_file))
+
+                # Then
+                assert success is True
+                assert "total_vertex_count" in metrics
+                assert "total_triangle_count" in metrics
+                assert "output_file_size" in metrics
+                assert metrics["total_vertex_count"] == 3
+                assert metrics["total_triangle_count"] == 1
+                assert metrics["output_file_size"] == 500
 
 
 if __name__ == "__main__":

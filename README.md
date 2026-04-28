@@ -1104,6 +1104,23 @@ The `htmlcov/` directory contains interactive coverage reports and is git-ignore
 - Use `@skip_if_no_freecad` decorator for tests requiring FreeCAD
 - See `tests/conftest.py` for shared fixtures
 
+### Quality Metrics
+
+After each export, quality metrics are automatically collected and logged:
+
+| Metric | Description |
+|--------|-------------|
+| Vertex Count | Total unique vertices across all meshes |
+| Triangle Count | Total triangles across all meshes |
+| STL Input Size | Combined size of all input STL files |
+| 3MF Output Size | Size of generated 3MF file |
+| Per-Body Metrics | Vertex/triangle counts per body (in debug logs) |
+
+The metrics are logged at INFO level after successful exports:
+```
+Quality Metrics: 15420 vertices, 30840 triangles, 123456 bytes STL input, 98765 bytes 3MF output
+```
+
 ---
 
 ## Support & Contributing

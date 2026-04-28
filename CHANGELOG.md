@@ -30,6 +30,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   - Supports multiple BOM sections (list of config dicts) for multi-assembly documents
   - Backward compatible with existing single dict config
   - `extract_bom_from_assembly()` now accepts optional `assembly_name` parameter
+- **Quality Metrics** (Task #2): Report mesh statistics and validate 3MF output structure
+  - `convert_stl_to_lib3mf_mesh()` returns dict with vertex_count, triangle_count, file_size
+  - `create_3mf_from_stls()` returns tuple of (success: bool, quality_metrics: dict)
+  - `create_from_json_config()` returns tuple of (success: bool, quality_metrics: dict)
+  - `validate_3mf_file()` checks ZIP structure, required files (3dmodel.model), metadata
+  - `format_quality_report()` generates human-readable quality report with totals and per-body breakdown
+  - Quality metrics logged at INFO level after successful exports
+  - Added 5 new unit tests for quality metrics functions
 
 ### Fixed
 
