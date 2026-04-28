@@ -7,109 +7,7 @@ For process guidance see AGENTS.md.
 
 ## Open Tasks
 
-### 1. Explicit Body Selection Mode: Config vs FreeCAD Properties [HIGH PRIORITY]
-**Status**: NOT STARTED
-**Branch**: `agent_body_selection_mode`
-**Effort**: Medium (3-4 hours)
-
-Make body selection mode **explicit** in config (`body_source: config | properties`) and extend FreeCAD property system with orientation and count.
-
-**Problem**:
-- `bodies: []` silently means "use marked bodies" - not obvious
-- `find_exportable_bodies()` isn't wired into fc_export.py pipeline
-- No way to specify orientation or count via FreeCAD body properties
-- Mixing both approaches has undefined behavior
-
-**Design**:
-```yaml
-export:
-  - name: MyProject
-    source: MyProject.FCStd
-    body_source: config          # "config" or "properties"
-    bodies:
-      - Feed001
-      - body: "Cover"
-        rotation: {axis: [0, 0, 1], angle: 45}   # 45 deg around Z
-
-  - name: AutoProject
-    source: AutoProject.FCStd
-    body_source: properties      # Read from FreeCAD body properties
-    output: prints/AutoProject.3mf
-```
-
-**FreeCAD Custom Properties** (when `body_source: properties`):
-
-| Property | FreeCAD Type | Required | Description |
-|----------|--------------|----------|-------------|
-| `ExportTo3MF` | `App::PropertyBool` | Yes | Mark body for export |
-| `ExportCount` | `App::PropertyInteger` | No | Number of copies (default: 1) |
-| `ExportRotation` | `App::PropertyRotation` | No | Orientation for export |
-
-All properties are grouped under `freecad_tools` in the Properties panel.
-
-**`App::PropertyRotation` details**:
-- FreeCAD GUI displays this as **Axis (x,y,z) + Angle** — not Euler angles
-- Axis+Angle is unambiguous (no Euler convention confusion, no gimbal lock)
-- Read in Python via `obj.ExportRotation` → `FreeCAD.Rotation` object
-- Convert to rotation matrix for 3MF transform via `.toMatrix()`
-- Construct in scripts: `FreeCAD.Rotation(FreeCAD.Vector(0,0,1), 45)` = 45 deg around Z
-
-**Config rotation format** (when `body_source: config`):
-- **Axis+Angle dict** (matches FreeCAD property): `rotation: {axis: [0, 0, 1], angle: 45}`
-- This is the same representation shown in FreeCAD's Properties panel
-- Axis is a direction vector (will be normalized), angle is in degrees
-- No Euler angle ambiguity — what you set in config = what you see in FreeCAD GUI
-
-**Implementation notes**:
-- Current `parse_body_specs()` and `create_euler_transform()` use Euler X,Y,Z rotation order
-- Must replace with axis+angle → rotation matrix conversion
-- Rename `create_euler_transform()` → `create_axis_angle_transform()` (or similar)
-- When reading `App::PropertyRotation` from FreeCAD, the `FreeCAD.Rotation` object
-  can be converted to axis+angle via `.Axis` and `.Angle` properties
-- All existing rotation tests must be updated for axis+angle format
-
-**Test data** (in `examples/`):
-
-| File | Bodies | Properties | Purpose |
-|------|--------|------------|---------|
-| `example.FCStd` | Simple geometry | None | Basic export pipeline testing |
-| `example_properties.FCStd` | Angles, Ball, Cube, Doughnut | `ExportTo3MF`, `ExportCount`, `ExportRotation` | Property-based selection testing |
-| `example_multi.FCStd` | Multiple bodies | None | Multi-document export testing |
-| `example_techdraw.FCStd` | Bodies + TechDraw pages | None | TechDraw/BOM testing |
-
-`example_properties.FCStd` body configurations:
-
-| Body | ExportTo3MF | ExportCount | ExportRotation |
-|------|-------------|-------------|----------------|
-| Angles | true | 1 | identity (no rotation) |
-| Ball | true | 1 | 90 deg around X |
-| Cube | true | 3 | 45 deg around Z |
-| Doughnut | false | 1 | identity (no rotation) |
-
-**Phase 1** - Make mode explicit, wire up property reading:
-- [ ] Add `body_source` field to config schema
-- [ ] Validate: error if mode and bodies list conflict
-- [ ] Backwards compat: infer from `bodies` presence if `body_source` omitted (deprecation warning)
-- [ ] Wire `find_exportable_bodies()` into fc_export.py
-- [ ] Add tests for mode validation
-
-**Phase 2** - Extend properties with orientation and count:
-- [ ] Read `ExportCount` and `ExportRotation` (`App::PropertyRotation`) properties
-- [ ] Convert `FreeCAD.Rotation` → axis+angle for pipeline
-- [ ] Update `parse_body_specs()` to accept `{axis: [x,y,z], angle: N}` dict format
-- [ ] Replace `create_euler_transform()` with axis+angle → rotation matrix
-- [ ] Feed property-derived body specs into existing pipeline
-- [ ] Add `set_export_properties()` helper to macro_helper.py (using `App::PropertyRotation`)
-- [ ] Update all rotation tests for axis+angle format
-
-**Phase 3** - Documentation:
-- [ ] Document both modes in README.md
-- [ ] Add FreeCAD macro to set export properties via dialog
-- [ ] Update example config with both modes
-
----
-
-### 2. Batch Processing [MEDIUM PRIORITY]
+### 1. Batch Processing [MEDIUM PRIORITY]
 **Status**: NOT STARTED
 **Branch**: `agent_batch_processing`
 **Effort**: Low-Medium (1-2 hours)
@@ -126,7 +24,7 @@ Process multiple export jobs with parallel execution and per-job error handling.
 
 ---
 
-### 3. Quality Metrics [MEDIUM PRIORITY]
+### 2. Quality Metrics [MEDIUM PRIORITY]
 **Status**: NOT STARTED
 **Branch**: `agent_quality_metrics`
 **Effort**: Low (1-2 hours)
@@ -143,7 +41,7 @@ Report mesh statistics (vertex/triangle counts, file sizes) and validate 3MF out
 
 ---
 
-### 4. Multi-Document Support [LOW PRIORITY]
+### 3. Multi-Document Support [LOW PRIORITY]
 **Status**: NOT STARTED
 **Branch**: `agent_multi_document`
 **Effort**: Medium (2-3 hours)
@@ -163,7 +61,7 @@ export:
 
 ---
 
-### 5. Printables.com Upload & Publishing [LOW PRIORITY]
+### 4. Printables.com Upload & Publishing [LOW PRIORITY]
 **Status**: NOT STARTED
 **Branch**: `agent_printables_upload`
 **Effort**: High (5-10 hours)

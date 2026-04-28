@@ -7,6 +7,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **Explicit Body Selection Mode** (Task #1): Add `body_source` config field and FreeCAD property-based body selection
+  - `body_source: config` - Explicit body list in config (default when bodies present)
+  - `body_source: properties` - Auto-select bodies with `ExportTo3MF=True` property
+  - Support for `ExportCount` property to duplicate bodies
+  - Support for `ExportRotation` (App::PropertyRotation) for axis+angle orientation
+  - Backward compatible: infers mode from `bodies` list presence with deprecation warning
+  - New macro: `macros/set_export_properties.py` for GUI/CLI property management
+- **Axis+Angle Rotation Format**: Alternative to Euler angles, matches FreeCAD GUI display
+  - Config format: `rotation: {axis: [x, y, z], angle: deg}`
+  - Maintains backward compatibility with Euler `[x, y, z]` list format
+  - Uses Rodrigues' rotation formula for unambiguous orientation
 - **CLI Help and Argument Parsing** (Task #7): Added comprehensive command-line interface to `export.py` and `fc_export.py`
   - `argparse` integration with `--help` for self-documenting usage
   - `--config/-c PATH` flag to specify config file path
