@@ -3,6 +3,7 @@ on:
   push:
     branches: [main, "copilot/**"]
   pull_request:
+  workflow_dispatch:
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -30,5 +31,5 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6
         with:
-          file: ./coverage.xml
+          files: ./coverage.xml
           fail_ci_if_error: false
