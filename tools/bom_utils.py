@@ -26,13 +26,12 @@ def write_bom_csv(bom_data, output_file, fields=None):
         True if successful, False otherwise
     """
     try:
-        if not bom_data:
-            logger.warning("BOM data is empty, skipping CSV generation")
-            return True
+        # Ensure fields always has at least label and quantity
+        default_fields = ["label", "quantity"]
 
         # Determine field list if not provided
         if fields is None:
-            # Use fields from first item, then add any extras from other items
+            # Use fields from all items
             fields = []
             seen_fields = set()
             for item in bom_data:
@@ -40,16 +39,19 @@ def write_bom_csv(bom_data, output_file, fields=None):
                     if key not in seen_fields:
                         fields.append(key)
                         seen_fields.add(key)
+            # If no fields found in data and no custom fields, use defaults
+            if not fields:
+                fields = default_fields
         else:
             # Ensure 'label' and 'quantity' are always included
-            if "label" not in fields:
-                fields.insert(0, "label")
-            if "quantity" not in fields:
-                fields.insert(1, "quantity")
+            for field in default_fields:
+                if field not in fields:
+                    fields.insert(default_fields.index(field), field)
 
         logger.debug(f"CSV fields: {fields}")
 
-        # Write CSV file
+        # Write CSV file (always write, even if bom_data is empty - this ensures
+        # a CSV file is created for PDF generation to reference)
         with open(output_file, "w", newline="", encoding="utf-8") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fields, restval="")
             writer.writeheader()

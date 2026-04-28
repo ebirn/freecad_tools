@@ -96,7 +96,7 @@ def _build_cover_page(metadata, toc_entries, bom_csv_path=None):
     # ── Metadata table (compact key-value pairs)
     meta_rows = []
 
-    date_str = metadata.get("date") or datetime.now().strftime("%Y-%m-%d %H:%M")
+    date_str = metadata.get("date") or metadata.get("Date") or datetime.now().strftime("%Y-%m-%d %H:%M")
     # Return resolved date via a copy — do not mutate the caller's dict
     resolved_date = date_str
     meta_rows.append(("Created", date_str))
@@ -107,6 +107,21 @@ def _build_cover_page(metadata, toc_entries, bom_csv_path=None):
 
     if version:
         meta_rows.append(("Version", version))
+
+    # License information
+    license_info = metadata.get("License") or metadata.get("license", "")
+    if license_info:
+        meta_rows.append(("License", license_info))
+
+    # Project name
+    project = metadata.get("Project") or metadata.get("project", "")
+    if project:
+        meta_rows.append(("Project", project))
+
+    # Description
+    description = metadata.get("Description") or metadata.get("description", "")
+    if description:
+        meta_rows.append(("Description", description))
 
     # Git info — single compact line: hash (branch, tag)
     git_parts = []
@@ -221,9 +236,6 @@ def _build_bom_table_compact(bom_csv_path):
     Returns:
         List of reportlab flowables (heading + table), or empty list.
     """
-    if not bom_csv_path or not os.path.exists(bom_csv_path):
-        return []
-
     styles = getSampleStyleSheet()
 
     flowables = []
@@ -236,11 +248,25 @@ def _build_bom_table_compact(bom_csv_path):
     )
     flowables.append(Paragraph("Bill of Materials", section_style))
 
+    # Check if CSV exists and read it
+    if not bom_csv_path or not os.path.exists(bom_csv_path):
+        # Add a note that BOM CSV was not found
+        no_bom_style = ParagraphStyle(
+            "NoBOMSmall", parent=styles["Normal"], fontSize=7, textColor=colors.HexColor("#888888")
+        )
+        flowables.append(Paragraph("No BOM CSV file found", no_bom_style))
+        return flowables
+
     with open(bom_csv_path, newline="", encoding="utf-8") as f:
         reader = csv.reader(f)
         rows = list(reader)
 
     if not rows:
+        # CSV exists but is empty
+        no_bom_style = ParagraphStyle(
+            "NoBOMSmall", parent=styles["Normal"], fontSize=7, textColor=colors.HexColor("#888888")
+        )
+        flowables.append(Paragraph("No BOM data available", no_bom_style))
         return flowables
 
     header = rows[0]
