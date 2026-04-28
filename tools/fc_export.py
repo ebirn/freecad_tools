@@ -1872,24 +1872,24 @@ def main():
                             if bom_data:
                                 log_success(f"Extracted BOM from Parts ({len(bom_data)} items)")
 
+                        # Write BOM CSV using shared utility (always write, even if empty)
+                        os.makedirs(os.path.dirname(bom_output) or ".", exist_ok=True)
+
+                        from bom_utils import write_bom_csv  # pylint: disable=import-error
+
+                        # Determine fields: if BOM has custom fields from config, pass them;
+                        # otherwise let write_bom_csv auto-detect from data keys
+                        fields = None
+                        if bom_fields:
+                            fields = ["label", "quantity"] + bom_fields
+
+                        write_bom_csv(bom_data, bom_output, fields=fields)
                         if bom_data:
-                            # Write BOM CSV using shared utility
-                            os.makedirs(os.path.dirname(bom_output) or ".", exist_ok=True)
-
-                            from bom_utils import write_bom_csv  # pylint: disable=import-error
-
-                            # Determine fields: if BOM has custom fields from config, pass them;
-                            # otherwise let write_bom_csv auto-detect from data keys
-                            fields = None
-                            if bom_fields:
-                                fields = ["label", "quantity"] + bom_fields
-
-                            write_bom_csv(bom_data, bom_output, fields=fields)
-                            log_success(f"BOM written to: {bom_output}")
-                            # Track this for TechDraw integration
-                            last_bom_csv = bom_output
+                            log_success(f"BOM written to: {bom_output} ({len(bom_data)} items)")
                         else:
-                            log_warning_msg(f"No BOM data extracted from document for config #{i}")
+                            log_warning_msg(f"BOM written to: {bom_output} (no items found)")
+                        # Track this for TechDraw integration
+                        last_bom_csv = bom_output
 
                     except Exception as e:
                         logger.exception(f"Error generating BOM #{i}: {e}")
