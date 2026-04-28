@@ -810,9 +810,12 @@ addopts = "--cov=tools --cov-fail-under=80"
 ```
 
 **CI Integration**: Coverage is integrated into CI workflow (`.github/workflows/ci.yml`):
-- Automatically generates coverage XML report on every push/PR
-- Uploads to Codecov for historical tracking
+- Automatically generates coverage XML report and terminal output on every push/PR
+- Uses pinned commit SHA for codecov-action (required by GitHub Actions security policy)
+- Uploads to Codecov for historical tracking (optional, can be skipped)
 - Terminal output shows missing lines during CI runs
+
+**Action Security**: All GitHub Actions should be pinned to specific commit SHAs (not tags) for security. Prefer actions published by GitHub or verified Marketplace creators.
 
 To view coverage locally:
 ```bash
