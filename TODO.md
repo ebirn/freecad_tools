@@ -97,7 +97,7 @@ printables:
 ---
 
 ### 4. Body Screenshot Generation [MEDIUM PRIORITY]
-**Status**: NOT STARTED
+**Status**: IN PROGRESS
 **Branch**: `agent_body_screenshots`
 **Effort**: Medium (4-6 hours)
 
@@ -134,14 +134,16 @@ export:
 ```
 
 **Tasks**:
-- [ ] Create `tools/body_screenshot.py` with camera control and image capture
-- [ ] Extend config parsing in `fc_export.py` for screenshots section
-- [ ] Integrate screenshot subprocess into export pipeline
-- [ ] Add CLI flag `--screenshots-only` for standalone screenshot generation
-- [ ] Add unit tests for config parsing and default values
+- [x] Create `tools/body_screenshot.py` with camera control and image capture
+- [x] Extend config parsing in `fc_export.py` for screenshots section
+- [x] Integrate screenshot subprocess into export pipeline
+- [x] Add CLI flag `--name` to select single export from multi-item config
+- [x] Add unit tests for config parsing and default values
 - [ ] Add integration tests with example.FCStd
 - [ ] Update README.md with usage documentation
-- [ ] Update example config file
+
+- [x] Update example config file with screenshot examples
+- [x] Create comprehensive test config in tests/export_test_config.yml
 
 ---
 

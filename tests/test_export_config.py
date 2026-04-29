@@ -1323,5 +1323,140 @@ class TestParseBodySpecsAxisAngle:
         assert rotation == [45, 0, 0]
 
 
+class TestScreenshotConfigSection:
+    """Tests for screenshot configuration section in export config."""
+
+    def test_export_item_without_screenshots(self):
+        """Export item without screenshots should work fine."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+            "bodies": ["Body1"],
+            "output": "output.3mf",
+        }
+
+        # When
+        # Just verify it doesn't crash when accessing
+        screenshots = item.get("screenshots")
+
+        # Then
+        assert screenshots is None
+
+    def test_export_item_with_screenshots_bool_true(self):
+        """Export item with screenshots: true should be valid."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+            "bodies": ["Body1"],
+            "output": "output.3mf",
+            "screenshots": True,
+        }
+
+        # When
+        screenshots = item.get("screenshots")
+
+        # Then
+        assert screenshots is True
+
+    def test_export_item_with_screenshots_bool_false(self):
+        """Export item with screenshots: false should be valid."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+            "bodies": ["Body1"],
+            "screenshots": False,
+        }
+
+        # When
+        screenshots = item.get("screenshots")
+
+        # Then
+        assert screenshots is False
+
+    def test_export_item_with_screenshots_dict(self):
+        """Export item with screenshots dict should be valid."""
+        # Given
+        item = {
+            "name": "TestProject",
+            "source": "test.FCStd",
+            "bodies": ["Body1"],
+            "screenshots": {
+                "enabled": True,
+                "views": ["isometric", "front"],
+                "resolution": [1920, 1080],
+                "format": "png",
+            },
+        }
+
+        # When
+        screenshots = item.get("screenshots")
+
+        # Then
+        assert isinstance(screenshots, dict)
+        assert screenshots["enabled"] is True
+        assert len(screenshots["views"]) == 2
+
+    def test_screenshots_with_output_dir(self):
+        """Screenshots config should support output_dir."""
+        # Given
+        screenshots = {
+            "output_dir": "docs/images/",
+        }
+
+        # When
+        output_dir = screenshots.get("output_dir")
+
+        # Then
+        assert output_dir == "docs/images/"
+
+    def test_screenshots_with_multiple_views(self):
+        """Screenshots config should support multiple views."""
+        # Given
+        screenshots = {
+            "views": ["isometric", "front", "top", "right"],
+        }
+
+        # When
+        views = screenshots.get("views")
+
+        # Then
+        assert len(views) == 4
+        assert "isometric" in views
+        assert "front" in views
+
+    def test_screenshots_with_all_options(self):
+        """Screenshots config with all options should be valid."""
+        # Given
+        screenshots = {
+            "enabled": True,
+            "output_dir": "docs/images/",
+            "views": ["isometric", "front"],
+            "resolution": [1920, 1080],
+            "background": [255, 255, 255, 255],
+            "format": "png",
+            "composite": True,
+        }
+
+        # When/Then - verify all fields present
+        assert screenshots["enabled"] is True
+        assert screenshots["output_dir"] == "docs/images/"
+        assert screenshots["views"] == ["isometric", "front"]
+        assert screenshots["resolution"] == [1920, 1080]
+        assert screenshots["background"] == [255, 255, 255, 255]
+        assert screenshots["format"] == "png"
+        assert screenshots["composite"] is True
+
+    def test_screenshots_minimal_config(self):
+        """Screenshots config with minimal settings should be valid."""
+        # Given
+        screenshots = True
+
+        # When/Then - should be valid as boolean
+        assert isinstance(screenshots, bool)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

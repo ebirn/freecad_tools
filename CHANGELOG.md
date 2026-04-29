@@ -5,6 +5,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Body screenshot generation via FreeCAD GUI (`screenshots:` config) for publication-ready PNG/JPGs.
+- `--name/-n` option to export a single named item from multi-item configs.
+
 ## [v0.3.0] - 2026-04-28
 
 ### Added
