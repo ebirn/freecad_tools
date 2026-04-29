@@ -85,6 +85,7 @@ python3 tools/export.py --help
 | `--config PATH` | `-c PATH` | Specify YAML config file path |
 | `--verbose` | `-v` | Enable debug logging output |
 | `--dry-run` | | Validate config without performing export |
+| `--name NAME` | `-n NAME` | Export only the item with this name (from multi-item config) |
 | `--help` | `-h` | Show usage information |
 
 **Config File Discovery** (when not specified):
@@ -432,7 +433,32 @@ This requires the FreeCAD GUI binary (not freecadcmd). On macOS it runs headless
 
 ---
 
-### 8. Generate Bill of Materials (BOM)
+### 8. Generate Publication Screenshots
+
+Generate publication-ready screenshots (Thingiverse/Printables) using the FreeCAD GUI renderer.
+
+```yaml
+export:
+  - name: Antenna
+    source: Antenna.FCStd
+    bodies: [MainBody, Feed001]
+    output: prints/Antenna.3mf
+    screenshots:
+      enabled: true
+      output_dir: docs/images/
+      views: [isometric, front, top]
+      resolution: [1920, 1080]
+      format: png
+      composite: true
+```
+
+Notes:
+- Requires the FreeCAD GUI binary (not `freecadcmd`).
+- Screenshot failures are non-fatal to the main export.
+
+---
+
+### 9. Generate Bill of Materials (BOM)
 
 Automatically extract parts lists from assemblies:
 
@@ -509,6 +535,19 @@ techdraw:                           # Optional: export technical drawings
   instructions: INSTRUCTIONS.md     # Optional: markdown file to include in PDF report
 ```
 
+### Screenshot Configuration
+
+```yaml
+screenshots:                        # Optional: generate PNG/JPG screenshots
+  enabled: true                     # Boolean, or use short form: screenshots: true
+  output_dir: docs/images           # Where to save images
+  views: [isometric, front, top]    # isometric/front/top/right/back/bottom/left
+  resolution: [1920, 1080]          # [width, height]
+  background: [255, 255, 255, 255]  # RGBA (currently best-effort)
+  format: png                       # png or jpg
+  composite: true                   # true: all bodies together; false: per-body
+```
+
 ### BOM Generation Configuration
 
 ```yaml
@@ -558,6 +597,12 @@ export:
       output_dir: docs
       format: pdf
       instructions: INSTRUCTIONS.md
+
+    # Screenshots for publication
+    screenshots:
+      enabled: true
+      output_dir: docs/images
+      views: [isometric, front]
 
     # Bill of materials
     bom:

@@ -278,6 +278,33 @@ class TestExportFunctionsIntegration:
             FreeCAD.closeDocument(doc.Name)
 
 
+class TestExampleFcstdIntegration:
+    """Integration tests that open the bundled example.FCStd."""
+
+    @skip_if_no_freecad
+    def test_open_example_fcstd_and_resolve_bodies(self, example_fcstd_file):
+        """Should open examples/example.FCStd and resolve known bodies by Name."""
+        import FreeCAD
+
+        doc = FreeCAD.open(str(example_fcstd_file))
+        try:
+            obj, resolved_name, resolved_label = fc_export.resolve_object_identifier(doc, "Body")
+            assert obj is not None
+            assert resolved_name == "Body"
+            assert resolved_label
+
+            obj2, resolved_name2, resolved_label2 = fc_export.resolve_object_identifier(doc, "Body001")
+            assert obj2 is not None
+            assert resolved_name2 == "Body001"
+            assert resolved_label2
+
+            # Both should have renderable shapes.
+            assert hasattr(obj, "Shape") and obj.Shape
+            assert hasattr(obj2, "Shape") and obj2.Shape
+        finally:
+            FreeCAD.closeDocument(doc.Name)
+
+
 class TestExportBodiesTo3MFIntegration:
     """Integration tests for 3MF export pipeline.
 

@@ -96,20 +96,7 @@ printables:
 
 ---
 
-### 4. Body Screenshot Generation [MEDIUM PRIORITY]
-**Status**: NOT STARTED
-**Branch**: `agent_screenshots_docs`
-**Effort**: Low (1-2 hours)
-
-Follow-ups for the screenshot feature that landed on main.
-
-**Tasks**:
-- [ ] Add integration tests with example.FCStd
-- [ ] Update README.md with screenshot usage documentation
-
----
-
-### 5. Refactor Export Core + Batch GUI Runs [HIGH PRIORITY]
+### 4. Refactor Export Core + Batch GUI Runs [HIGH PRIORITY]
 **Status**: NOT STARTED
 **Branch**: `agent_refactor_fc_export`
 **Effort**: Medium-High (4-8 hours)
@@ -124,6 +111,10 @@ Refactor `tools/fc_export.py` (core export orchestrator) to reduce complexity an
 - [ ] Define a simple IPC contract for GUI runs (inputs: config/name, outputs: artifacts + structured result)
 - [ ] Ensure non-GUI exports remain fast and do not require GUI binary
 - [ ] Add regression tests around the pipeline boundaries (unit) and one integration test that exercises GUI batching
+- [ ] Reduce GUI subprocess noise: keep logs structured in result JSON, emit concise summaries to stderr
+- [ ] Add basic screenshot output validation (detect near-uniform images and warn)
+- [ ] Add `--screenshots-only` / `--gui-only` mode to run GUI tasks without rebuilding 3MF (optional)
+- [ ] Add `--list-exports` to print available export item names (pairs with `--name`)
 
 ---
 

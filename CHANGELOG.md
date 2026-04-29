@@ -10,6 +10,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Body screenshot generation via FreeCAD GUI (`screenshots:` config) for publication-ready PNG/JPGs.
 - `--name/-n` option to export a single named item from multi-item configs.
 
+### Changed
+
+- README: Document screenshot exports (`screenshots:`) and the `--name/-n` CLI option.
+
+### Tests
+
+- Add FreeCAD integration coverage for opening `examples/example.FCStd` and resolving exported bodies.
+
 ## [v0.3.0] - 2026-04-28
 
 ### Added
