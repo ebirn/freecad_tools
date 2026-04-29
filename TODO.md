@@ -97,53 +97,33 @@ printables:
 ---
 
 ### 4. Body Screenshot Generation [MEDIUM PRIORITY]
-**Status**: IN PROGRESS
-**Branch**: `agent_body_screenshots`
-**Effort**: Medium (4-6 hours)
+**Status**: NOT STARTED
+**Branch**: `agent_screenshots_docs`
+**Effort**: Low (1-2 hours)
 
-Generate publication-ready screenshots of exported bodies for Thingiverse, Printables.com, and similar platforms.
-
-**Requirements**:
-- Support multiple view angles (isometric, front, top, right, back, bottom, left)
-- Configurable resolution (1920x1080 default)
-- PNG/JPG format options
-- Clean background (configurable color)
-- Composite or per-body rendering
-
-**Implementation**:
-- New `tools/body_screenshot.py` module (runs via FreeCAD GUI binary)
-- Uses FreeCAD's `ActiveView.saveImage()`
-- Config section in export.yml under `screenshots:`
-- Integration into main export pipeline (post-3MF generation)
-- Non-blocking: screenshot failures don't prevent main export
-
-**Config Example**:
-```yaml
-export:
-  - name: MyProject
-    source: project.FCStd
-    bodies: [Body1, Body2]
-    screenshots:
-      enabled: true
-      output_dir: docs/images/
-      views: [isometric, front, top]
-      resolution: [1920, 1080]
-      background: [255, 255, 255, 255]
-      format: png
-      composite: true
-```
+Follow-ups for the screenshot feature that landed on main.
 
 **Tasks**:
-- [x] Create `tools/body_screenshot.py` with camera control and image capture
-- [x] Extend config parsing in `fc_export.py` for screenshots section
-- [x] Integrate screenshot subprocess into export pipeline
-- [x] Add CLI flag `--name` to select single export from multi-item config
-- [x] Add unit tests for config parsing and default values
 - [ ] Add integration tests with example.FCStd
-- [ ] Update README.md with usage documentation
+- [ ] Update README.md with screenshot usage documentation
 
-- [x] Update example config file with screenshot examples
-- [x] Create comprehensive test config in tests/export_test_config.yml
+---
+
+### 5. Refactor Export Core + Batch GUI Runs [HIGH PRIORITY]
+**Status**: NOT STARTED
+**Branch**: `agent_refactor_fc_export`
+**Effort**: Medium-High (4-8 hours)
+
+Refactor `tools/fc_export.py` (core export orchestrator) to reduce complexity and improve maintainability.
+
+**Primary goal**: When an export item requires FreeCAD GUI (TechDraw, screenshots, etc.), batch all GUI-dependent steps into a single FreeCAD GUI launch per export run (or per export item), instead of launching FreeCAD multiple times.
+
+**Tasks**:
+- [ ] Refactor `fc_export.py` into clearer pipeline stages (config load, STL export, lib3mf, GUI tasks)
+- [ ] Introduce a single GUI session execution path for all GUI-required steps (TechDraw + screenshots)
+- [ ] Define a simple IPC contract for GUI runs (inputs: config/name, outputs: artifacts + structured result)
+- [ ] Ensure non-GUI exports remain fast and do not require GUI binary
+- [ ] Add regression tests around the pipeline boundaries (unit) and one integration test that exercises GUI batching
 
 ---
 
