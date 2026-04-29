@@ -353,13 +353,14 @@ def main():
 
             # Some FreeCAD builds expose FreeCADGui.showMainWindow(), others don't.
             # Avoid nested event loops here (they can deadlock); just pump events briefly.
+        QtWidgets = None  # noqa: N806
+        try:
+            from PySide6 import QtWidgets  # type: ignore[no-redef]  # noqa: N812
+        except ImportError:  # pragma: no cover
             try:
-                from PySide6 import QtWidgets  # noqa: N812
-            except ImportError:  # pragma: no cover
-                try:
-                    from PySide2 import QtWidgets  # noqa: N812
-                except ImportError:
-                    QtWidgets = None  # noqa: N806
+                from PySide2 import QtWidgets  # type: ignore[no-redef]  # noqa: N812
+            except ImportError:
+                QtWidgets = None  # noqa: N806
 
         def _pump_events(iterations: int = 50) -> None:
             if not QtWidgets:
