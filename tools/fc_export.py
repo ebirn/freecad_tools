@@ -53,6 +53,13 @@ def parse_args():
         action="store_true",
         help="Validate config without performing export",
     )
+    parser.add_argument(
+        "--name",
+        "-n",
+        type=str,
+        default=None,
+        help="Export only the item with this name (from multi-item config)",
+    )
     return parser.parse_args()
 
 
@@ -93,11 +100,14 @@ args = parse_args()
 # Check for verbose flag from CLI or environment
 verbose_cli = args.verbose
 dry_run_mode = args.dry_run
+name_filter = args.name
 
 # Check environment for verbose/log level (set by export.py)
 log_level_env = os.environ.get("FREECAD_TOOLS_LOG_LEVEL")
 if os.environ.get("FREECAD_TOOLS_DRY_RUN", "").lower() == "true":
     dry_run_mode = True
+if os.environ.get("FREECAD_TOOLS_NAME") and not name_filter:
+    name_filter = os.environ.get("FREECAD_TOOLS_NAME")
 
 # Configure logging (respects --verbose or env var)
 logger = configure_logging(verbose=verbose_cli, log_level_env=log_level_env)
@@ -817,6 +827,15 @@ def load_config():
                     logger.debug(f"Resolved bom.output '{bom['output']}' to: {resolved}")
                 bom["output"] = resolved
 
+        # Resolve nested paths in screenshots section
+        screenshot_cfg = item.get("screenshots")
+        if screenshot_cfg and isinstance(screenshot_cfg, dict):
+            if "output_dir" in screenshot_cfg and screenshot_cfg["output_dir"]:
+                resolved = resolve_relative_path(screenshot_cfg["output_dir"], base_dir)
+                if resolved != screenshot_cfg["output_dir"]:
+                    logger.debug(f"Resolved screenshots.output_dir '{screenshot_cfg['output_dir']}' to: {resolved}")
+                screenshot_cfg["output_dir"] = resolved
+
         # Validate body_source configuration
         is_valid, body_source_resolved, warning_msg = validate_body_source_config(item)
         if warning_msg:
@@ -1130,9 +1149,10 @@ def _find_venv_python():
 
 def _find_freecad_gui_binary():
     """
-    Find the FreeCAD GUI binary for TechDraw PDF export.
+    Find the FreeCAD GUI binary for TechDraw PDF export and screenshot generation.
 
-    TechDrawGui.exportPageAsPdf() requires the GUI binary (not freecadcmd).
+    TechDrawGui.exportPageAsPdf() and body screenshot generation require
+    the GUI binary (not freecadcmd).
     As of FreeCAD 1.1, there is no offline/headless API for pixel-perfect
     TechDraw PDF export — check future FreeCAD releases for improvements.
 
@@ -1315,6 +1335,170 @@ def _run_techdraw_pipeline(
 
     logger.error(f"PDF merge completed but file not found: {output_path}")
     return False
+
+
+def run_screenshot_generation(export_item, project_root):
+    """
+    Run screenshot generation for an export item.
+
+    This function runs body_screenshot.py via FreeCAD GUI binary
+    to generate screenshots of the exported bodies.
+
+    Args:
+        export_item: The export configuration dictionary
+        project_root: The project root directory
+
+    Returns:
+        Tuple (success: bool, result: dict) where result contains 'images' on success
+    """
+    logger.info(f"run_screenshot_generation called with export_item name: {export_item.get('name')}")
+    logger.info("About to try importing from body_screenshot")
+
+    # Set guard to prevent main() from being called during import
+    import sys as _sys
+
+    _sys._body_screenshot_skip_main = True  # noqa: SLF001
+
+    try:
+        from body_screenshot import (
+            build_screenshot_config,
+            get_screenshot_config,
+            validate_screenshot_config,
+        )
+
+        logger.info("Successfully imported body_screenshot functions")
+    except Exception as e:
+        logger.error(f"Failed to import from body_screenshot: {e}")
+        return False, {"success": False, "images": [], "error": f"Import error: {e}"}
+    finally:
+        # Clean up the guard
+        if hasattr(_sys, "_body_screenshot_skip_main"):
+            del _sys._body_screenshot_skip_main
+
+    # Get screenshot config from export item
+    raw_screenshot_cfg = get_screenshot_config(export_item)
+    logger.info(f"Raw screenshot config from export item: {raw_screenshot_cfg}")
+
+    if not raw_screenshot_cfg.get("enabled", False):
+        logger.info("Screenshots not enabled for this export item (skipping)")
+        return True, {"success": True, "images": [], "error": None, "skipped": True}
+
+    logger.info("Screenshots enabled - proceeding with generation")
+
+    # Validate config
+    try:
+        validate_screenshot_config(raw_screenshot_cfg)
+    except ValueError as e:
+        logger.warning(f"Invalid screenshot config: {e}")
+        return False, {"success": False, "images": [], "error": str(e)}
+
+    # Build full screenshot config (preflight only; GUI process reads YAML directly)
+    build_screenshot_config(export_item, raw_screenshot_cfg)
+
+    # Find FreeCAD GUI binary
+    freecad_gui = _find_freecad_gui_binary()
+    logger.info(f"Screenshot GUI binary path: {freecad_gui}")
+    if freecad_gui:
+        logger.info(f"GUI binary exists: {os.path.exists(freecad_gui)}")
+    if not freecad_gui:
+        logger.warning(
+            "FreeCAD GUI binary not found. Screenshot generation requires the GUI binary. "
+            "Set FREECAD_GUI_BINARY environment variable or install FreeCAD in a standard location."
+        )
+        return (
+            False,
+            {
+                "success": False,
+                "images": [],
+                "error": "FreeCAD GUI binary not found. Screenshot generation requires GUI binary.",
+            },
+        )
+
+    # Ensure source file exists (resolved earlier in load_config)
+    source_path = export_item.get("source", "")
+    if not os.path.exists(source_path):
+        logger.warning(f"Screenshot source file not found: {source_path}")
+        return False, {"success": False, "images": [], "error": f"Source file not found: {source_path}"}
+
+    # Create temp directory for result exchange only; screenshot script reads YAML config directly.
+    with tempfile.TemporaryDirectory(prefix="screenshot_") as tmpdir:
+        result_path = os.path.join(tmpdir, "result.json")
+
+        tools_dir = os.path.dirname(os.path.abspath(__file__))
+        body_screenshot_path = os.path.join(tools_dir, "body_screenshot.py")
+
+        # IMPORTANT: invoking the GUI binary with a script path can leave the full app open
+        # and/or depend on the Qt main loop. For automation we run in console mode (-c)
+        # and exec() the script, then rely on the script's sys.exit().
+        cmd = [
+            freecad_gui,
+            "-c",
+            (
+                "import os,sys; "
+                f"os.chdir({tmpdir!r}); "
+                f"sys.path.insert(0,{tools_dir!r}); "
+                f"exec(open({body_screenshot_path!r}).read())"
+            ),
+        ]
+
+        env = os.environ.copy()
+        # Pass selection to the GUI process; body_screenshot.py will read YAML itself.
+        if os.environ.get("FREECAD_TOOLS_CONFIG"):
+            env["FREECAD_TOOLS_CONFIG"] = os.environ["FREECAD_TOOLS_CONFIG"]
+        elif CONFIG_FILE:
+            env["FREECAD_TOOLS_CONFIG"] = str(CONFIG_FILE)
+        if project_root:
+            env["FREECAD_TOOLS_PROJECT_ROOT"] = str(project_root)
+        if export_item.get("name"):
+            env["FREECAD_TOOLS_NAME"] = export_item.get("name")
+        env["FREECAD_TOOLS_SCREENSHOT_RESULT"] = result_path
+        # Avoid GUI hangs on some FreeCAD builds.
+        env.setdefault("FREECAD_TOOLS_SCREENSHOT_RECOMPUTE", "false")
+
+        logger.info(f"Generating screenshots via GUI: {freecad_gui}")
+        logger.debug(f"Command: {' '.join(cmd)}")
+        logger.debug(f"Working directory: {project_root or os.getcwd()}")
+
+        gui_result = subprocess.run(
+            cmd,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            cwd=(project_root or os.getcwd()),
+        )
+
+        logger.debug(f"Screenshot GUI exit code: {gui_result.returncode}")
+
+        if gui_result.stdout:
+            stdout_str = gui_result.stdout
+            # Print full stdout if not too long, otherwise truncate
+            if len(stdout_str) > 2000:
+                logger.info(f"Screenshot stdout (first 1000 chars): {stdout_str[:1000]}")
+                logger.info(f"Screenshot stdout (last 1000 chars): {stdout_str[-1000:]}")
+            else:
+                logger.info(f"Screenshot stdout: {stdout_str}")
+        if gui_result.stderr:
+            stderr_str = gui_result.stderr
+            if len(stderr_str) > 2000:
+                logger.warning(f"Screenshot stderr (first 1000 chars): {stderr_str[:1000]}")
+                logger.warning(f"Screenshot stderr (last 1000 chars): {stderr_str[-1000:]}")
+            else:
+                logger.warning(f"Screenshot stderr: {stderr_str}")
+
+        # Read result
+        if os.path.exists(result_path):
+            with open(result_path, encoding="utf-8") as f:
+                result = json.load(f)
+            return gui_result.returncode == 0, result
+
+        # No result file
+        error_msg = f"Screenshot GUI produced no result file. Exit code: {gui_result.returncode}"
+        logger.error(error_msg)
+        return (
+            False,
+            {"success": False, "images": [], "error": error_msg, "exit_code": gui_result.returncode},
+        )
 
 
 def _col_index_to_letter(col_idx):
@@ -1652,8 +1836,16 @@ def main():
         logger.info("DRY-RUN MODE: Validating config without performing export")
         try:
             exports = load_config()
+
+            # Filter exports by name if --name flag was provided (for consistency)
+            if name_filter:
+                exports = [item for item in exports if item.get("name") == name_filter]
+
             if not exports:
-                logger.warning("No exports defined in config - exports list is empty or None")
+                if name_filter:
+                    logger.warning(f"No export item found with name '{name_filter}'")
+                else:
+                    logger.warning("No exports defined in config - exports list is empty or None")
                 sys.exit(0)
 
             logger.info(f"Found {len(exports)} export(s) in config:")
@@ -1685,6 +1877,17 @@ def main():
 
     exports = load_config()
     logger.debug(f"Loaded {len(exports)} exports")
+
+    # Filter exports by name if --name flag was provided
+    if name_filter:
+        filtered_exports = [item for item in exports if item.get("name") == name_filter]
+        if not filtered_exports:
+            logger.warning(f"No export item found with name '{name_filter}'")
+            logger.info(f"Available export names: {[item.get('name', 'unnamed') for item in exports]}")
+            sys.exit(1)
+        exports = filtered_exports
+        logger.info(f"Filtered to 1 export item: {name_filter}")
+
     if not exports:
         log_warning_msg("No exports defined in config - exports list is empty or None")
         sys.exit(0)
@@ -1811,6 +2014,25 @@ def main():
 
             file_size = os.path.getsize(output_abs)
             log_success(f"Output verified: {os.path.basename(output_abs)} ({_format_bytes(file_size)})")
+
+            # Process screenshots if configured
+            screenshot_cfg = item.get("screenshots")
+            logger.info(f"Screenshot config from item: {screenshot_cfg}")
+            if screenshot_cfg:
+                logger.info("Screenshot config is truthy, generating screenshots")
+                log_action("Generating screenshots")
+                screenshot_success, screenshot_result = run_screenshot_generation(item, PROJECT_ROOT or os.getcwd())
+                if screenshot_result.get("success"):
+                    images = screenshot_result.get("images", [])
+                    if images:
+                        log_success(f"Generated {len(images)} screenshots")
+                        for img in images:
+                            logger.debug(f"  - {img.get('path', 'unknown')}")
+                    elif screenshot_result.get("skipped"):
+                        logger.debug("Screenshots skipped (not enabled)")
+                else:
+                    error = screenshot_result.get("error", "Unknown error")
+                    log_warning_msg(f"Screenshot generation failed (non-fatal): {error}")
 
             # Process TechDraw pages if configured
             if techdraw_config:

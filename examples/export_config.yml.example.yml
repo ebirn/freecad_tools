@@ -112,3 +112,33 @@ export:
       output: docs/bom.csv              # CSV output path
       fields:
         - material                       # Optional custom fields
+
+  # Screenshot generation example for Thingiverse/Printables publication
+  - name: MyProject_With_Screenshots
+    source: MyProject.FCStd
+    bodies:
+      - MainBody
+      - SupportBracket
+    output: prints/MyProject.3mf
+
+    # Screenshot generation for publication platforms
+    screenshots:
+      enabled: true                     # Enable screenshot generation
+      output_dir: docs/images/          # Where to save screenshot images
+      views:                            # List of view angles to capture
+        - isometric                     # SW isometric (default)
+        - front                         # Front view
+        - top                           # Top-down view
+        - right                         # Right side view
+      resolution: [1920, 1080]          # Image dimensions [width, height]
+      background: [255, 255, 255, 255]  # RGBA background color (white)
+      format: png                       # Output format: png or jpg
+      composite: true                   # True = all bodies together, False = per-body
+
+  # Minimal screenshot example (uses defaults)
+  - name: SimpleScreenshots
+    source: Simple.FCStd
+    bodies:
+      - Body
+    screenshots: true                 # Short form: enabled with all defaults
+    output: prints/Simple.3mf

@@ -495,6 +495,18 @@ These features are not yet implemented and are good candidates for new `agent_` 
 - **3MF validation**: Use `unzip -l output.3mf` to inspect structure
 - **Mesh counting**: Parse 3D/3dmodel.model XML for vertex/triangle stats
 
+### FreeCAD Automation Findings (Screenshots, TechDraw)
+
+Practical learnings from implementing TechDraw export and body screenshot generation.
+
+- **Avoid passing arbitrary CLI args to `freecadcmd`**: it parses argv and may reject unknown flags. Prefer env vars (`FREECAD_TOOLS_CONFIG`, `FREECAD_TOOLS_PROJECT_ROOT`, `FREECAD_TOOLS_NAME`).
+- **Prefer `FreeCAD` GUI binary `-c` for automation**: invoking the GUI binary with a script path may open the full app and not exit. `FreeCAD -c "...exec(open('script.py').read())"` is more reliable.
+- **Do not start your own Qt event loop**: nested `QEventLoop.exec_()` can hang. If you must, pump events via bounded `QApplication.processEvents()`.
+- **`doc.recompute()` can hang** in GUI builds depending on document/workbench threads; make recompute opt-in for screenshots.
+- **GUI available does not imply a 3D view exists**: in `-c` mode, `FreeCADGui` can import but there may be no 3D MDI view. Screenshot code must create/activate a 3D view before calling `activeView().saveImage()`.
+- **`sys.exit()` may not terminate GUI subprocesses**: for automation subprocesses, consider `os._exit()` after writing the result file to avoid Qt threads keeping the process alive.
+- **Ignore noisy optional framework warnings** unless they block (e.g. missing `3DconnexionNavlib.framework` on macOS).
+
 ### Test Output Directory
 
 **All test/debug output goes in `test_output/` at the project root.**

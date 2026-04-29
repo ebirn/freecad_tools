@@ -51,6 +51,13 @@ def parse_args():
         action="store_true",
         help="Validate config without performing export",
     )
+    parser.add_argument(
+        "--name",
+        "-n",
+        type=str,
+        default=None,
+        help="Export only the item with this name (from multi-item config)",
+    )
     return parser.parse_args()
 
 
@@ -114,6 +121,8 @@ def main():
         env["FREECAD_TOOLS_LIB3MF_PYTHON"] = sys.executable
         if CONFIG_FILE:
             env["FREECAD_TOOLS_CONFIG"] = str(CONFIG_FILE)
+        if args.name:
+            env["FREECAD_TOOLS_NAME"] = args.name
 
         # Build arguments for fc_export.py - config first, then flags
         fc_args = [sys.executable, str(FC_EXPORT_SCRIPT)]
@@ -128,6 +137,9 @@ def main():
     fc_args = [sys.executable, str(FC_EXPORT_SCRIPT)]
     if CONFIG_FILE:
         fc_args.append(str(CONFIG_FILE))
+    if args.name:
+        fc_args.append("--name")
+        fc_args.append(args.name)
 
     # Pass PROJECT_ROOT and CONFIG_FILE via environment variables for subprocess
     env = os.environ.copy()
@@ -135,6 +147,8 @@ def main():
     env["FREECAD_TOOLS_LIB3MF_PYTHON"] = sys.executable  # Pass original Python with lib3mf
     if CONFIG_FILE:
         env["FREECAD_TOOLS_CONFIG"] = str(CONFIG_FILE)
+    if args.name:
+        env["FREECAD_TOOLS_NAME"] = args.name
     if args.verbose:
         env["FREECAD_TOOLS_LOG_LEVEL"] = "DEBUG"
 
