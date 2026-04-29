@@ -1352,31 +1352,31 @@ def run_screenshot_generation(export_item, project_root):
         Tuple (success: bool, result: dict) where result contains 'images' on success
     """
     logger.info(f"run_screenshot_generation called with export_item name: {export_item.get('name')}")
-    logger.info("About to try importing from body_screenshot")
 
-    # Set guard to prevent main() from being called during import
+    # Load the helper module from tools/ explicitly so pylint/CI doesn't depend on PYTHONPATH.
+    # Also set a guard so importing the file does not execute main().
+    import importlib.util
     import sys as _sys
 
     _sys._body_screenshot_skip_main = True  # noqa: SLF001
-
     try:
-        from body_screenshot import (
-            build_screenshot_config,
-            get_screenshot_config,
-            validate_screenshot_config,
-        )
-
-        logger.info("Successfully imported body_screenshot functions")
+        tools_dir = os.path.dirname(os.path.abspath(__file__))
+        body_screenshot_py = os.path.join(tools_dir, "body_screenshot.py")
+        spec = importlib.util.spec_from_file_location("body_screenshot", body_screenshot_py)
+        if not spec or not spec.loader:
+            raise ImportError("Unable to load body_screenshot module spec")
+        body_screenshot = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(body_screenshot)
+        logger.info("Successfully loaded body_screenshot module")
     except Exception as e:
-        logger.error(f"Failed to import from body_screenshot: {e}")
+        logger.error(f"Failed to load body_screenshot module: {e}")
         return False, {"success": False, "images": [], "error": f"Import error: {e}"}
     finally:
-        # Clean up the guard
         if hasattr(_sys, "_body_screenshot_skip_main"):
             del _sys._body_screenshot_skip_main
 
     # Get screenshot config from export item
-    raw_screenshot_cfg = get_screenshot_config(export_item)
+    raw_screenshot_cfg = body_screenshot.get_screenshot_config(export_item)
     logger.info(f"Raw screenshot config from export item: {raw_screenshot_cfg}")
 
     if not raw_screenshot_cfg.get("enabled", False):
@@ -1387,13 +1387,13 @@ def run_screenshot_generation(export_item, project_root):
 
     # Validate config
     try:
-        validate_screenshot_config(raw_screenshot_cfg)
+        body_screenshot.validate_screenshot_config(raw_screenshot_cfg)
     except ValueError as e:
         logger.warning(f"Invalid screenshot config: {e}")
         return False, {"success": False, "images": [], "error": str(e)}
 
     # Build full screenshot config (preflight only; GUI process reads YAML directly)
-    build_screenshot_config(export_item, raw_screenshot_cfg)
+    body_screenshot.build_screenshot_config(export_item, raw_screenshot_cfg)
 
     # Find FreeCAD GUI binary
     freecad_gui = _find_freecad_gui_binary()
