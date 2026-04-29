@@ -118,6 +118,24 @@ Refactor `tools/fc_export.py` (core export orchestrator) to reduce complexity an
 
 ---
 
+### 5. PrusaSlicer CLI Slicing Automation [MEDIUM PRIORITY]
+**Status**: NOT STARTED
+**Branch**: `agent_prusaslicer_cli`
+**Effort**: Medium (2-4 hours)
+
+Research and add optional automation to slice exported 3MFs via PrusaSlicer CLI.
+
+**Research**:
+- [ ] Confirm supported PrusaSlicer CLI flags on macOS (`PrusaSlicer --help`, `--help-fff`)
+- [ ] Determine best way to select profiles: `--printer-profile`, `--print-profile`, `--material-profile` and/or `--load` config bundles
+- [ ] Decide output conventions for G-code (per-export-item) and where to write files
+
+**Implementation ideas**:
+- [ ] Add optional `slicer:` section in export config (profile names, config files, threads, output paths)
+- [ ] Support `--export-gcode` (and optionally `--export-3mf` for normalized 3MF output)
+- [ ] Consider `--datadir` to isolate slicer profiles for reproducible builds
+- [ ] Ensure slicing can be run independently of FreeCAD (operate on generated 3MF)
+
 ## Notes
 
 - Feature branches use `agent_<feature_name>` naming convention
