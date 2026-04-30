@@ -15,11 +15,35 @@ import logging
 from pathlib import Path
 from typing import Any
 
-try:
-    import FreeCAD  # noqa: F401
-    from PySide2 import QtWidgets
+QtWidgets = None
+FREECAD_AVAILABLE = False
+QT_AVAILABLE = False
 
-    FREECAD_AVAILABLE = True
+try:
+    import FreeCAD  # type: ignore
+
+    try:
+        from unittest.mock import MagicMock
+
+        if isinstance(FreeCAD, MagicMock):
+            FreeCAD = None  # type: ignore[assignment]
+    except Exception:
+        pass
+
+    if FreeCAD is not None:
+        FREECAD_AVAILABLE = True
+
+        # FreeCAD bundles either PySide6 (newer) or PySide2 (older).
+        try:
+            from PySide6 import QtWidgets as _QtWidgets  # noqa: N812
+        except ImportError:  # pragma: no cover
+            try:
+                from PySide2 import QtWidgets as _QtWidgets  # noqa: N812
+            except ImportError:
+                _QtWidgets = None
+
+        QtWidgets = _QtWidgets
+        QT_AVAILABLE = QtWidgets is not None
 except ImportError:
     FREECAD_AVAILABLE = False
 
@@ -35,99 +59,98 @@ logging.basicConfig(level=logging.INFO, format="macro_helper - %(levelname)s - %
 logger = logging.getLogger(__name__)
 
 
-class MacroConfigDialog(QtWidgets.QDialog):
-    """
-    A dialog for configuring macro parameters.
-    Allows users to specify object names/labels and parameter values.
-    """
+if QT_AVAILABLE:
 
-    def __init__(self, parent=None, title="Macro Configuration", fields: list[dict[str, Any]] = None):
-        super().__init__(parent)
-        self.setWindowTitle(title)
-        self.fields = fields or []
-        self.values = {}
-        self.init_ui()
+    class MacroConfigDialog(QtWidgets.QDialog):
+        """A dialog for configuring macro parameters."""
 
-    def init_ui(self):
-        """Initialize the dialog UI."""
-        layout = QtWidgets.QVBoxLayout()
+        def __init__(self, parent=None, title="Macro Configuration", fields: list[dict[str, Any]] | None = None):
+            super().__init__(parent)
+            self.setWindowTitle(title)
+            self.fields = fields or []
+            self.values: dict[str, Any] = {}
+            self.input_widgets: dict[str, tuple[Any, str]] = {}
+            self.init_ui()
 
-        # Add fields based on configuration
-        self.input_widgets = {}
-        for field in self.fields:
-            field_name = field.get("name")
-            field_type = field.get("type", "text")
-            label_text = field.get("label", field_name)
-            default_value = field.get("default", "")
-            help_text = field.get("help", "")
+        def init_ui(self) -> None:
+            """Initialize the dialog UI."""
+            layout = QtWidgets.QVBoxLayout()
 
-            # Create label
-            label = QtWidgets.QLabel(label_text)
-            layout.addWidget(label)
+            for field in self.fields:
+                field_name = field.get("name")
+                field_type = field.get("type", "text")
+                label_text = field.get("label", field_name)
+                default_value = field.get("default", "")
+                help_text = field.get("help", "")
 
-            # Create input widget based on type
-            if field_type == "text":
-                widget = QtWidgets.QLineEdit()
-                widget.setText(str(default_value))
-            elif field_type == "number":
-                widget = QtWidgets.QSpinBox()
-                widget.setValue(int(default_value) if default_value else 0)
-            elif field_type == "float":
-                widget = QtWidgets.QDoubleSpinBox()
-                widget.setValue(float(default_value) if default_value else 0.0)
-            elif field_type == "list":
-                widget = QtWidgets.QListWidget()
-                items = field.get("items", [])
-                for item in items:
-                    widget.addItem(str(item))
-            elif field_type == "checkbox":
-                widget = QtWidgets.QCheckBox()
-                widget.setChecked(bool(default_value))
-            else:
-                # Default to text
-                widget = QtWidgets.QLineEdit()
-                widget.setText(str(default_value))
+                label = QtWidgets.QLabel(label_text)
+                layout.addWidget(label)
 
-            # Add help text if provided
-            if help_text:
-                help_label = QtWidgets.QLabel(f"  {help_text}")
-                help_label.setStyleSheet("color: gray; font-size: 10px;")
-                layout.addWidget(help_label)
+                if field_type == "text":
+                    widget = QtWidgets.QLineEdit()
+                    widget.setText(str(default_value))
+                elif field_type == "number":
+                    widget = QtWidgets.QSpinBox()
+                    widget.setValue(int(default_value) if default_value else 0)
+                elif field_type == "float":
+                    widget = QtWidgets.QDoubleSpinBox()
+                    widget.setValue(float(default_value) if default_value else 0.0)
+                elif field_type == "list":
+                    widget = QtWidgets.QListWidget()
+                    for item in field.get("items", []):
+                        widget.addItem(str(item))
+                elif field_type == "checkbox":
+                    widget = QtWidgets.QCheckBox()
+                    widget.setChecked(bool(default_value))
+                else:
+                    widget = QtWidgets.QLineEdit()
+                    widget.setText(str(default_value))
 
-            layout.addWidget(widget)
-            self.input_widgets[field_name] = (widget, field_type)
+                if help_text:
+                    help_label = QtWidgets.QLabel(f"  {help_text}")
+                    help_label.setStyleSheet("color: gray; font-size: 10px;")
+                    layout.addWidget(help_label)
 
-        # Add buttons
-        button_layout = QtWidgets.QHBoxLayout()
-        ok_button = QtWidgets.QPushButton("OK")
-        cancel_button = QtWidgets.QPushButton("Cancel")
+                layout.addWidget(widget)
+                self.input_widgets[field_name] = (widget, field_type)
 
-        ok_button.clicked.connect(self.accept)
-        cancel_button.clicked.connect(self.reject)
+            button_layout = QtWidgets.QHBoxLayout()
+            ok_button = QtWidgets.QPushButton("OK")
+            cancel_button = QtWidgets.QPushButton("Cancel")
 
-        button_layout.addWidget(ok_button)
-        button_layout.addWidget(cancel_button)
-        layout.addLayout(button_layout)
+            ok_button.clicked.connect(self.accept)
+            cancel_button.clicked.connect(self.reject)
 
-        self.setLayout(layout)
-        self.setMinimumWidth(400)
+            button_layout.addWidget(ok_button)
+            button_layout.addWidget(cancel_button)
+            layout.addLayout(button_layout)
 
-    def get_values(self) -> dict[str, Any]:
-        """Get the values entered by the user."""
-        values = {}
-        for field_name, (widget, field_type) in self.input_widgets.items():
-            if field_type == "text":
-                values[field_name] = widget.text()
-            elif field_type == "number":
-                values[field_name] = widget.value()
-            elif field_type == "float":
-                values[field_name] = widget.value()
-            elif field_type == "list":
-                selected_items = [item.text() for item in widget.selectedItems()]
-                values[field_name] = selected_items
-            elif field_type == "checkbox":
-                values[field_name] = widget.isChecked()
-        return values
+            self.setLayout(layout)
+            self.setMinimumWidth(400)
+
+        def get_values(self) -> dict[str, Any]:
+            """Get the values entered by the user."""
+            values: dict[str, Any] = {}
+            for field_name, (widget, field_type) in self.input_widgets.items():
+                if field_type == "text":
+                    values[field_name] = widget.text()
+                elif field_type == "number":
+                    values[field_name] = widget.value()
+                elif field_type == "float":
+                    values[field_name] = widget.value()
+                elif field_type == "list":
+                    values[field_name] = [item.text() for item in widget.selectedItems()]
+                elif field_type == "checkbox":
+                    values[field_name] = widget.isChecked()
+            return values
+
+else:
+
+    class MacroConfigDialog:  # pragma: no cover
+        """Placeholder dialog when Qt is unavailable."""
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            raise RuntimeError("QtWidgets is not available in this environment")
 
 
 def get_object_by_identifier(doc, identifier: str) -> object | None:
@@ -260,8 +283,8 @@ def show_config_dialog(title: str = "Configuration", fields: list[dict[str, Any]
     Returns:
         Dictionary of field values if OK clicked, None if cancelled
     """
-    if not FREECAD_AVAILABLE:
-        logger.error("FreeCAD/PySide2 not available for dialog")
+    if not (FREECAD_AVAILABLE and QT_AVAILABLE):
+        logger.error("FreeCAD/Qt not available for dialog")
         return None
 
     dialog = MacroConfigDialog(title=title, fields=fields or [])
