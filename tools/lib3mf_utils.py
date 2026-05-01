@@ -510,13 +510,24 @@ def create_3mf_from_stls(
                 transform_data = transforms[i]
                 rotation = transform_data.get("rotation")
                 position = transform_data.get("position")
-                transform = create_euler_transform(rotation, position)
-                logger.info(f"Applied transform to {body_label}: rotation={rotation}, position={position}")
+                try:
+                    transform = create_euler_transform(rotation, position)
+                    logger.info(f"Applied transform to {body_label}: rotation={rotation}, position={position}")
+                except Exception as e:
+                    logger.warning(f"Failed to build transform for {body_label}: {e}; using identity transform instead")
+                    transform = wrapper.GetIdentityTransform()
             else:
                 transform = wrapper.GetIdentityTransform()
 
-            # Add to build with the specified transform
-            model.AddBuildItem(mesh_obj, transform)
+            # Add to build with the specified transform.
+            # Some lib3mf bindings/configurations reject specific transform payloads
+            # with low-level errors like "invalid index". Fall back to identity
+            # so one bad transform does not abort the entire export.
+            try:
+                model.AddBuildItem(mesh_obj, transform)
+            except Exception as e:
+                logger.warning(f"Failed to add build item with transform for {body_label}: {e}; retrying identity")
+                model.AddBuildItem(mesh_obj, wrapper.GetIdentityTransform())
 
         # Add metadata if provided
         if metadata or template_metadata:
