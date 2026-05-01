@@ -9,14 +9,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 - Body screenshot generation via FreeCAD GUI (`screenshots:` config) for publication-ready PNG/JPGs.
 - `--name/-n` option to export a single named item from multi-item configs.
+- `--list-exports` option to print configured export item names and exit.
+- `--gui-only` and `--screenshots-only` modes to run GUI tasks without rebuilding 3MF output.
+- `--gui-session item|run` mode to choose per-item GUI execution or a shared GUI session for the full run.
+- Overall run statistics summary with aggregated timings for open/export/gui/shared-gui/total.
+- `make export` target for practical full-feature export runs with test config.
 
 ### Changed
 
-- README: Document screenshot exports (`screenshots:`) and the `--name/-n` CLI option.
+- README: Document GUI mode flags, `--gui-session`, and `make export` / `make clean` workflows.
+- Shared GUI session runner now handles both TechDraw and screenshot tasks in one queued run path.
+
+### Fixed
+
+- Preserve CLI mode flags across `freecadcmd` re-exec via environment propagation.
+- Fallback to identity transform in lib3mf build-item creation to avoid intermittent `invalid index` failures.
 
 ### Tests
 
 - Add FreeCAD integration coverage for opening `examples/example.FCStd` and resolving exported bodies.
+- Add regression tests for run-level timing summary formatting and shared GUI job payload construction.
 
 ## [v0.3.0] - 2026-04-28
 
