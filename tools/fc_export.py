@@ -278,6 +278,142 @@ def summarize_subprocess_stderr(stderr_text, limit=240):
     return f"{compact[:limit]}..."
 
 
+def validate_slicer_config(export_item):
+    """Validate slicer config and return normalized warning/error state."""
+    slicer = export_item.get("slicer")
+    if not slicer:
+        return True, None
+    if not isinstance(slicer, dict):
+        return False, "slicer must be a mapping"
+
+    enabled = slicer.get("enabled", False)
+    if not enabled:
+        return True, None
+
+    engine = slicer.get("engine")
+    if engine not in ("prusa", "orca"):
+        return False, "slicer.engine must be one of: prusa, orca"
+
+    engine_cfg = slicer.get(engine, {})
+    if engine_cfg is None:
+        engine_cfg = {}
+    if not isinstance(engine_cfg, dict):
+        return False, f"slicer.{engine} must be a mapping"
+
+    output_name = slicer.get("output_name")
+    if output_name is not None and not isinstance(output_name, str):
+        return False, "slicer.output_name must be a string"
+
+    extra_args = engine_cfg.get("extra_args", [])
+    if extra_args and (not isinstance(extra_args, list) or not all(isinstance(arg, str) for arg in extra_args)):
+        return False, f"slicer.{engine}.extra_args must be a list of strings"
+
+    has_template = bool(export_item.get("template"))
+    use_config_bundle = bool(slicer.get("use_config_bundle", False))
+    config_bundle = slicer.get("config_bundle")
+    profile_keys = ["printer_profile", "print_profile", "material_profile"]
+    has_profiles = all(bool(engine_cfg.get(key)) for key in profile_keys)
+
+    if use_config_bundle and not config_bundle:
+        return False, "slicer.config_bundle is required when slicer.use_config_bundle=true"
+
+    if not has_template and not has_profiles and not use_config_bundle:
+        return (
+            False,
+            "slicer requires either profiles (printer_profile/print_profile/material_profile) "
+            "or use_config_bundle=true when no export template is configured",
+        )
+
+    return True, None
+
+
+def _resolve_slicer_binary(slicer_config):
+    """Resolve slicer executable name/path for selected engine."""
+    engine = slicer_config.get("engine")
+    binary_override = slicer_config.get("binary")
+    if binary_override:
+        return binary_override
+    if engine == "prusa":
+        return "prusa-slicer"
+    return "orca-slicer"
+
+
+def _format_slicer_output_name(template, export_name, engine):
+    """Format output_name template for slicer gcode outputs."""
+    date_token = time.strftime("%Y%m%d")
+    value = template.format(name=export_name, engine=engine, date=date_token)
+    return "".join(c if c.isalnum() or c in ("-", "_", ".") else "_" for c in value)
+
+
+def build_slicer_command(export_item, output_3mf_path):
+    """Build slicer CLI command for a generated 3MF output."""
+    slicer = export_item.get("slicer", {})
+    if not slicer.get("enabled", False):
+        return None, None
+
+    engine = slicer["engine"]
+    engine_cfg = slicer.get(engine, {}) or {}
+    binary = _resolve_slicer_binary(slicer)
+
+    output_dir = slicer.get("output_dir") or os.path.dirname(output_3mf_path)
+    os.makedirs(output_dir, exist_ok=True)
+    output_name_template = slicer.get("output_name", "{name}_{engine}_{date}.gcode")
+    output_name = _format_slicer_output_name(output_name_template, export_item.get("name", "export"), engine)
+    output_path = os.path.join(output_dir, output_name)
+
+    cmd = [binary, "--export-gcode", output_3mf_path, "--output", output_path]
+
+    if slicer.get("use_config_bundle", False) and slicer.get("config_bundle"):
+        cmd.extend(["--load", slicer["config_bundle"]])
+
+    profile_map = {
+        "printer_profile": "--printer-profile",
+        "print_profile": "--print-profile",
+        "material_profile": "--material-profile",
+    }
+    for key, flag in profile_map.items():
+        value = engine_cfg.get(key)
+        if value:
+            cmd.extend([flag, value])
+
+    cmd.extend(engine_cfg.get("extra_args", []))
+    return cmd, output_path
+
+
+def run_slicer_for_export_item(export_item, output_3mf_path):
+    """Run optional slicer stage after 3MF export."""
+    cmd, output_path = build_slicer_command(export_item, output_3mf_path)
+    if not cmd:
+        return True
+
+    cmd_display = " ".join(cmd)
+    log_action(f"Slicer command: {cmd_display}")
+
+    slicer = export_item.get("slicer", {})
+    slicer_dry_run = bool(slicer.get("dry_run", False) or dry_run_mode)
+    if slicer_dry_run:
+        log_action("Skipping slicer execution in dry-run mode")
+        return True
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+    except Exception as exc:
+        log_failure(f"Slicer execution failed: {exc}")
+        return False
+
+    if result.returncode != 0:
+        stderr_summary = summarize_subprocess_stderr(result.stderr)
+        log_failure(f"Slicer failed (exit {result.returncode}): {stderr_summary}")
+        return False
+
+    if output_path and os.path.exists(output_path):
+        file_size = os.path.getsize(output_path)
+        log_success(f"Slicer output generated: {os.path.basename(output_path)} ({_format_bytes(file_size)})")
+    else:
+        log_warning_msg("Slicer completed but output file was not found at expected path")
+    return True
+
+
 def build_gui_batch_config(item, source_path, project_root, temp_dir):
     """Build JSON-serializable config payload for batched GUI subprocess."""
     screenshot_cfg = item.get("screenshots") if isinstance(item.get("screenshots"), dict) else {}
@@ -1392,6 +1528,19 @@ def load_config():
                     logger.debug(f"Resolved screenshots.output_dir '{screenshot_cfg['output_dir']}' to: {resolved}")
                 screenshot_cfg["output_dir"] = resolved
 
+        # Resolve nested paths in slicer section
+        slicer_cfg = item.get("slicer")
+        if slicer_cfg and isinstance(slicer_cfg, dict):
+            for nested_path in ["output_dir", "config_bundle", "binary"]:
+                if nested_path in slicer_cfg and slicer_cfg[nested_path]:
+                    # Only resolve binary as a path if caller provided path-like content
+                    if nested_path == "binary" and os.path.sep not in str(slicer_cfg[nested_path]):
+                        continue
+                    resolved = resolve_relative_path(slicer_cfg[nested_path], base_dir)
+                    if resolved != slicer_cfg[nested_path]:
+                        logger.debug(f"Resolved slicer.{nested_path} '{slicer_cfg[nested_path]}' to: {resolved}")
+                    slicer_cfg[nested_path] = resolved
+
         # Validate body_source configuration
         is_valid, body_source_resolved, warning_msg = validate_body_source_config(item)
         if warning_msg:
@@ -1401,6 +1550,12 @@ def load_config():
             sys.exit(1)
         # Store resolved body_source in item for later use
         item["_body_source"] = body_source_resolved
+
+        # Validate optional slicer configuration
+        slicer_valid, slicer_error = validate_slicer_config(item)
+        if not slicer_valid:
+            logger.error(f"Export item '{item.get('name', 'unnamed')}': {slicer_error}")
+            sys.exit(1)
 
     return result
 
@@ -2602,6 +2757,12 @@ def main():
 
                 file_size = os.path.getsize(output_abs)
                 log_success(f"Output verified: {os.path.basename(output_abs)} ({_format_bytes(file_size)})")
+
+                slicer_cfg = item.get("slicer") or {}
+                if slicer_cfg.get("enabled", False) and slicer_cfg.get("run_after_export", True):
+                    if not run_slicer_for_export_item(item, output_abs):
+                        FreeCAD.closeDocument(doc_name)
+                        sys.exit(1)
 
             gui_start = time.time()
             if gui_session_mode == "run" and has_gui_tasks(item) and not item.get("bom"):
