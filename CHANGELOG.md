@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.4.0] - 2026-05-01
+
 ### Added
 
 - Body screenshot generation via FreeCAD GUI (`screenshots:` config) for publication-ready PNG/JPGs.
