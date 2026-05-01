@@ -17,6 +17,7 @@ jobs:
       - run: uv run ruff format --check tools/ tests/ macros/
       - run: uv run yamllint -c .yamllint .pre-commit-hooks.yaml .pre-commit-config.yaml
       - run: uv run pylint --disable=all --enable=E,F tools/*.py
+      - run: uv run pylint --disable=all --enable=E,F --disable=E0401,E1101 macros/*.py
       - run: >-
           uv run pytest
           tests/test_git_utils.py
