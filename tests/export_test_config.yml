@@ -201,7 +201,7 @@ export:
       Description: "Generate screenshots for publication"
 
   # ============================================================================
-  # 12. SCREENSHOTS MINIMAL - Just enabled flag
+  # 12. SCREENSHOTS MINIMAL - Minimal config with explicit output path
   # ============================================================================
   - name: screenshots_minimal
     source: ../examples/example.FCStd
@@ -209,7 +209,9 @@ export:
     bodies:
       - Body
     output: ../test_output/screenshots_minimal.3mf
-    screenshots: true
+    screenshots:
+      enabled: true
+      output_dir: ../test_output/images/
     metadata:
       Test: "Minimal screenshots"
 

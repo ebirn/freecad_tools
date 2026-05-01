@@ -58,6 +58,27 @@ def parse_args():
         default=None,
         help="Export only the item with this name (from multi-item config)",
     )
+    parser.add_argument(
+        "--list-exports",
+        action="store_true",
+        help="List export item names from config and exit",
+    )
+    parser.add_argument(
+        "--gui-only",
+        action="store_true",
+        help="Run only GUI-dependent tasks (TechDraw/screenshots), skip 3MF export",
+    )
+    parser.add_argument(
+        "--screenshots-only",
+        action="store_true",
+        help="Run only screenshot GUI tasks, skip 3MF export and TechDraw",
+    )
+    parser.add_argument(
+        "--gui-session",
+        choices=["item", "run"],
+        default="item",
+        help="GUI session scope: per-item (default) or single session per run",
+    )
     return parser.parse_args()
 
 
@@ -129,6 +150,16 @@ def main():
         if CONFIG_FILE:
             fc_args.append(str(CONFIG_FILE))
         fc_args.append("--dry-run")
+        if args.list_exports:
+            fc_args.append("--list-exports")
+        if args.gui_only:
+            fc_args.append("--gui-only")
+        if args.screenshots_only:
+            fc_args.append("--screenshots-only")
+        if args.name:
+            fc_args.extend(["--name", args.name])
+        if args.gui_session:
+            fc_args.extend(["--gui-session", args.gui_session])
 
         result = subprocess.run(fc_args, env=env, text=True)
         sys.exit(result.returncode)
@@ -140,6 +171,14 @@ def main():
     if args.name:
         fc_args.append("--name")
         fc_args.append(args.name)
+    if args.list_exports:
+        fc_args.append("--list-exports")
+    if args.gui_only:
+        fc_args.append("--gui-only")
+    if args.screenshots_only:
+        fc_args.append("--screenshots-only")
+    if args.gui_session:
+        fc_args.extend(["--gui-session", args.gui_session])
 
     # Pass PROJECT_ROOT and CONFIG_FILE via environment variables for subprocess
     env = os.environ.copy()
