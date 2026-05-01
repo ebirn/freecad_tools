@@ -8,3 +8,4 @@ examples/*.FCBak
 test_output/
 .coverage
 htmlcov/
+tests/docs

@@ -1,6 +1,6 @@
 # Makefile for freecad_tools
 
-.PHONY: test test-unit test-integration test-all
+.PHONY: test test-unit test-integration test-all clean export
 
 # Default pytest flags
 PYTEST_FLAGS ?=
@@ -26,3 +26,16 @@ test-integration:
 
 # Run all tests including integration
 test-all: test-unit test-integration
+
+# Practical full-feature run using test config
+export:
+	python3 tools/export.py tests/export_test_config.yml --gui-session run
+
+# Remove generated test output artifacts
+clean:
+	@if [ -d "test_output" ]; then \
+		rm -rf test_output/*; \
+		echo "Removed test_output artifacts"; \
+	else \
+		echo "No test_output directory found"; \
+	fi

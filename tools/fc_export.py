@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from unittest.mock import MagicMock
 
 import yaml
@@ -60,6 +61,27 @@ def parse_args():
         default=None,
         help="Export only the item with this name (from multi-item config)",
     )
+    parser.add_argument(
+        "--list-exports",
+        action="store_true",
+        help="List export item names from config and exit",
+    )
+    parser.add_argument(
+        "--gui-only",
+        action="store_true",
+        help="Run only GUI-dependent tasks (TechDraw/screenshots), skip 3MF export",
+    )
+    parser.add_argument(
+        "--screenshots-only",
+        action="store_true",
+        help="Run only screenshot GUI tasks, skip 3MF export and TechDraw",
+    )
+    parser.add_argument(
+        "--gui-session",
+        choices=["item", "run"],
+        default="item",
+        help="GUI session scope: per-item (default) or single session per run",
+    )
     return parser.parse_args()
 
 
@@ -101,6 +123,10 @@ args = parse_args()
 verbose_cli = args.verbose
 dry_run_mode = args.dry_run
 name_filter = args.name
+list_exports_mode = args.list_exports
+gui_only_mode = args.gui_only
+screenshots_only_mode = args.screenshots_only
+gui_session_mode = args.gui_session
 
 # Check environment for verbose/log level (set by export.py)
 log_level_env = os.environ.get("FREECAD_TOOLS_LOG_LEVEL")
@@ -108,6 +134,14 @@ if os.environ.get("FREECAD_TOOLS_DRY_RUN", "").lower() == "true":
     dry_run_mode = True
 if os.environ.get("FREECAD_TOOLS_NAME") and not name_filter:
     name_filter = os.environ.get("FREECAD_TOOLS_NAME")
+if os.environ.get("FREECAD_TOOLS_LIST_EXPORTS", "").lower() == "true":
+    list_exports_mode = True
+if os.environ.get("FREECAD_TOOLS_GUI_ONLY", "").lower() == "true":
+    gui_only_mode = True
+if os.environ.get("FREECAD_TOOLS_SCREENSHOTS_ONLY", "").lower() == "true":
+    screenshots_only_mode = True
+if os.environ.get("FREECAD_TOOLS_GUI_SESSION") in ("item", "run"):
+    gui_session_mode = os.environ.get("FREECAD_TOOLS_GUI_SESSION")
 
 # Configure logging (respects --verbose or env var)
 logger = configure_logging(verbose=verbose_cli, log_level_env=log_level_env)
@@ -154,6 +188,516 @@ def _format_bytes(num_bytes: int) -> str:
             return f"{num_bytes:.1f} {unit}"
         num_bytes /= 1024
     return f"{num_bytes:.1f} TB"
+
+
+def get_export_names(exports):
+    """Return display-safe export names from config entries."""
+    names = []
+    for idx, item in enumerate(exports):
+        name = item.get("name") if isinstance(item, dict) else None
+        names.append(name or f"unnamed_{idx}")
+    return names
+
+
+def filter_exports_by_name(exports, selected_name):
+    """Filter exports by exact name match."""
+    return [item for item in exports if item.get("name") == selected_name]
+
+
+def should_run_3mf_export(gui_only=False, screenshots_only=False):
+    """Return True when the core 3MF export pipeline should run."""
+    return not (gui_only or screenshots_only)
+
+
+def should_run_techdraw(techdraw_config, screenshots_only=False):
+    """Return True when TechDraw tasks should run."""
+    return bool(techdraw_config) and not screenshots_only
+
+
+def has_gui_tasks(export_item):
+    """Return True when an export item has screenshot or TechDraw work configured."""
+    return bool(export_item.get("screenshots") or export_item.get("techdraw"))
+
+
+def build_gui_task_summary(export_item, screenshots_only=False):
+    """Build a concise summary of GUI tasks for logging/reporting."""
+    screenshot_cfg = export_item.get("screenshots")
+    techdraw_cfg = export_item.get("techdraw")
+    return {
+        "screenshots": bool(screenshot_cfg),
+        "techdraw": should_run_techdraw(techdraw_cfg, screenshots_only=screenshots_only),
+    }
+
+
+def plan_gui_tasks(export_item, screenshots_only=False):
+    """Return the GUI task plan for an export item."""
+    summary = build_gui_task_summary(export_item, screenshots_only=screenshots_only)
+    return {
+        "run_screenshots": summary["screenshots"],
+        "run_techdraw": summary["techdraw"],
+    }
+
+
+def _compute_image_stddev(image_path):
+    """Return average RGB stddev for an image, or None if unavailable."""
+    try:
+        from PIL import Image, ImageStat  # pylint: disable=import-error
+
+        with Image.open(image_path) as img:
+            rgb = img.convert("RGB")
+            stat = ImageStat.Stat(rgb)
+            if not stat.stddev:
+                return 0.0
+            return sum(stat.stddev) / len(stat.stddev)
+    except Exception:
+        return None
+
+
+def warn_on_near_uniform_images(images, stddev_threshold=1.5):
+    """Warn when generated screenshots appear near-uniform/blank."""
+    for image in images:
+        image_path = image.get("path")
+        if not image_path or not os.path.exists(image_path):
+            continue
+        stddev = _compute_image_stddev(image_path)
+        if stddev is None:
+            continue
+        if stddev <= stddev_threshold:
+            log_warning_msg(
+                f"Screenshot may be blank/near-uniform: {image_path} (stddev={stddev:.2f}, threshold={stddev_threshold:.2f})"
+            )
+
+
+def summarize_subprocess_stderr(stderr_text, limit=240):
+    """Return a compact single-line stderr summary for operator output."""
+    if not stderr_text:
+        return ""
+    compact = " ".join(line.strip() for line in stderr_text.splitlines() if line.strip())
+    if len(compact) <= limit:
+        return compact
+    return f"{compact[:limit]}..."
+
+
+def build_gui_batch_config(item, source_path, project_root, temp_dir):
+    """Build JSON-serializable config payload for batched GUI subprocess."""
+    screenshot_cfg = item.get("screenshots") if isinstance(item.get("screenshots"), dict) else {}
+    screenshot_output_dir = screenshot_cfg.get("output_dir", "prints/images/")
+    if not os.path.isabs(screenshot_output_dir):
+        screenshot_output_dir = os.path.abspath(os.path.join(project_root, screenshot_output_dir))
+
+    techdraw_cfg = item.get("techdraw") or {}
+
+    return {
+        "source": source_path,
+        "run_screenshots": True,
+        "run_techdraw": True,
+        "screenshots": {
+            "bodies": item.get("bodies", []),
+            "output_dir": screenshot_output_dir,
+            "views": screenshot_cfg.get("views", ["isometric"]),
+            "resolution": screenshot_cfg.get("resolution", [1920, 1080]),
+            "format": screenshot_cfg.get("format", "png"),
+            "composite": screenshot_cfg.get("composite", True),
+        },
+        "techdraw": {
+            "pages": techdraw_cfg.get("pages", []),
+            "output_dir": temp_dir,
+        },
+    }
+
+
+def merge_techdraw_pdfs(page_pdfs, output_path, temp_dir):
+    """Merge per-page PDFs into final output path via techdraw_pdf.py."""
+    merge_config = {
+        "page_pdfs": page_pdfs,
+        "output_path": os.path.abspath(output_path),
+    }
+    merge_config_path = os.path.join(temp_dir, "merge_config.json")
+    with open(merge_config_path, "w", encoding="utf-8") as f:
+        json.dump(merge_config, f, indent=2)
+
+    merge_cmd = [
+        _find_venv_python(),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "techdraw_pdf.py"),
+        merge_config_path,
+    ]
+    merge_result = subprocess.run(merge_cmd, capture_output=True, text=True, timeout=120)
+    if merge_result.stderr:
+        logger.debug(f"PDF merge stderr: {merge_result.stderr[:1000]}")
+        logger.info(f"PDF merge stderr summary: {summarize_subprocess_stderr(merge_result.stderr)}")
+
+    return merge_result.returncode == 0 and os.path.exists(merge_config["output_path"])
+
+
+def normalize_gui_batch_result(batch_result):
+    """Normalize batched GUI result into stable dict shape."""
+    screenshots = batch_result.get("screenshots") if isinstance(batch_result, dict) else None
+    techdraw = batch_result.get("techdraw") if isinstance(batch_result, dict) else None
+    artifacts = batch_result.get("artifacts") if isinstance(batch_result, dict) else None
+    timing = batch_result.get("timing") if isinstance(batch_result, dict) else None
+
+    if not isinstance(screenshots, dict):
+        screenshots = {"success": False, "images": [], "error": "Missing screenshots result", "skipped": False}
+    screenshots.setdefault("success", False)
+    screenshots.setdefault("images", [])
+    screenshots.setdefault("error", None)
+    screenshots.setdefault("skipped", False)
+
+    if not isinstance(techdraw, dict):
+        techdraw = {"success": False, "pages": [], "error": "Missing techdraw result"}
+    techdraw.setdefault("success", False)
+    techdraw.setdefault("pages", [])
+    techdraw.setdefault("error", None)
+
+    if not isinstance(artifacts, dict):
+        artifacts = {"pdf_pages": [], "images": []}
+    artifacts.setdefault("pdf_pages", [])
+    artifacts.setdefault("images", [])
+
+    if not isinstance(timing, dict):
+        timing = {"total_seconds": 0.0, "techdraw_seconds": 0.0, "screenshots_seconds": 0.0}
+    timing.setdefault("total_seconds", 0.0)
+    timing.setdefault("techdraw_seconds", 0.0)
+    timing.setdefault("screenshots_seconds", 0.0)
+
+    return {
+        "success": bool(batch_result.get("success", False)) if isinstance(batch_result, dict) else False,
+        "screenshots": screenshots,
+        "techdraw": techdraw,
+        "artifacts": artifacts,
+        "timing": timing,
+        "error": (batch_result.get("error") if isinstance(batch_result, dict) else "Invalid batch result"),
+    }
+
+
+def summarize_gui_batch_result(batch_result):
+    """Build concise human-readable summary line for batched GUI results."""
+    normalized = normalize_gui_batch_result(batch_result)
+    screenshots_ok = normalized["screenshots"].get("success")
+    techdraw_ok = normalized["techdraw"].get("success")
+    image_count = len(normalized["artifacts"].get("images", []))
+    page_count = len(normalized["artifacts"].get("pdf_pages", []))
+    total_seconds = normalized["timing"].get("total_seconds", 0.0)
+    return (
+        "GUI batch result: "
+        f"success={normalized['success']} "
+        f"screenshots={screenshots_ok}({image_count} images) "
+        f"techdraw={techdraw_ok}({page_count} pages) "
+        f"time={total_seconds:.3f}s"
+    )
+
+
+def summarize_export_timing(export_name, timing_data):
+    """Return a concise per-export timing summary line."""
+    open_seconds = timing_data.get("open_seconds", 0.0)
+    export_seconds = timing_data.get("export_seconds", 0.0)
+    gui_seconds = timing_data.get("gui_seconds", 0.0)
+    total_seconds = timing_data.get("total_seconds", 0.0)
+    return (
+        f"Export timing [{export_name}]: "
+        f"open={open_seconds:.3f}s "
+        f"export={export_seconds:.3f}s "
+        f"gui={gui_seconds:.3f}s "
+        f"total={total_seconds:.3f}s"
+    )
+
+
+def log_export_timing(export_name, timing_data):
+    """Emit per-export timing summary to logs."""
+    logger.info(summarize_export_timing(export_name, timing_data))
+
+
+def summarize_run_stats(run_stats):
+    """Return concise overall timing/stats summary for full export run."""
+    return (
+        "Run totals: "
+        f"items={run_stats.get('item_count', 0)} "
+        f"open={run_stats.get('open_seconds', 0.0):.3f}s "
+        f"export={run_stats.get('export_seconds', 0.0):.3f}s "
+        f"gui={run_stats.get('gui_seconds', 0.0):.3f}s "
+        f"shared_gui={run_stats.get('shared_gui_seconds', 0.0):.3f}s "
+        f"total={run_stats.get('total_seconds', 0.0):.3f}s"
+    )
+
+
+def run_gui_tasks_for_item(doc, item, export_name, source_path, project_root, screenshots_only=False):
+    """Run GUI-dependent tasks for one export item and return task results."""
+    results = {
+        "screenshot": None,
+        "techdraw": None,
+        "last_bom_csv": None,
+    }
+
+    task_plan = plan_gui_tasks(item, screenshots_only=screenshots_only)
+    logger.debug(f"GUI task plan: {task_plan}")
+
+    if task_plan["run_screenshots"] and task_plan["run_techdraw"]:
+        batched_results = run_gui_tasks_batched(doc, item, export_name, source_path, project_root)
+        if batched_results.get("screenshot") is not None or batched_results.get("techdraw") is not None:
+            return batched_results
+        log_warning_msg("Batched GUI path unavailable, falling back to sequential GUI steps")
+
+    if task_plan["run_screenshots"]:
+        log_action("Generating screenshots")
+        screenshot_success, screenshot_result = run_screenshot_generation(item, project_root)
+        results["screenshot"] = {
+            "success": screenshot_success,
+            "result": screenshot_result,
+        }
+
+        if screenshot_result.get("success"):
+            images = screenshot_result.get("images", [])
+            if images:
+                log_success(f"Generated {len(images)} screenshots")
+                for img in images:
+                    logger.debug(f"  - {img.get('path', 'unknown')}")
+                warn_on_near_uniform_images(images)
+            elif screenshot_result.get("skipped"):
+                logger.debug("Screenshots skipped (not enabled)")
+        else:
+            error = screenshot_result.get("error", "Unknown error")
+            log_warning_msg(f"Screenshot generation failed (non-fatal): {error}")
+
+    techdraw_config = item.get("techdraw")
+    if task_plan["run_techdraw"]:
+        log_action("Processing TechDraw export")
+        pages_to_export = techdraw_config.get("pages", [])
+        techdraw_output_dir = techdraw_config.get("output_dir", "docs")
+        techdraw_format = techdraw_config.get("format", "pdf")
+
+        if not os.path.isabs(techdraw_output_dir):
+            techdraw_output_dir = os.path.join(project_root, techdraw_output_dir)
+        os.makedirs(techdraw_output_dir, exist_ok=True)
+
+        if techdraw_format == "pdf":
+            pdf_output = os.path.join(techdraw_output_dir, f"{export_name}.pdf")
+            techdraw_pdf_pending = {
+                "pages": pages_to_export,
+                "output": pdf_output,
+                "instructions": techdraw_config.get("instructions"),
+            }
+            logger.debug(f"TechDraw PDF generation pending: {pdf_output}")
+        else:
+            log_warning_msg(f"TechDraw format '{techdraw_format}' not yet supported, skipping")
+            techdraw_pdf_pending = None
+    else:
+        techdraw_pdf_pending = None
+
+    bom_config = item.get("bom")
+    if bom_config and task_plan["run_techdraw"]:
+        bom_configs = [bom_config] if isinstance(bom_config, dict) else bom_config
+
+        for i, single_bom_config in enumerate(bom_configs):
+            log_action(f"Processing BOM generation #{i}")
+            bom_source = single_bom_config.get("source", "auto")
+            bom_output = single_bom_config.get("output", f"docs/{export_name}_bom.csv")
+            bom_fields = single_bom_config.get("fields", [])
+            bom_assembly = single_bom_config.get("assembly")
+
+            try:
+                if not os.path.isabs(bom_output):
+                    bom_output = os.path.join(project_root, bom_output)
+
+                bom_data = []
+                if bom_source in ("auto", "assembly"):
+                    logger.debug("Attempting to extract BOM from Assembly")
+                    bom_data = extract_bom_from_assembly(doc, custom_fields=bom_fields, assembly_name=bom_assembly)
+                    if bom_data:
+                        log_success(f"Extracted BOM from Assembly ({len(bom_data)} items)")
+
+                if not bom_data and bom_source in ("auto", "spreadsheet"):
+                    spreadsheet_name = single_bom_config.get("spreadsheet_name", "BOM")
+                    logger.debug(f"Attempting to extract BOM from Spreadsheet '{spreadsheet_name}'")
+                    bom_data = extract_bom_from_spreadsheet(
+                        doc, spreadsheet_name=spreadsheet_name, custom_fields=bom_fields
+                    )
+                    if bom_data:
+                        log_success(f"Extracted BOM from Spreadsheet ({len(bom_data)} items)")
+
+                if not bom_data and bom_source in ("auto", "parts"):
+                    logger.debug("Attempting to extract BOM from Parts")
+                    bom_data = extract_bom_from_parts(doc, custom_fields=bom_fields)
+                    if bom_data:
+                        log_success(f"Extracted BOM from Parts ({len(bom_data)} items)")
+
+                os.makedirs(os.path.dirname(bom_output) or ".", exist_ok=True)
+
+                from bom_utils import write_bom_csv  # pylint: disable=import-error
+
+                fields = ["label", "quantity"] + bom_fields if bom_fields else None
+                write_bom_csv(bom_data, bom_output, fields=fields)
+                if bom_data:
+                    log_success(f"BOM written to: {bom_output} ({len(bom_data)} items)")
+                else:
+                    log_warning_msg(f"BOM written to: {bom_output} (no items found)")
+                results["last_bom_csv"] = bom_output
+
+            except Exception as e:
+                logger.exception(f"Error generating BOM #{i}: {e}")
+
+    if techdraw_pdf_pending:
+        try:
+            pdf_output = techdraw_pdf_pending["output"]
+            pages = techdraw_pdf_pending["pages"]
+            instructions_path = techdraw_pdf_pending.get("instructions")
+
+            if instructions_path and not os.path.isabs(instructions_path):
+                instructions_path = os.path.join(project_root, instructions_path)
+
+            last_bom_csv = results["last_bom_csv"]
+            bom_csv_for_pdf = last_bom_csv if (last_bom_csv and os.path.exists(last_bom_csv)) else None
+
+            pdf_metadata = get_export_metadata(item, project_root)
+            pdf_metadata["title"] = export_name
+            pdf_metadata["source"] = os.path.basename(source_path)
+
+            log_action(f"Generating TechDraw PDF: {os.path.basename(pdf_output)}")
+            pdf_success = export_techdraw_to_pdf(
+                doc,
+                pages,
+                pdf_output,
+                bom_csv_path=bom_csv_for_pdf,
+                instructions_path=instructions_path,
+                metadata=pdf_metadata,
+            )
+            results["techdraw"] = {
+                "success": pdf_success,
+                "output": pdf_output,
+            }
+
+            if pdf_success:
+                log_success(f"TechDraw PDF generated: {os.path.basename(pdf_output)}")
+            else:
+                log_warning_msg("TechDraw PDF generation failed")
+        except Exception as e:
+            logger.exception(f"Error generating TechDraw PDF: {e}")
+            results["techdraw"] = {
+                "success": False,
+                "error": str(e),
+            }
+
+    return results
+
+
+def run_gui_tasks_batched(doc, item, export_name, source_path, project_root):
+    """Run screenshots and TechDraw in a single GUI subprocess."""
+    results = {"screenshot": None, "techdraw": None, "last_bom_csv": None}
+    freecad_gui = _find_freecad_gui_binary()
+    if not freecad_gui:
+        log_warning_msg("FreeCAD GUI binary not found; cannot run batched GUI tasks")
+        return results
+
+    with tempfile.TemporaryDirectory(prefix="gui_batch_") as temp_dir:
+        result_file = os.path.join(temp_dir, "result.json")
+        config_path = os.path.join(temp_dir, "batch_config.json")
+        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gui_batch_export.py")
+
+        batch_cfg = build_gui_batch_config(item, source_path, project_root, temp_dir)
+        batch_cfg["result_file"] = result_file
+
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(batch_cfg, f, indent=2)
+
+        cmd = [freecad_gui, script_path, config_path]
+        gui_result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if gui_result.stderr:
+            logger.debug(f"Batched GUI stderr: {gui_result.stderr[:1000]}")
+            logger.info(f"Batched GUI stderr summary: {summarize_subprocess_stderr(gui_result.stderr)}")
+
+        if not os.path.exists(result_file):
+            log_warning_msg("Batched GUI run produced no result file")
+            return results
+
+        with open(result_file, encoding="utf-8") as f:
+            batch_result = normalize_gui_batch_result(json.load(f))
+        logger.info(summarize_gui_batch_result(batch_result))
+
+        screenshot_result = batch_result["screenshots"]
+        results["screenshot"] = {
+            "success": bool(screenshot_result.get("success")),
+            "result": screenshot_result,
+        }
+        if screenshot_result.get("success"):
+            warn_on_near_uniform_images(screenshot_result.get("images", []))
+
+        page_pdfs = [p.get("pdf_path") for p in batch_result["techdraw"]["pages"] if p.get("pdf_path")]
+        if page_pdfs:
+            final_pdf = os.path.abspath(os.path.join(project_root, "docs", f"{export_name}.pdf"))
+            techdraw_success = merge_techdraw_pdfs(page_pdfs, final_pdf, temp_dir)
+            results["techdraw"] = {"success": techdraw_success, "output": final_pdf}
+            if techdraw_success:
+                log_success(f"TechDraw PDF generated: {os.path.basename(final_pdf)}")
+            else:
+                log_warning_msg("TechDraw PDF generation failed in batched mode")
+
+    return results
+
+
+def run_gui_tasks_shared_session(gui_jobs, project_root):
+    """Run GUI tasks for multiple export jobs in one GUI process."""
+    if not gui_jobs:
+        return {}
+    freecad_gui = _find_freecad_gui_binary()
+    if not freecad_gui:
+        log_warning_msg("FreeCAD GUI binary not found; cannot run shared GUI session")
+        return {}
+
+    tools_dir = os.path.dirname(os.path.abspath(__file__))
+    script_path = os.path.join(tools_dir, "gui_batch_run.py")
+    with tempfile.TemporaryDirectory(prefix="gui_run_") as temp_dir:
+        result_file = os.path.join(temp_dir, "result.json")
+        cfg_path = os.path.join(temp_dir, "run_config.json")
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            json.dump({"jobs": gui_jobs, "result_file": result_file}, f, indent=2)
+
+        cmd = [freecad_gui, script_path, cfg_path]
+        gui_result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+        if gui_result.stderr:
+            logger.info(f"Shared GUI stderr summary: {summarize_subprocess_stderr(gui_result.stderr)}")
+        if not os.path.exists(result_file):
+            log_warning_msg("Shared GUI run produced no result file")
+            return {}
+        with open(result_file, encoding="utf-8") as f:
+            payload = json.load(f)
+        return payload.get("results", {})
+
+
+def build_shared_gui_job(item, export_name, source, project_root, screenshots_only=False):
+    """Build one shared-session GUI job payload from export item."""
+    techdraw_cfg = item.get("techdraw") or {}
+    screenshots_cfg = item.get("screenshots")
+
+    techdraw_enabled = should_run_techdraw(item, screenshots_only=screenshots_only)
+    screenshot_enabled = bool(screenshots_cfg)
+
+    screenshot_output_dir = None
+    if screenshot_enabled:
+        screenshot_output_dir = screenshots_cfg.get("output_dir")
+        if screenshot_output_dir:
+            if not os.path.isabs(screenshot_output_dir):
+                screenshot_output_dir = os.path.abspath(os.path.join(project_root, screenshot_output_dir))
+        else:
+            screenshot_output_dir = os.path.abspath(os.path.join(project_root, "prints", "images"))
+
+    return {
+        "name": export_name,
+        "source": source,
+        "techdraw": {
+            "enabled": techdraw_enabled,
+            "pages": techdraw_cfg.get("pages", []),
+            "temp_dir": os.path.join(project_root, "test_output", "_gui_pages", export_name),
+            "output_dir": techdraw_cfg.get("output_dir", "docs"),
+        },
+        "screenshots": {
+            "enabled": screenshot_enabled,
+            "output_dir": screenshot_output_dir,
+            "views": (screenshots_cfg or {}).get("views", ["isometric"]),
+            "resolution": (screenshots_cfg or {}).get("resolution", [1920, 1080]),
+            "format": (screenshots_cfg or {}).get("format", "png"),
+            "composite": (screenshots_cfg or {}).get("composite", True),
+            "bodies": (screenshots_cfg or {}).get("bodies", []),
+        },
+    }
 
 
 logger.info("=" * 60)
@@ -278,6 +822,18 @@ except ImportError as e:
         if dry_run_mode:
             env["FREECAD_TOOLS_DRY_RUN"] = "true"
             logger.debug("Passing FREECAD_TOOLS_DRY_RUN=true to subprocess")
+        if list_exports_mode:
+            env["FREECAD_TOOLS_LIST_EXPORTS"] = "true"
+            logger.debug("Passing FREECAD_TOOLS_LIST_EXPORTS=true to subprocess")
+        if gui_only_mode:
+            env["FREECAD_TOOLS_GUI_ONLY"] = "true"
+            logger.debug("Passing FREECAD_TOOLS_GUI_ONLY=true to subprocess")
+        if screenshots_only_mode:
+            env["FREECAD_TOOLS_SCREENSHOTS_ONLY"] = "true"
+            logger.debug("Passing FREECAD_TOOLS_SCREENSHOTS_ONLY=true to subprocess")
+        if gui_session_mode:
+            env["FREECAD_TOOLS_GUI_SESSION"] = gui_session_mode
+            logger.debug(f"Passing FREECAD_TOOLS_GUI_SESSION={gui_session_mode} to subprocess")
         if verbose_cli or log_level_env:
             log_level_pass = "DEBUG" if verbose_cli else log_level_env
             env["FREECAD_TOOLS_LOG_LEVEL"] = log_level_pass
@@ -1831,6 +2387,11 @@ def main():
     logger.debug(f"CONFIG_FILE: {CONFIG_FILE}")
     logger.debug("Starting main()")
 
+    if screenshots_only_mode:
+        logger.info("Screenshots-only mode enabled")
+    if gui_only_mode:
+        logger.info("GUI-only mode enabled")
+
     # Handle dry-run mode: validate config and exit without exporting
     if dry_run_mode:
         logger.info("DRY-RUN MODE: Validating config without performing export")
@@ -1839,7 +2400,7 @@ def main():
 
             # Filter exports by name if --name flag was provided (for consistency)
             if name_filter:
-                exports = [item for item in exports if item.get("name") == name_filter]
+                exports = filter_exports_by_name(exports, name_filter)
 
             if not exports:
                 if name_filter:
@@ -1878,12 +2439,17 @@ def main():
     exports = load_config()
     logger.debug(f"Loaded {len(exports)} exports")
 
+    if list_exports_mode:
+        for export_name in get_export_names(exports):
+            logger.info(export_name)
+        sys.exit(0)
+
     # Filter exports by name if --name flag was provided
     if name_filter:
-        filtered_exports = [item for item in exports if item.get("name") == name_filter]
+        filtered_exports = filter_exports_by_name(exports, name_filter)
         if not filtered_exports:
             logger.warning(f"No export item found with name '{name_filter}'")
-            logger.info(f"Available export names: {[item.get('name', 'unnamed') for item in exports]}")
+            logger.info(f"Available export names: {get_export_names(exports)}")
             sys.exit(1)
         exports = filtered_exports
         logger.info(f"Filtered to 1 export item: {name_filter}")
@@ -1892,10 +2458,23 @@ def main():
         log_warning_msg("No exports defined in config - exports list is empty or None")
         sys.exit(0)
 
+    run_start = time.time()
+    run_stats = {
+        "item_count": len(exports),
+        "open_seconds": 0.0,
+        "export_seconds": 0.0,
+        "gui_seconds": 0.0,
+        "shared_gui_seconds": 0.0,
+        "total_seconds": 0.0,
+    }
+
     log_section(f"Starting Export - {len(exports)} item(s) to process")
+    queued_gui_jobs = []
 
     for i, item in enumerate(exports):
         export_name = item.get("name", "export")
+        item_start = time.time()
+        timing_data = {"open_seconds": 0.0, "export_seconds": 0.0, "gui_seconds": 0.0, "total_seconds": 0.0}
         log_subsection(f"Export Item {i}: {export_name}")
         logger.debug(f"Item content: {item}")
 
@@ -1929,6 +2508,7 @@ def main():
 
         log_action(f"Opening document: {source}")
         try:
+            open_start = time.time()
             doc = FreeCAD.open(source)
             doc_name = doc.Name  # Save the name before closing
             logger.debug(f"Opened document {doc_name}")
@@ -1937,6 +2517,7 @@ def main():
             )
             FreeCAD.setActiveDocument(doc_name)
             log_success(f"Document opened: {doc_name}")
+            timing_data["open_seconds"] = time.time() - open_start
 
             # Determine bodies to export based on body_source mode
             body_source = item.get("_body_source", BODY_SOURCE_CONFIG)
@@ -1970,203 +2551,84 @@ def main():
 
                 log_action(f"Exporting {len(bodies)} bodies from properties (name: {export_name})")
 
-            if bodies:
-                log_action(f"Exporting {len(bodies)} bodies")
-                # Try to resolve template path (uses config value or falls back to default)
-                resolved_template = resolve_template_path(template)
+            if should_run_3mf_export(gui_only=gui_only_mode, screenshots_only=screenshots_only_mode):
+                export_start = time.time()
+                if bodies:
+                    log_action(f"Exporting {len(bodies)} bodies")
+                    # Try to resolve template path (uses config value or falls back to default)
+                    resolved_template = resolve_template_path(template)
 
-                # Extract metadata from config item and environment
-                export_metadata = get_export_metadata(item, PROJECT_ROOT or os.getcwd())
+                    # Extract metadata from config item and environment
+                    export_metadata = get_export_metadata(item, PROJECT_ROOT or os.getcwd())
 
-                # Use template-based export if template is available
-                if resolved_template:
-                    log_action(f"Using template: {os.path.basename(resolved_template)}")
-                    success = export_bodies_to_3mf_with_template(
-                        doc,
-                        bodies,
-                        output,
-                        resolved_template,
-                        keep_stl,
-                        stl_output_dir,
-                        export_name,
-                        metadata=export_metadata,
-                    )
+                    # Use template-based export if template is available
+                    if resolved_template:
+                        log_action(f"Using template: {os.path.basename(resolved_template)}")
+                        success = export_bodies_to_3mf_with_template(
+                            doc,
+                            bodies,
+                            output,
+                            resolved_template,
+                            keep_stl,
+                            stl_output_dir,
+                            export_name,
+                            metadata=export_metadata,
+                        )
+                    else:
+                        # Fallback to STL export if no template available
+                        log_warning_msg("No template - exporting without template")
+                        success = export_bodies(doc, bodies, output)
                 else:
-                    # Fallback to STL export if no template available
-                    log_warning_msg("No template - exporting without template")
-                    success = export_bodies(doc, bodies, output)
+                    log_action("Exporting full document")
+                    success = export_full_doc(doc, output)
+                timing_data["export_seconds"] = time.time() - export_start
             else:
-                log_action("Exporting full document")
-                success = export_full_doc(doc, output)
+                log_action("Skipping 3MF export in GUI-only mode")
+                success = True
 
             logger.debug(f"Export success: {success}")
             if not success:
                 FreeCAD.closeDocument(doc_name)
                 sys.exit(1)
 
-            # Final validation: ensure output file exists
-            output_abs = os.path.abspath(output)
-            if not os.path.exists(output_abs):
-                logger.error(f"Export reported success but output file does not exist: {output_abs}")
-                logger.error("This is a critical issue - the export process completed but produced no file")
-                FreeCAD.closeDocument(doc_name)
-                sys.exit(1)
+            # Final validation: ensure output file exists when 3MF export ran
+            if should_run_3mf_export(gui_only=gui_only_mode, screenshots_only=screenshots_only_mode):
+                output_abs = os.path.abspath(output)
+                if not os.path.exists(output_abs):
+                    logger.error(f"Export reported success but output file does not exist: {output_abs}")
+                    logger.error("This is a critical issue - the export process completed but produced no file")
+                    FreeCAD.closeDocument(doc_name)
+                    sys.exit(1)
 
-            file_size = os.path.getsize(output_abs)
-            log_success(f"Output verified: {os.path.basename(output_abs)} ({_format_bytes(file_size)})")
+                file_size = os.path.getsize(output_abs)
+                log_success(f"Output verified: {os.path.basename(output_abs)} ({_format_bytes(file_size)})")
 
-            # Process screenshots if configured
-            screenshot_cfg = item.get("screenshots")
-            logger.info(f"Screenshot config from item: {screenshot_cfg}")
-            if screenshot_cfg:
-                logger.info("Screenshot config is truthy, generating screenshots")
-                log_action("Generating screenshots")
-                screenshot_success, screenshot_result = run_screenshot_generation(item, PROJECT_ROOT or os.getcwd())
-                if screenshot_result.get("success"):
-                    images = screenshot_result.get("images", [])
-                    if images:
-                        log_success(f"Generated {len(images)} screenshots")
-                        for img in images:
-                            logger.debug(f"  - {img.get('path', 'unknown')}")
-                    elif screenshot_result.get("skipped"):
-                        logger.debug("Screenshots skipped (not enabled)")
-                else:
-                    error = screenshot_result.get("error", "Unknown error")
-                    log_warning_msg(f"Screenshot generation failed (non-fatal): {error}")
-
-            # Process TechDraw pages if configured
-            if techdraw_config:
-                log_action("Processing TechDraw export")
-                pages_to_export = techdraw_config.get("pages", [])
-                techdraw_output_dir = techdraw_config.get("output_dir", "docs")
-                techdraw_format = techdraw_config.get("format", "pdf")  # Default to PDF now
-
-                # Resolve output path
-                if not os.path.isabs(techdraw_output_dir):
-                    techdraw_output_dir = os.path.join(PROJECT_ROOT or os.getcwd(), techdraw_output_dir)
-                os.makedirs(techdraw_output_dir, exist_ok=True)
-
-                if techdraw_format == "pdf":
-                    try:
-                        pdf_output = os.path.join(techdraw_output_dir, f"{export_name}.pdf")
-                        # BOM CSV path will be available after BOM processing below
-                        # For now, collect it; PDF generation happens after BOM
-                        techdraw_pdf_pending = {
-                            "pages": pages_to_export,
-                            "output": pdf_output,
-                            "instructions": techdraw_config.get("instructions"),
-                        }
-                        logger.debug(f"TechDraw PDF generation pending: {pdf_output}")
-                    except Exception as e:
-                        logger.exception(f"Error preparing TechDraw PDF: {e}")
-                        techdraw_pdf_pending = None
-                else:
-                    log_warning_msg(f"TechDraw format '{techdraw_format}' not yet supported, skipping")
-                    techdraw_pdf_pending = None
-            else:
-                techdraw_pdf_pending = None
-
-            # Process BOM generation if configured
-            # Support both single dict config and list of configs
-            last_bom_csv = None  # Track the last generated BOM CSV for TechDraw
-            if bom_config:
-                # Normalize to list: if bom_config is a dict, wrap it in a list
-                bom_configs = [bom_config] if isinstance(bom_config, dict) else bom_config
-
-                for i, single_bom_config in enumerate(bom_configs):
-                    log_action(f"Processing BOM generation #{i}")
-                    bom_source = single_bom_config.get("source", "auto")  # auto/assembly/spreadsheet/parts
-                    bom_output = single_bom_config.get("output", f"docs/{export_name}_bom.csv")
-                    bom_fields = single_bom_config.get("fields", [])  # Custom fields like material, url, price
-                    bom_assembly = single_bom_config.get("assembly")  # Optional assembly identifier
-
-                    try:
-                        # Generate default BOM output path if not specified
-                        # Path is already resolved by load_config() if relative
-                        if not os.path.isabs(bom_output):
-                            bom_output = os.path.join(PROJECT_ROOT or os.getcwd(), bom_output)
-
-                        # Extract BOM based on source priority (auto/assembly/spreadsheet/parts)
-                        bom_data = []
-                        if bom_source in ("auto", "assembly"):
-                            logger.debug("Attempting to extract BOM from Assembly")
-                            bom_data = extract_bom_from_assembly(
-                                doc, custom_fields=bom_fields, assembly_name=bom_assembly
-                            )
-                            if bom_data:
-                                log_success(f"Extracted BOM from Assembly ({len(bom_data)} items)")
-
-                        if not bom_data and bom_source in ("auto", "spreadsheet"):
-                            spreadsheet_name = single_bom_config.get("spreadsheet_name", "BOM")
-                            logger.debug(f"Attempting to extract BOM from Spreadsheet '{spreadsheet_name}'")
-                            bom_data = extract_bom_from_spreadsheet(
-                                doc, spreadsheet_name=spreadsheet_name, custom_fields=bom_fields
-                            )
-                            if bom_data:
-                                log_success(f"Extracted BOM from Spreadsheet ({len(bom_data)} items)")
-
-                        if not bom_data and bom_source in ("auto", "parts"):
-                            logger.debug("Attempting to extract BOM from Parts")
-                            bom_data = extract_bom_from_parts(doc, custom_fields=bom_fields)
-                            if bom_data:
-                                log_success(f"Extracted BOM from Parts ({len(bom_data)} items)")
-
-                        # Write BOM CSV using shared utility (always write, even if empty)
-                        os.makedirs(os.path.dirname(bom_output) or ".", exist_ok=True)
-
-                        from bom_utils import write_bom_csv  # pylint: disable=import-error
-
-                        # Determine fields: if BOM has custom fields from config, pass them;
-                        # otherwise let write_bom_csv auto-detect from data keys
-                        fields = None
-                        if bom_fields:
-                            fields = ["label", "quantity"] + bom_fields
-
-                        write_bom_csv(bom_data, bom_output, fields=fields)
-                        if bom_data:
-                            log_success(f"BOM written to: {bom_output} ({len(bom_data)} items)")
-                        else:
-                            log_warning_msg(f"BOM written to: {bom_output} (no items found)")
-                        # Track this for TechDraw integration
-                        last_bom_csv = bom_output
-
-                    except Exception as e:
-                        logger.exception(f"Error generating BOM #{i}: {e}")
-
-            # Generate TechDraw PDF (after BOM so we can include BOM CSV)
-            if techdraw_pdf_pending:
-                try:
-                    pdf_output = techdraw_pdf_pending["output"]
-                    pages = techdraw_pdf_pending["pages"]
-                    instructions_path = techdraw_pdf_pending.get("instructions")
-
-                    # Resolve instructions path
-                    if instructions_path and not os.path.isabs(instructions_path):
-                        instructions_path = os.path.join(PROJECT_ROOT or os.getcwd(), instructions_path)
-
-                    # Use BOM CSV if it was generated (use last one if multiple)
-                    bom_csv_for_pdf = last_bom_csv if (last_bom_csv and os.path.exists(last_bom_csv)) else None
-
-                    # Build metadata for PDF cover page
-                    pdf_metadata = get_export_metadata(item, PROJECT_ROOT or os.getcwd())
-                    pdf_metadata["title"] = export_name
-                    pdf_metadata["source"] = os.path.basename(source)
-
-                    log_action(f"Generating TechDraw PDF: {os.path.basename(pdf_output)}")
-                    pdf_success = export_techdraw_to_pdf(
-                        doc,
-                        pages,
-                        pdf_output,
-                        bom_csv_path=bom_csv_for_pdf,
-                        instructions_path=instructions_path,
-                        metadata=pdf_metadata,
+            gui_start = time.time()
+            if gui_session_mode == "run" and has_gui_tasks(item) and not item.get("bom"):
+                queued_gui_jobs.append(
+                    build_shared_gui_job(
+                        item,
+                        export_name,
+                        source,
+                        PROJECT_ROOT or os.getcwd(),
+                        screenshots_only=screenshots_only_mode,
                     )
-                    if pdf_success:
-                        log_success(f"TechDraw PDF generated: {os.path.basename(pdf_output)}")
-                    else:
-                        log_warning_msg("TechDraw PDF generation failed")
-                except Exception as e:
-                    logger.exception(f"Error generating TechDraw PDF: {e}")
+                )
+            else:
+                run_gui_tasks_for_item(
+                    doc,
+                    item,
+                    export_name,
+                    source,
+                    PROJECT_ROOT or os.getcwd(),
+                    screenshots_only=screenshots_only_mode,
+                )
+            timing_data["gui_seconds"] = time.time() - gui_start
+            timing_data["total_seconds"] = time.time() - item_start
+            log_export_timing(export_name, timing_data)
+            run_stats["open_seconds"] += timing_data["open_seconds"]
+            run_stats["export_seconds"] += timing_data["export_seconds"]
+            run_stats["gui_seconds"] += timing_data["gui_seconds"]
 
             FreeCAD.closeDocument(doc_name)
             logger.debug(f"Closed document {doc_name}")
@@ -2175,6 +2637,40 @@ def main():
             sys.exit(1)
 
     log_section("Export Completed Successfully")
+
+    if gui_session_mode == "run" and queued_gui_jobs:
+        log_action(f"Running shared GUI session for {len(queued_gui_jobs)} job(s)")
+        shared_start = time.time()
+        shared_results = run_gui_tasks_shared_session(queued_gui_jobs, PROJECT_ROOT or os.getcwd())
+        run_stats["shared_gui_seconds"] = time.time() - shared_start
+        for job in queued_gui_jobs:
+            name = job["name"]
+            res = (shared_results or {}).get(name, {})
+
+            screenshot_res = res.get("screenshots", {})
+            if screenshot_res.get("success"):
+                warn_on_near_uniform_images(screenshot_res.get("images", []))
+            elif job.get("screenshots", {}).get("enabled"):
+                err = screenshot_res.get("error") or "unknown screenshot error"
+                log_warning_msg(f"Screenshot generation failed for {name}: {err}")
+
+            td = res.get("techdraw", {})
+            page_pdfs = [p.get("pdf_path") for p in td.get("pages", []) if p.get("pdf_path")]
+            if page_pdfs:
+                out_dir = job["techdraw"].get("output_dir", "docs")
+                if not os.path.isabs(out_dir):
+                    out_dir = os.path.abspath(os.path.join(PROJECT_ROOT or os.getcwd(), out_dir))
+                os.makedirs(out_dir, exist_ok=True)
+                final_pdf = os.path.join(out_dir, f"{name}.pdf")
+                ok = merge_techdraw_pdfs(page_pdfs, final_pdf, os.path.dirname(page_pdfs[0]))
+                if ok:
+                    log_success(f"TechDraw PDF generated: {os.path.basename(final_pdf)}")
+                else:
+                    log_warning_msg(f"TechDraw PDF merge failed for {name}")
+
+    run_stats["total_seconds"] = time.time() - run_start
+    log_section("Run Statistics")
+    logger.info(summarize_run_stats(run_stats))
     sys.exit(0)
 
 
