@@ -783,6 +783,135 @@ class TestSubprocessSummaries:
         assert len(summary) == 53
 
 
+class TestSlicerConfigAndCommands:
+    """Tests for slicer config validation and command building."""
+
+    def test_validate_slicer_config_disabled_is_valid(self):
+        item = {"name": "demo", "slicer": {"enabled": False}}
+        valid, error = fc_export.validate_slicer_config(item)
+        assert valid is True
+        assert error is None
+
+    def test_validate_slicer_config_requires_valid_engine(self):
+        item = {"name": "demo", "slicer": {"enabled": True, "engine": "invalid"}}
+        valid, error = fc_export.validate_slicer_config(item)
+        assert valid is False
+        assert "slicer.engine" in error
+
+    def test_validate_slicer_config_requires_profiles_without_template(self):
+        item = {
+            "name": "demo",
+            "slicer": {
+                "enabled": True,
+                "engine": "prusa",
+                "prusa": {},
+            },
+        }
+        valid, error = fc_export.validate_slicer_config(item)
+        assert valid is False
+        assert "requires either profiles" in error
+
+    def test_validate_slicer_config_allows_missing_profiles_with_template(self):
+        item = {
+            "name": "demo",
+            "template": "template.3mf",
+            "slicer": {
+                "enabled": True,
+                "engine": "prusa",
+                "prusa": {},
+            },
+        }
+        valid, error = fc_export.validate_slicer_config(item)
+        assert valid is True
+        assert error is None
+
+    def test_validate_slicer_config_accepts_config_bundle_without_template(self):
+        item = {
+            "name": "demo",
+            "slicer": {
+                "enabled": True,
+                "engine": "orca",
+                "use_config_bundle": True,
+                "config_bundle": "profile.ini",
+                "orca": {},
+            },
+        }
+        valid, error = fc_export.validate_slicer_config(item)
+        assert valid is True
+        assert error is None
+
+    def test_build_slicer_command_prusa_profiles(self, tmp_path):
+        item = {
+            "name": "demo",
+            "slicer": {
+                "enabled": True,
+                "engine": "prusa",
+                "prusa": {
+                    "printer_profile": "mk4",
+                    "print_profile": "0.2 quality",
+                    "material_profile": "PLA",
+                    "extra_args": ["--some-flag"],
+                },
+                "output_dir": str(tmp_path),
+                "output_name": "{name}_{engine}.gcode",
+            },
+        }
+        cmd, output_path = fc_export.build_slicer_command(item, "/tmp/in.3mf")
+        assert cmd[0] == "prusa-slicer"
+        assert "--printer-profile" in cmd
+        assert "--print-profile" in cmd
+        assert "--material-profile" in cmd
+        assert "--some-flag" in cmd
+        assert output_path.endswith("demo_prusa.gcode")
+
+    def test_build_slicer_command_orca_with_config_bundle(self, tmp_path):
+        item = {
+            "name": "demo",
+            "slicer": {
+                "enabled": True,
+                "engine": "orca",
+                "use_config_bundle": True,
+                "config_bundle": "/tmp/orca.ini",
+                "output_dir": str(tmp_path),
+                "orca": {},
+            },
+        }
+        cmd, _ = fc_export.build_slicer_command(item, "/tmp/in.3mf")
+        assert cmd[0] == "orca-slicer"
+        assert "--load" in cmd
+        assert "/tmp/orca.ini" in cmd
+
+    def test_run_slicer_for_export_item_respects_dry_run(self):
+        item = {
+            "name": "demo",
+            "slicer": {
+                "enabled": True,
+                "engine": "prusa",
+                "dry_run": True,
+                "prusa": {
+                    "printer_profile": "mk4",
+                    "print_profile": "0.2 quality",
+                    "material_profile": "PLA",
+                },
+            },
+        }
+        with patch("fc_export.subprocess.run") as mock_run:
+            ok = fc_export.run_slicer_for_export_item(item, "/tmp/in.3mf")
+        assert ok is True
+        mock_run.assert_not_called()
+
+    def test_run_slicer_for_export_item_handles_non_zero_exit(self):
+        item = {
+            "name": "demo",
+            "template": "template.3mf",
+            "slicer": {"enabled": True, "engine": "prusa", "prusa": {}},
+        }
+        proc = MagicMock(returncode=2, stderr="bad", stdout="")
+        with patch("fc_export.subprocess.run", return_value=proc):
+            ok = fc_export.run_slicer_for_export_item(item, "/tmp/in.3mf")
+        assert ok is False
+
+
 class TestColIndexToLetter:
     """Tests for spreadsheet column index to letter conversion."""
 
@@ -1125,6 +1254,39 @@ class TestLoadConfig:
 
         # Then
         assert result[0]["bom"]["output"] == str(tmp_path / "docs" / "bom.csv")
+
+    def test_load_config_resolves_slicer_paths(self, tmp_path):
+        """Should resolve nested slicer paths and validate slicer config."""
+        config_file = tmp_path / "export.yml"
+        config_content = {
+            "export": [
+                {
+                    "name": "TestProject",
+                    "source": "test.FCStd",
+                    "template": "templates/template.3mf",
+                    "slicer": {
+                        "enabled": True,
+                        "engine": "prusa",
+                        "output_dir": "gcode",
+                        "config_bundle": "configs/prusa.ini",
+                        "binary": "bin/prusa-slicer",
+                        "prusa": {},
+                    },
+                }
+            ]
+        }
+        config_file.write_text(yaml.dump(config_content))
+
+        with patch.dict("os.environ", {}, clear=False):
+            fc_export.CONFIG_FILE = str(config_file)
+            fc_export.PROJECT_ROOT = str(tmp_path)
+
+            result = fc_export.load_config()
+
+        slicer = result[0]["slicer"]
+        assert slicer["output_dir"] == str(tmp_path / "gcode")
+        assert slicer["config_bundle"] == str(tmp_path / "configs" / "prusa.ini")
+        assert slicer["binary"] == str(tmp_path / "bin" / "prusa-slicer")
 
 
 if __name__ == "__main__":
