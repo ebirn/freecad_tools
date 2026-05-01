@@ -16,6 +16,7 @@ This module tests:
 - _col_index_to_letter() - Spreadsheet column conversion
 """
 
+import json
 import logging
 import sys
 from pathlib import Path
@@ -48,6 +49,7 @@ class TestParseArgs:
         assert args.config is None
         assert args.verbose is False
         assert args.dry_run is False
+        assert args.list_exports is False
 
     def test_parse_args_with_config_positional(self):
         """Should parse config file from positional argument."""
@@ -60,6 +62,7 @@ class TestParseArgs:
         assert args.config is None
         assert args.verbose is False
         assert args.dry_run is False
+        assert args.list_exports is False
 
     def test_parse_args_with_config_flag(self):
         """Should parse config file from --config flag."""
@@ -72,6 +75,7 @@ class TestParseArgs:
         assert args.config == "my_config.yml"
         assert args.verbose is False
         assert args.dry_run is False
+        assert args.list_exports is False
 
     def test_parse_args_with_verbose_flag(self):
         """Should parse verbose flag."""
@@ -99,6 +103,34 @@ class TestParseArgs:
 
         # Then
         assert args.dry_run is True
+
+    def test_parse_args_with_list_exports_flag(self):
+        """Should parse --list-exports flag."""
+        with patch.object(sys, "argv", ["fc_export.py", "--list-exports"]):
+            args = fc_export.parse_args()
+
+        assert args.list_exports is True
+
+    def test_parse_args_with_gui_only_flag(self):
+        """Should parse --gui-only flag."""
+        with patch.object(sys, "argv", ["fc_export.py", "--gui-only"]):
+            args = fc_export.parse_args()
+
+        assert args.gui_only is True
+
+    def test_parse_args_with_screenshots_only_flag(self):
+        """Should parse --screenshots-only flag."""
+        with patch.object(sys, "argv", ["fc_export.py", "--screenshots-only"]):
+            args = fc_export.parse_args()
+
+        assert args.screenshots_only is True
+
+    def test_parse_args_with_gui_session_run(self):
+        """Should parse --gui-session run."""
+        with patch.object(sys, "argv", ["fc_export.py", "--gui-session", "run"]):
+            args = fc_export.parse_args()
+
+        assert args.gui_session == "run"
 
     def test_parse_args_with_all_flags(self):
         """Should parse all flags together."""
@@ -236,6 +268,519 @@ class TestResolveObjectIdentifier:
         # Then
         assert result[0] == mock_obj_by_name
         mock_doc.getObject.assert_called_once()
+
+
+class TestExportSelectionHelpers:
+    """Tests for export listing and filtering helpers."""
+
+    def test_get_export_names_uses_name_when_present(self):
+        exports = [{"name": "alpha"}, {"name": "beta"}]
+        assert fc_export.get_export_names(exports) == ["alpha", "beta"]
+
+    def test_get_export_names_falls_back_to_unnamed(self):
+        exports = [{"name": "alpha"}, {}, {"name": ""}]
+        assert fc_export.get_export_names(exports) == ["alpha", "unnamed_1", "unnamed_2"]
+
+    def test_filter_exports_by_name_exact_match(self):
+        exports = [{"name": "alpha"}, {"name": "beta"}, {"name": "alpha"}]
+        filtered = fc_export.filter_exports_by_name(exports, "alpha")
+        assert filtered == [{"name": "alpha"}, {"name": "alpha"}]
+
+
+class TestModeHelpers:
+    """Tests for pipeline mode helper behavior."""
+
+    def test_should_run_3mf_export_default(self):
+        assert fc_export.should_run_3mf_export(gui_only=False, screenshots_only=False) is True
+
+    def test_should_run_3mf_export_gui_only(self):
+        assert fc_export.should_run_3mf_export(gui_only=True, screenshots_only=False) is False
+
+    def test_should_run_3mf_export_screenshots_only(self):
+        assert fc_export.should_run_3mf_export(gui_only=False, screenshots_only=True) is False
+
+    def test_should_run_techdraw_when_present(self):
+        assert fc_export.should_run_techdraw({"pages": []}, screenshots_only=False) is True
+
+    def test_should_run_techdraw_false_in_screenshots_only(self):
+        assert fc_export.should_run_techdraw({"pages": []}, screenshots_only=True) is False
+
+    def test_has_gui_tasks_true_for_screenshots(self):
+        assert fc_export.has_gui_tasks({"screenshots": {"enabled": True}}) is True
+
+    def test_has_gui_tasks_true_for_techdraw(self):
+        assert fc_export.has_gui_tasks({"techdraw": {"pages": ["Page"]}}) is True
+
+    def test_has_gui_tasks_false_when_none_configured(self):
+        assert fc_export.has_gui_tasks({}) is False
+
+    def test_build_gui_task_summary_reports_flags(self):
+        item = {"screenshots": {"enabled": True}, "techdraw": {"pages": []}}
+        summary = fc_export.build_gui_task_summary(item, screenshots_only=False)
+        assert summary == {"screenshots": True, "techdraw": True}
+
+    def test_build_gui_task_summary_disables_techdraw_in_screenshots_only(self):
+        item = {"screenshots": {"enabled": True}, "techdraw": {"pages": []}}
+        summary = fc_export.build_gui_task_summary(item, screenshots_only=True)
+        assert summary == {"screenshots": True, "techdraw": False}
+
+    def test_plan_gui_tasks_uses_summary(self):
+        item = {"screenshots": {"enabled": True}, "techdraw": {"pages": []}}
+        plan = fc_export.plan_gui_tasks(item, screenshots_only=False)
+        assert plan == {"run_screenshots": True, "run_techdraw": True}
+
+    def test_build_gui_batch_config_resolves_relative_paths(self, tmp_path):
+        item = {
+            "bodies": ["Body"],
+            "screenshots": {"output_dir": "prints/images", "views": ["front"]},
+            "techdraw": {"pages": ["Page"]},
+        }
+        cfg = fc_export.build_gui_batch_config(item, "example.FCStd", str(tmp_path), str(tmp_path / "temp"))
+        assert cfg["source"] == "example.FCStd"
+        assert cfg["screenshots"]["output_dir"].startswith(str(tmp_path))
+        assert cfg["techdraw"]["output_dir"].endswith("temp")
+
+    def test_normalize_gui_batch_result_fills_missing_sections(self):
+        normalized = fc_export.normalize_gui_batch_result({"success": False})
+        assert normalized["screenshots"]["success"] is False
+        assert normalized["screenshots"]["images"] == []
+        assert normalized["techdraw"]["success"] is False
+        assert normalized["techdraw"]["pages"] == []
+        assert normalized["artifacts"]["pdf_pages"] == []
+        assert normalized["timing"]["total_seconds"] == 0.0
+
+    def test_normalize_gui_batch_result_preserves_valid_sections(self):
+        payload = {
+            "success": True,
+            "screenshots": {"success": True, "images": [{"path": "a.png"}], "error": None, "skipped": False},
+            "techdraw": {"success": True, "pages": [{"pdf_path": "a.pdf"}], "error": None},
+            "error": None,
+        }
+        normalized = fc_export.normalize_gui_batch_result(payload)
+        assert normalized["success"] is True
+        assert normalized["screenshots"]["images"][0]["path"] == "a.png"
+        assert normalized["techdraw"]["pages"][0]["pdf_path"] == "a.pdf"
+
+    def test_normalize_gui_batch_result_preserves_artifacts_and_timing(self):
+        payload = {
+            "success": True,
+            "screenshots": {"success": True, "images": [], "error": None, "skipped": False},
+            "techdraw": {"success": True, "pages": [], "error": None},
+            "artifacts": {"pdf_pages": ["a.pdf"], "images": ["a.png"]},
+            "timing": {"total_seconds": 1.25, "techdraw_seconds": 0.4, "screenshots_seconds": 0.6},
+            "error": None,
+        }
+        normalized = fc_export.normalize_gui_batch_result(payload)
+        assert normalized["artifacts"]["pdf_pages"] == ["a.pdf"]
+        assert normalized["artifacts"]["images"] == ["a.png"]
+        assert normalized["timing"]["total_seconds"] == 1.25
+
+    def test_summarize_gui_batch_result_formats_counts_and_timing(self):
+        payload = {
+            "success": True,
+            "screenshots": {"success": True, "images": [], "error": None, "skipped": False},
+            "techdraw": {"success": True, "pages": [], "error": None},
+            "artifacts": {"pdf_pages": ["p1.pdf", "p2.pdf"], "images": ["i1.png"]},
+            "timing": {"total_seconds": 2.5, "techdraw_seconds": 1.0, "screenshots_seconds": 1.2},
+            "error": None,
+        }
+        summary = fc_export.summarize_gui_batch_result(payload)
+        assert "success=True" in summary
+        assert "screenshots=True(1 images)" in summary
+        assert "techdraw=True(2 pages)" in summary
+        assert "time=2.500s" in summary
+
+    def test_summarize_export_timing_formats_stage_times(self):
+        summary = fc_export.summarize_export_timing(
+            "Demo",
+            {
+                "open_seconds": 0.5,
+                "export_seconds": 1.25,
+                "gui_seconds": 0.75,
+                "total_seconds": 2.6,
+            },
+        )
+        assert "Export timing [Demo]" in summary
+        assert "open=0.500s" in summary
+        assert "export=1.250s" in summary
+        assert "gui=0.750s" in summary
+        assert "total=2.600s" in summary
+
+    def test_log_export_timing_emits_summary_line(self):
+        timing_data = {
+            "open_seconds": 0.1,
+            "export_seconds": 0.2,
+            "gui_seconds": 0.3,
+            "total_seconds": 0.7,
+        }
+        with patch("fc_export.logger.info") as mock_info:
+            fc_export.log_export_timing("Demo", timing_data)
+
+        assert mock_info.call_count == 1
+        msg = mock_info.call_args.args[0]
+        assert "Export timing [Demo]" in msg
+        assert "total=0.700s" in msg
+
+    def test_summarize_run_stats_formats_overall_totals(self):
+        summary = fc_export.summarize_run_stats(
+            {
+                "item_count": 3,
+                "open_seconds": 1.0,
+                "export_seconds": 2.0,
+                "gui_seconds": 3.0,
+                "shared_gui_seconds": 4.0,
+                "total_seconds": 10.0,
+            }
+        )
+        assert "items=3" in summary
+        assert "open=1.000s" in summary
+        assert "export=2.000s" in summary
+        assert "gui=3.000s" in summary
+        assert "shared_gui=4.000s" in summary
+        assert "total=10.000s" in summary
+
+    def test_build_shared_gui_job_with_relative_paths(self):
+        item = {
+            "techdraw": {"pages": ["Page"], "output_dir": "docs"},
+            "screenshots": {
+                "output_dir": "images",
+                "views": ["front"],
+                "resolution": [800, 600],
+                "format": "jpg",
+                "composite": False,
+                "bodies": ["Body"],
+            },
+        }
+
+        job = fc_export.build_shared_gui_job(item, "Demo", "src.FCStd", "/tmp/project", screenshots_only=False)
+
+        assert job["name"] == "Demo"
+        assert job["source"] == "src.FCStd"
+        assert job["techdraw"]["enabled"] is True
+        assert job["techdraw"]["pages"] == ["Page"]
+        assert job["techdraw"]["temp_dir"].endswith("test_output/_gui_pages/Demo")
+        assert job["screenshots"]["enabled"] is True
+        assert job["screenshots"]["output_dir"] == "/tmp/project/images"
+        assert job["screenshots"]["views"] == ["front"]
+        assert job["screenshots"]["resolution"] == [800, 600]
+        assert job["screenshots"]["format"] == "jpg"
+        assert job["screenshots"]["composite"] is False
+        assert job["screenshots"]["bodies"] == ["Body"]
+
+    def test_build_shared_gui_job_screenshots_only_disables_techdraw(self):
+        item = {"techdraw": {"pages": ["Page"]}, "screenshots": {"bodies": ["Body"]}}
+
+        job = fc_export.build_shared_gui_job(item, "Demo", "src.FCStd", "/tmp/project", screenshots_only=True)
+
+        assert job["techdraw"]["enabled"] is False
+        assert job["screenshots"]["enabled"] is True
+
+
+class TestGuiTaskExecution:
+    """Tests for GUI task orchestration boundaries."""
+
+    def test_run_gui_tasks_for_item_screenshots_only_skips_techdraw(self, tmp_path):
+        doc = MagicMock()
+        item = {
+            "name": "demo",
+            "source": "example.FCStd",
+            "screenshots": {"enabled": True},
+            "techdraw": {"pages": ["Page"]},
+        }
+
+        with (
+            patch("fc_export.run_screenshot_generation") as mock_screenshots,
+            patch("fc_export.export_techdraw_to_pdf") as mock_techdraw,
+        ):
+            mock_screenshots.return_value = (True, {"success": True, "images": []})
+
+            result = fc_export.run_gui_tasks_for_item(
+                doc,
+                item,
+                "demo",
+                "example.FCStd",
+                str(tmp_path),
+                screenshots_only=True,
+            )
+
+        assert result["screenshot"]["success"] is True
+        mock_screenshots.assert_called_once()
+        mock_techdraw.assert_not_called()
+
+    def test_run_gui_tasks_for_item_uses_batched_path_when_both_enabled(self, tmp_path):
+        doc = MagicMock()
+        item = {
+            "name": "demo",
+            "source": "example.FCStd",
+            "screenshots": {"enabled": True},
+            "techdraw": {"pages": ["Page"]},
+        }
+
+        with patch("fc_export.run_gui_tasks_batched") as mock_batched:
+            mock_batched.return_value = {
+                "screenshot": {"success": True, "result": {"success": True, "images": []}},
+                "techdraw": {"success": True, "output": "demo.pdf"},
+                "last_bom_csv": None,
+            }
+            result = fc_export.run_gui_tasks_for_item(
+                doc,
+                item,
+                "demo",
+                "example.FCStd",
+                str(tmp_path),
+                screenshots_only=False,
+            )
+
+        mock_batched.assert_called_once()
+        assert result["screenshot"]["success"] is True
+        assert result["techdraw"]["success"] is True
+
+    def test_run_gui_tasks_for_item_falls_back_when_batched_unavailable(self, tmp_path):
+        doc = MagicMock()
+        item = {
+            "name": "demo",
+            "source": "example.FCStd",
+            "screenshots": {"enabled": True},
+            "techdraw": {"pages": ["Page"]},
+        }
+
+        with (
+            patch(
+                "fc_export.run_gui_tasks_batched",
+                return_value={"screenshot": None, "techdraw": None, "last_bom_csv": None},
+            ),
+            patch(
+                "fc_export.run_screenshot_generation", return_value=(True, {"success": True, "images": []})
+            ) as mock_screens,
+            patch("fc_export.export_techdraw_to_pdf", return_value=True) as mock_pdf,
+            patch("fc_export.extract_bom_from_assembly", return_value=[]),
+            patch("fc_export.extract_bom_from_spreadsheet", return_value=[]),
+            patch("fc_export.extract_bom_from_parts", return_value=[]),
+        ):
+            result = fc_export.run_gui_tasks_for_item(
+                doc,
+                item,
+                "demo",
+                "example.FCStd",
+                str(tmp_path),
+                screenshots_only=False,
+            )
+
+        assert result["screenshot"]["success"] is True
+        mock_screens.assert_called_once()
+        mock_pdf.assert_called_once()
+
+    def test_run_gui_tasks_batched_runs_single_gui_process(self, tmp_path):
+        doc = MagicMock()
+        source_path = str(tmp_path / "example.FCStd")
+        (tmp_path / "example.FCStd").write_text("stub", encoding="utf-8")
+        item = {
+            "name": "demo",
+            "source": source_path,
+            "bodies": ["Body"],
+            "screenshots": {"enabled": True, "views": ["isometric"]},
+            "techdraw": {"pages": ["Page"]},
+        }
+
+        gui_calls = {"count": 0}
+
+        def fake_run(cmd, capture_output, text, timeout):
+            if cmd[1].endswith("gui_batch_export.py"):
+                gui_calls["count"] += 1
+                with open(cmd[2], encoding="utf-8") as f:
+                    batch_cfg = json.load(f)
+                with open(batch_cfg["result_file"], "w", encoding="utf-8") as f:
+                    json.dump(
+                        {
+                            "success": True,
+                            "screenshots": {"success": True, "images": [], "error": None, "skipped": False},
+                            "techdraw": {
+                                "success": True,
+                                "pages": [{"name": "Page", "pdf_path": str(tmp_path / "Page.pdf")}],
+                                "error": None,
+                            },
+                        },
+                        f,
+                    )
+                return MagicMock(returncode=0, stderr="", stdout="")
+
+            if cmd[1].endswith("techdraw_pdf.py"):
+                with open(cmd[2], encoding="utf-8") as f:
+                    merge_cfg = json.load(f)
+                output_path = merge_cfg["output_path"]
+                Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+                Path(output_path).write_text("pdf", encoding="utf-8")
+                return MagicMock(returncode=0, stderr="", stdout="")
+
+            raise AssertionError(f"Unexpected subprocess command: {cmd}")
+
+        with (
+            patch(
+                "fc_export._find_freecad_gui_binary", return_value="/Applications/FreeCAD.app/Contents/MacOS/FreeCAD"
+            ),
+            patch("fc_export._find_venv_python", return_value=sys.executable),
+            patch("fc_export.subprocess.run", side_effect=fake_run),
+            patch("fc_export.logger.info") as mock_info,
+        ):
+            result = fc_export.run_gui_tasks_batched(doc, item, "demo", source_path, str(tmp_path))
+
+        assert gui_calls["count"] == 1
+        assert result["screenshot"]["success"] is True
+        assert result["techdraw"]["success"] is True
+        assert any("GUI batch result:" in str(call.args[0]) for call in mock_info.call_args_list if call.args)
+
+    def test_main_gui_only_uses_batched_path_once_for_combined_tasks(self, tmp_path):
+        source_path = tmp_path / "example.FCStd"
+        source_path.write_text("stub", encoding="utf-8")
+
+        doc = MagicMock()
+        doc.Name = "Doc"
+        doc.FileName = str(source_path)
+        doc.Objects = []
+
+        export_item = {
+            "name": "demo",
+            "source": str(source_path),
+            "screenshots": {"enabled": True},
+            "techdraw": {"pages": ["Page"]},
+        }
+
+        with (
+            patch.object(fc_export, "dry_run_mode", False),
+            patch.object(fc_export, "list_exports_mode", False),
+            patch.object(fc_export, "gui_only_mode", True),
+            patch.object(fc_export, "screenshots_only_mode", False),
+            patch.object(fc_export, "name_filter", None),
+            patch("fc_export.load_config", return_value=[export_item]),
+            patch("fc_export.FreeCAD.open", return_value=doc),
+            patch("fc_export.FreeCAD.setActiveDocument"),
+            patch("fc_export.FreeCAD.closeDocument"),
+            patch("fc_export.run_gui_tasks_batched") as mock_batched,
+            patch("fc_export.run_screenshot_generation") as mock_screenshots,
+            patch("fc_export.export_techdraw_to_pdf") as mock_techdraw,
+            patch("fc_export.sys.exit", side_effect=SystemExit),
+        ):
+            mock_batched.return_value = {
+                "screenshot": {"success": True, "result": {"success": True, "images": []}},
+                "techdraw": {"success": True, "output": str(tmp_path / "docs" / "demo.pdf")},
+                "last_bom_csv": None,
+            }
+
+            with pytest.raises(SystemExit):
+                fc_export.main()
+
+        mock_batched.assert_called_once()
+        mock_screenshots.assert_not_called()
+        mock_techdraw.assert_not_called()
+
+    @pytest.mark.integration
+    def test_main_gui_session_run_batches_multiple_jobs_once(self, tmp_path):
+        source_path = tmp_path / "example.FCStd"
+        source_path.write_text("stub", encoding="utf-8")
+
+        doc_one = MagicMock()
+        doc_one.Name = "Doc1"
+        doc_one.FileName = str(source_path)
+        doc_one.Objects = []
+
+        doc_two = MagicMock()
+        doc_two.Name = "Doc2"
+        doc_two.FileName = str(source_path)
+        doc_two.Objects = []
+
+        exports = [
+            {
+                "name": "one",
+                "source": str(source_path),
+                "screenshots": {"enabled": True, "bodies": ["Body"]},
+                "techdraw": {"pages": ["Page"]},
+            },
+            {
+                "name": "two",
+                "source": str(source_path),
+                "screenshots": {"enabled": True, "bodies": ["Body"]},
+                "techdraw": {"pages": ["Page"]},
+            },
+        ]
+
+        with (
+            patch.object(fc_export, "dry_run_mode", False),
+            patch.object(fc_export, "list_exports_mode", False),
+            patch.object(fc_export, "gui_only_mode", True),
+            patch.object(fc_export, "screenshots_only_mode", False),
+            patch.object(fc_export, "gui_session_mode", "run"),
+            patch.object(fc_export, "name_filter", None),
+            patch.object(fc_export, "PROJECT_ROOT", str(tmp_path)),
+            patch("fc_export.load_config", return_value=exports),
+            patch("fc_export.FreeCAD.open", side_effect=[doc_one, doc_two]),
+            patch("fc_export.FreeCAD.setActiveDocument"),
+            patch("fc_export.FreeCAD.closeDocument"),
+            patch("fc_export.run_gui_tasks_for_item") as mock_per_item,
+            patch("fc_export.run_gui_tasks_shared_session") as mock_shared,
+            patch("fc_export.merge_techdraw_pdfs", return_value=True),
+            patch("fc_export.warn_on_near_uniform_images"),
+            patch("fc_export.sys.exit", side_effect=SystemExit),
+        ):
+            mock_shared.return_value = {
+                "one": {
+                    "screenshots": {"success": True, "images": []},
+                    "techdraw": {"pages": [{"name": "Page", "pdf_path": str(tmp_path / "one_page.pdf")}]},
+                },
+                "two": {
+                    "screenshots": {"success": True, "images": []},
+                    "techdraw": {"pages": [{"name": "Page", "pdf_path": str(tmp_path / "two_page.pdf")}]},
+                },
+            }
+
+            with pytest.raises(SystemExit):
+                fc_export.main()
+
+        mock_per_item.assert_not_called()
+        mock_shared.assert_called_once()
+        queued_jobs = mock_shared.call_args.args[0]
+        assert len(queued_jobs) == 2
+        assert {job["name"] for job in queued_jobs} == {"one", "two"}
+
+
+class TestScreenshotValidation:
+    """Tests for near-uniform screenshot warning logic."""
+
+    def test_warn_on_near_uniform_images_emits_warning(self, tmp_path):
+        image_path = tmp_path / "blank.png"
+        image_path.write_text("stub", encoding="utf-8")
+        images = [{"path": str(image_path)}]
+
+        with patch("fc_export._compute_image_stddev", return_value=0.5), patch("fc_export.log_warning_msg") as warn:
+            fc_export.warn_on_near_uniform_images(images, stddev_threshold=1.5)
+
+        warn.assert_called_once()
+
+    def test_warn_on_near_uniform_images_no_warning_above_threshold(self, tmp_path):
+        image_path = tmp_path / "normal.png"
+        image_path.write_text("stub", encoding="utf-8")
+        images = [{"path": str(image_path)}]
+
+        with patch("fc_export._compute_image_stddev", return_value=3.0), patch("fc_export.log_warning_msg") as warn:
+            fc_export.warn_on_near_uniform_images(images, stddev_threshold=1.5)
+
+        warn.assert_not_called()
+
+
+class TestSubprocessSummaries:
+    """Tests for concise subprocess stderr summaries."""
+
+    def test_summarize_subprocess_stderr_empty(self):
+        assert fc_export.summarize_subprocess_stderr("") == ""
+
+    def test_summarize_subprocess_stderr_compacts_multiline(self):
+        stderr = "line one\n\nline two\n"
+        assert fc_export.summarize_subprocess_stderr(stderr) == "line one line two"
+
+    def test_summarize_subprocess_stderr_truncates_long_text(self):
+        stderr = "x" * 400
+        summary = fc_export.summarize_subprocess_stderr(stderr, limit=50)
+        assert summary.endswith("...")
+        assert len(summary) == 53
 
 
 class TestColIndexToLetter:

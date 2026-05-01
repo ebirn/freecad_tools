@@ -658,6 +658,7 @@ class TestQualityMetrics:
             mock_stat.st_size = 500
             with (
                 patch.object(lib3mf_utils, "convert_stl_to_lib3mf_mesh", return_value=mock_stl_metrics),
+                patch.object(lib3mf_utils, "create_euler_transform", return_value=MagicMock()),
                 patch("lib3mf_utils.Path") as mock_path,
             ):
                 mock_path_instance = MagicMock()
@@ -675,6 +676,93 @@ class TestQualityMetrics:
                 assert metrics["total_vertex_count"] == 3
                 assert metrics["total_triangle_count"] == 1
                 assert metrics["output_file_size"] == 500
+
+    def test_create_3mf_from_stls_falls_back_to_identity_on_transform_error(self, tmp_path):
+        """Should retry AddBuildItem with identity transform on transform errors."""
+        import lib3mf_utils
+
+        with patch("lib3mf_utils.get_wrapper") as mock_get_wrapper:
+            mock_wrapper = MagicMock()
+            mock_model = MagicMock()
+            mock_writer = MagicMock()
+            mock_mesh = MagicMock()
+
+            mock_wrapper.CreateModel.return_value = mock_model
+            mock_model.QueryWriter.return_value = mock_writer
+            mock_model.AddMeshObject.return_value = mock_mesh
+            mock_get_wrapper.return_value = mock_wrapper
+
+            # First AddBuildItem call fails, second succeeds
+            mock_model.AddBuildItem.side_effect = [Exception("invalid index"), None]
+
+            stl_file = tmp_path / "test.stl"
+            create_minimal_binary_stl(stl_file, [[(0, 0, 0), (1, 0, 0), (0, 1, 0)]])
+            output_file = tmp_path / "output.3mf"
+            stl_files = [("TestMesh", str(stl_file))]
+
+            mock_stl_metrics = {"vertex_count": 3, "triangle_count": 1, "file_size": 148}
+            mock_stat = MagicMock()
+            mock_stat.st_size = 500
+
+            with (
+                patch.object(lib3mf_utils, "convert_stl_to_lib3mf_mesh", return_value=mock_stl_metrics),
+                patch.object(lib3mf_utils, "create_euler_transform", return_value=MagicMock()),
+                patch("lib3mf_utils.Path") as mock_path,
+            ):
+                mock_path_instance = MagicMock()
+                mock_path_instance.stat.return_value = mock_stat
+                mock_path.return_value = mock_path_instance
+
+                success, _metrics = lib3mf_utils.create_3mf_from_stls(
+                    stl_files,
+                    str(output_file),
+                    transforms=[{"rotation": [45, 0, 0], "position": [1, 2, 3]}],
+                )
+
+            assert success is True
+            assert mock_model.AddBuildItem.call_count == 2
+
+    def test_create_3mf_from_stls_uses_identity_when_transform_build_fails(self, tmp_path):
+        """Should continue export when create_euler_transform raises."""
+        import lib3mf_utils
+
+        with patch("lib3mf_utils.get_wrapper") as mock_get_wrapper:
+            mock_wrapper = MagicMock()
+            mock_model = MagicMock()
+            mock_writer = MagicMock()
+            mock_mesh = MagicMock()
+
+            mock_wrapper.CreateModel.return_value = mock_model
+            mock_model.QueryWriter.return_value = mock_writer
+            mock_model.AddMeshObject.return_value = mock_mesh
+            mock_get_wrapper.return_value = mock_wrapper
+
+            stl_file = tmp_path / "test.stl"
+            create_minimal_binary_stl(stl_file, [[(0, 0, 0), (1, 0, 0), (0, 1, 0)]])
+            output_file = tmp_path / "output.3mf"
+            stl_files = [("TestMesh", str(stl_file))]
+
+            mock_stl_metrics = {"vertex_count": 3, "triangle_count": 1, "file_size": 148}
+            mock_stat = MagicMock()
+            mock_stat.st_size = 500
+
+            with (
+                patch.object(lib3mf_utils, "convert_stl_to_lib3mf_mesh", return_value=mock_stl_metrics),
+                patch.object(lib3mf_utils, "create_euler_transform", side_effect=Exception("invalid index")),
+                patch("lib3mf_utils.Path") as mock_path,
+            ):
+                mock_path_instance = MagicMock()
+                mock_path_instance.stat.return_value = mock_stat
+                mock_path.return_value = mock_path_instance
+
+                success, _metrics = lib3mf_utils.create_3mf_from_stls(
+                    stl_files,
+                    str(output_file),
+                    transforms=[{"rotation": [45, 0, 0], "position": [1, 2, 3]}],
+                )
+
+            assert success is True
+            mock_model.AddBuildItem.assert_called_once()
 
 
 if __name__ == "__main__":
