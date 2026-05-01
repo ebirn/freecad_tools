@@ -74,6 +74,18 @@ python3 tools/export.py path/to/config.yml --dry-run
 python3 tools/export.py path/to/config.yml --verbose
 python3 tools/export.py path/to/config.yml -v
 
+# List available export item names
+python3 tools/export.py path/to/config.yml --list-exports
+
+# Run only GUI tasks (screenshots + TechDraw), skip 3MF rebuild
+python3 tools/export.py path/to/config.yml --gui-only
+
+# Run only screenshots, skip 3MF and TechDraw
+python3 tools/export.py path/to/config.yml --screenshots-only
+
+# Queue GUI work and run one shared GUI session for the full run
+python3 tools/export.py path/to/config.yml --gui-session run
+
 # Show help
 python3 tools/export.py --help
 ```
@@ -86,7 +98,27 @@ python3 tools/export.py --help
 | `--verbose` | `-v` | Enable debug logging output |
 | `--dry-run` | | Validate config without performing export |
 | `--name NAME` | `-n NAME` | Export only the item with this name (from multi-item config) |
+| `--list-exports` | | Print available export item names and exit |
+| `--gui-only` | | Run GUI tasks only (screenshots/TechDraw), skip 3MF export |
+| `--screenshots-only` | | Run screenshot tasks only, skip 3MF and TechDraw |
+| `--gui-session MODE` | | GUI batching mode: `item` (default) or `run` (shared GUI session for all queued GUI jobs) |
 | `--help` | `-h` | Show usage information |
+
+**GUI Session Modes**:
+- `item` (default): run GUI tasks as each export item is processed.
+- `run`: queue GUI tasks and execute them in one shared FreeCAD GUI session after non-GUI export steps.
+
+For practical end-to-end runs in this repository:
+
+```bash
+make export
+```
+
+To remove generated artifacts from `test_output/`:
+
+```bash
+make clean
+```
 
 **Config File Discovery** (when not specified):
 1. `.freecad_tools/export.yml` (per-project config)

@@ -7,20 +7,21 @@ For process guidance see AGENTS.md.
 
 ## Open Tasks
 
-### 1. Batch Processing [MEDIUM PRIORITY]
+### 1. Batch Job Runner (Multi-Job Queue) [LOW PRIORITY]
 **Status**: NOT STARTED
 **Branch**: `agent_batch_processing`
 **Effort**: Low-Medium (1-2 hours)
 
-Process multiple export jobs with parallel execution and per-job error handling.
+Run multiple independent export jobs as a managed queue (across one or more config files/projects), with per-job progress and failure isolation.
 
 **Tasks**:
-- [ ] Design batch processing interface (CLI args or separate config)
-- [ ] Implement export queue management
-- [ ] Add progress reporting for batch jobs
-- [ ] Handle errors per export (continue on failure)
-- [ ] Test with multiple concurrent exports
-- [ ] Document in README.md
+- [ ] Design batch interface (`--batch` CLI and/or batch YAML)
+- [ ] Support multiple config paths and output roots per batch job
+- [ ] Implement queue execution with per-job status (pending/running/success/failed)
+- [ ] Add continue-on-error mode and final summary report
+- [ ] Optionally add bounded parallelism for independent jobs
+- [ ] Add tests for mixed success/failure jobs and summary output
+- [ ] Document batch runner usage in README.md
 
 ---
 
@@ -96,29 +97,7 @@ printables:
 
 ---
 
-### 4. Refactor Export Core + Batch GUI Runs [HIGH PRIORITY]
-**Status**: NOT STARTED
-**Branch**: `agent_refactor_fc_export`
-**Effort**: Medium-High (4-8 hours)
-
-Refactor `tools/fc_export.py` (core export orchestrator) to reduce complexity and improve maintainability.
-
-**Primary goal**: When an export item requires FreeCAD GUI (TechDraw, screenshots, etc.), batch all GUI-dependent steps into a single FreeCAD GUI launch per export run (or per export item), instead of launching FreeCAD multiple times.
-
-**Tasks**:
-- [ ] Refactor `fc_export.py` into clearer pipeline stages (config load, STL export, lib3mf, GUI tasks)
-- [ ] Introduce a single GUI session execution path for all GUI-required steps (TechDraw + screenshots)
-- [ ] Define a simple IPC contract for GUI runs (inputs: config/name, outputs: artifacts + structured result)
-- [ ] Ensure non-GUI exports remain fast and do not require GUI binary
-- [ ] Add regression tests around the pipeline boundaries (unit) and one integration test that exercises GUI batching
-- [ ] Reduce GUI subprocess noise: keep logs structured in result JSON, emit concise summaries to stderr
-- [ ] Add basic screenshot output validation (detect near-uniform images and warn)
-- [ ] Add `--screenshots-only` / `--gui-only` mode to run GUI tasks without rebuilding 3MF (optional)
-- [ ] Add `--list-exports` to print available export item names (pairs with `--name`)
-
----
-
-### 5. PrusaSlicer CLI Slicing Automation [MEDIUM PRIORITY]
+### 4. PrusaSlicer CLI Slicing Automation [MEDIUM PRIORITY]
 **Status**: NOT STARTED
 **Branch**: `agent_prusaslicer_cli`
 **Effort**: Medium (2-4 hours)
