@@ -67,3 +67,22 @@ repos:
         description: Prevent giant files from being committed
         args: [--maxkb=1000]
         stages: [pre-commit]
+
+  # Deeper Python error checks (run before push)
+  - repo: local
+    hooks:
+      - id: pylint-errors-tools
+        name: Pylint errors/failures (tools)
+        description: Run pylint E/F checks on tools scripts
+        entry: uv run pylint --disable=all --enable=E,F tools/*.py
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: pylint-errors-macros
+        name: Pylint errors/failures (macros)
+        description: Run pylint E/F checks on macros with FreeCAD-specific allowances
+        entry: uv run pylint --disable=all --enable=E,F --disable=E0401,E1101 macros/*.py
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
