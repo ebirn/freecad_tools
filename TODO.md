@@ -97,23 +97,35 @@ printables:
 
 ---
 
-### 4. PrusaSlicer CLI Slicing Automation [MEDIUM PRIORITY]
+### 4. Multi-Slicer CLI Slicing Automation (Native Profiles) [MEDIUM PRIORITY]
 **Status**: NOT STARTED
-**Branch**: `agent_prusaslicer_cli`
+**Branch**: `agent_slicer_cli`
 **Effort**: Medium (2-4 hours)
 
-Research and add optional automation to slice exported 3MFs via PrusaSlicer CLI.
+Add optional automation to slice exported 3MFs with multiple slicers in native-profile mode.
+
+**Scope (v1)**:
+- Supported slicers: **PrusaSlicer** and **OrcaSlicer**
+- Native-profile mode only (no cross-slicer profile translation)
+- Input 3MF comes from existing export output (`input_3mf: auto` default)
 
 **Research**:
-- [ ] Confirm supported PrusaSlicer CLI flags on macOS (`PrusaSlicer --help`, `--help-fff`)
-- [ ] Determine best way to select profiles: `--printer-profile`, `--print-profile`, `--material-profile` and/or `--load` config bundles
+- [ ] Confirm supported CLI flags on macOS for both slicers (`PrusaSlicer --help`, `OrcaSlicer --help`)
+- [ ] Map profile flags per slicer (`printer` + `print/process` + `filament`) and `--load` config bundle support
 - [ ] Decide output conventions for G-code (per-export-item) and where to write files
 
+**Config + validation rules**:
+- [ ] Add optional `slicer:` section with `enabled`, `engine` (`prusa|orca`), `output_dir`, `output_name`, `run_after_export`, and engine-specific blocks
+- [ ] Allow profile fields to be optional when export item has `template` 3MF; require profiles or `use_config_bundle` when no template is present
+- [ ] Define precedence when both template and profiles are set (profiles override template settings where slicer supports it)
+- [ ] Validate and report clear actionable errors for missing engine/binary/profile inputs
+
 **Implementation ideas**:
-- [ ] Add optional `slicer:` section in export config (profile names, config files, threads, output paths)
-- [ ] Support `--export-gcode` (and optionally `--export-3mf` for normalized 3MF output)
-- [ ] Consider `--datadir` to isolate slicer profiles for reproducible builds
-- [ ] Ensure slicing can be run independently of FreeCAD (operate on generated 3MF)
+- [ ] Implement slicer command builders for PrusaSlicer and OrcaSlicer under a shared runner interface
+- [ ] Support G-code export path generation with stable naming tokens (e.g. `{name}`, `{engine}`, `{date}`)
+- [ ] Ensure slicing can run independently of FreeCAD (operate on generated 3MF only)
+- [ ] Add optional `--dry-run` for slicer command preview
+- [ ] Document native-profile behavior and template/profile compatibility notes in README.md
 
 ## Notes
 
