@@ -53,9 +53,9 @@ docs(readme): add usage section for pre-commit workflow
 
 ---
 
-## Test-Driven Development (TDD) for Bug Fixes
+## Test-Driven Development (TDD) for Bug Fixes and New Features
 
-When a bug or error is reported or detected (except trivial ones), follow this process:
+When a bug or error is reported or detected (except trivial ones), and when implementing new features, follow this process:
 
 1. **Write a failing test first** - Create a test case that reproduces the error
 2. **Verify the test fails** - Run the test to confirm it captures the bug
@@ -63,6 +63,16 @@ When a bug or error is reported or detected (except trivial ones), follow this p
 4. **Verify all tests pass** - Run the full test suite to ensure no regressions
 
 This ensures every non-trivial bug fix is backed by a regression test, preventing the same issue from recurring.
+
+For **new features**, tests define the intended behavior and acceptance criteria:
+
+1. **Design tests with care first** - Cover expected behavior, edge cases, and failure modes before coding
+2. **Add tests before implementation** - New feature tests must be written first
+3. **Confirm tests fail initially** - Verify they fail for the right reason before changing production code
+4. **Implement until green** - Add functionality incrementally until the new tests pass
+5. **Treat green tests as feature completeness signal** - Passing feature tests indicates the behavior is correctly implemented
+
+Important: Great care is required when designing tests for new features. Poorly designed tests can hide defects or enforce the wrong behavior.
 
 ---
 
