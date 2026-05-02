@@ -2,6 +2,8 @@
 
 set shell := ["bash", "-cu"]
 
+test_config := "tests/export_test_config.yml"
+
 # Run all tests (unit only, without FreeCAD)
 test: test-unit
 
@@ -24,7 +26,23 @@ test-all: test-unit test-integration
 
 # Practical full-feature run using test config
 export:
-    python3 tools/export.py tests/export_test_config.yml --gui-session run
+    python3 tools/export.py {{test_config}} --gui-session run
+
+# List export item names from test config
+export-list:
+    python3 tools/export.py {{test_config}} --list-exports
+
+# Run a single export item by name, e.g. `just export-item basic_export`
+export-item name:
+    python3 tools/export.py {{test_config}} --name {{name}} --gui-session run
+
+# Validate one export item (no export), e.g. `just export-item-dry-run basic_export`
+export-item-dry-run name:
+    python3 tools/export.py {{test_config}} --name {{name}} --dry-run --slicer-dry-run
+
+# Print shell commands for all export items (auto-detected from YAML)
+export-show-commands:
+    python3 -c "import yaml; cfg=yaml.safe_load(open('{{test_config}}', encoding='utf-8')) or {}; ex=cfg.get('export', []); [print(f'python3 tools/export.py {{test_config}} --name {i.get(\"name\", \"\")} --gui-session run') for i in ex if i.get('name')]"
 
 # Remove generated test output artifacts
 clean:

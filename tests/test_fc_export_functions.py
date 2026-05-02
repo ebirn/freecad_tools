@@ -865,7 +865,7 @@ class TestSlicerConfigAndCommands:
             },
         }
         cmd, output_path = fc_export.build_slicer_command(item, "/tmp/in.3mf")
-        assert cmd[0] == "prusa-slicer"
+        assert cmd[0].endswith("prusa-slicer") or cmd[0].endswith("PrusaSlicer")
         assert "--printer-profile" in cmd
         assert "--print-profile" in cmd
         assert "--material-profile" in cmd
@@ -885,7 +885,7 @@ class TestSlicerConfigAndCommands:
             },
         }
         cmd, _ = fc_export.build_slicer_command(item, "/tmp/in.3mf")
-        assert cmd[0] == "orca-slicer"
+        assert cmd[0].endswith("orca-slicer") or cmd[0].endswith("OrcaSlicer")
         assert "--load" in cmd
         assert "/tmp/orca.ini" in cmd
 
@@ -918,6 +918,23 @@ class TestSlicerConfigAndCommands:
         with patch("fc_export.subprocess.run", return_value=proc):
             ok = fc_export.run_slicer_for_export_item(item, "/tmp/in.3mf")
         assert ok is False
+
+    def test_resolve_slicer_binary_prefers_path_candidate(self):
+        cfg = {"engine": "prusa"}
+        with (
+            patch("fc_export.shutil.which", side_effect=[None, None]),
+            patch("fc_export.os.path.exists", return_value=True),
+        ):
+            resolved = fc_export._resolve_slicer_binary(cfg)
+
+        assert resolved.endswith("PrusaSlicer")
+
+    def test_resolve_slicer_binary_uses_which_when_available(self):
+        cfg = {"engine": "orca"}
+        with patch("fc_export.shutil.which", return_value="/usr/local/bin/orca-slicer"):
+            resolved = fc_export._resolve_slicer_binary(cfg)
+
+        assert resolved == "/usr/local/bin/orca-slicer"
 
     @pytest.mark.integration
     def test_main_runs_slicer_stage_after_3mf_export(self, tmp_path):

@@ -186,7 +186,7 @@ export:
       output_dir: ../test_output/gcode/
       output_name: "{name}_{engine}_{date}.gcode"
       run_after_export: true
-      prusa:
-        printer_profile: "Original Prusa MK4"
-        print_profile: "0.20mm SPEED"
-        material_profile: "Prusament PLA"
+      # prusa:
+      #   printer_profile: "Original Prusa MK4"
+      #   print_profile: "0.20mm SPEED"
+      #   material_profile: "Prusament PLA"
