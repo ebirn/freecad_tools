@@ -19,6 +19,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 - Slicer binary resolution now auto-detects common macOS app binaries and PATH names.
 - `tests/export_test_config.yml` includes Prusa and Orca slicer examples with explicit profile/config patterns.
+- Slicer precedence is now explicit: config profile overrides take priority; when omitted, template metadata config is used via temporary bundle load.
+
+### Docs
+
+- AGENTS: expanded TDD guidance for new features (tests-first, fail-first, implement-to-green, and careful test design requirements).
 
 ### Fixed
 
