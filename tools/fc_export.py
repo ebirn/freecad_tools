@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zipfile
 from unittest.mock import MagicMock
 
 import yaml
@@ -377,6 +378,57 @@ def _format_slicer_output_name(template, export_name, engine):
     return "".join(c if c.isalnum() or c in ("-", "_", ".") else "_" for c in value)
 
 
+def _strip_profile_value(raw_value):
+    """Normalize profile value parsed from slicer config text."""
+    if raw_value is None:
+        return None
+    value = str(raw_value).strip()
+    if value.startswith('"') and value.endswith('"') and len(value) >= 2:
+        value = value[1:-1]
+    return value.strip() or None
+
+
+def _extract_prusa_profiles_from_template(template_path):
+    """Extract default profile names from template 3MF Prusa config metadata."""
+    if not template_path or not os.path.exists(template_path):
+        return {}
+
+    try:
+        with zipfile.ZipFile(template_path) as archive:
+            if "Metadata/Slic3r_PE.config" not in archive.namelist():
+                return {}
+            config_text = archive.read("Metadata/Slic3r_PE.config").decode("utf-8", errors="ignore")
+    except Exception as exc:
+        logger.debug(f"Failed to read template slicer config metadata: {exc}")
+        return {}
+
+    profile_map = {
+        "printer_settings_id": "printer_profile",
+        "print_settings_id": "print_profile",
+        "filament_settings_id": "material_profile",
+        "default_print_profile": "print_profile",
+        "default_filament_profile": "material_profile",
+    }
+    extracted = {}
+
+    for raw_line in config_text.splitlines():
+        line = raw_line.strip()
+        if not line.startswith(";"):
+            continue
+        line = line[1:].strip()
+        if "=" not in line:
+            continue
+        key, value = [part.strip() for part in line.split("=", 1)]
+        normalized_key = profile_map.get(key)
+        if not normalized_key:
+            continue
+        cleaned = _strip_profile_value(value)
+        if cleaned and normalized_key not in extracted:
+            extracted[normalized_key] = cleaned
+
+    return extracted
+
+
 def build_slicer_command(export_item, output_3mf_path):
     """Build slicer CLI command for a generated 3MF output."""
     slicer = export_item.get("slicer", {})
@@ -384,7 +436,16 @@ def build_slicer_command(export_item, output_3mf_path):
         return None, None
 
     engine = slicer["engine"]
-    engine_cfg = slicer.get(engine, {}) or {}
+    engine_cfg = dict(slicer.get(engine, {}) or {})
+
+    if engine == "prusa":
+        template_profiles = _extract_prusa_profiles_from_template(export_item.get("template"))
+        for key in ("printer_profile", "print_profile", "material_profile"):
+            if not engine_cfg.get(key) and template_profiles.get(key):
+                engine_cfg[key] = template_profiles[key]
+        if template_profiles:
+            logger.debug(f"Template-derived Prusa profiles: {template_profiles}")
+
     binary = _resolve_slicer_binary(slicer)
 
     output_dir = slicer.get("output_dir") or os.path.dirname(output_3mf_path)
