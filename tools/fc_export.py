@@ -3,6 +3,7 @@ import argparse
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -341,9 +342,32 @@ def _resolve_slicer_binary(slicer_config):
     binary_override = slicer_config.get("binary")
     if binary_override:
         return binary_override
+
     if engine == "prusa":
-        return "prusa-slicer"
-    return "orca-slicer"
+        candidates = [
+            "prusa-slicer",
+            "PrusaSlicer",
+            "/Applications/Original Prusa Drivers/PrusaSlicer.app/Contents/MacOS/PrusaSlicer",
+            "/Applications/PrusaSlicer.app/Contents/MacOS/PrusaSlicer",
+        ]
+    else:
+        candidates = [
+            "orca-slicer",
+            "OrcaSlicer",
+            "/Applications/OrcaSlicer.app/Contents/MacOS/OrcaSlicer",
+        ]
+
+    for candidate in candidates:
+        if os.path.isabs(candidate):
+            if os.path.exists(candidate):
+                return candidate
+            continue
+
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+
+    return candidates[0]
 
 
 def _format_slicer_output_name(template, export_name, engine):

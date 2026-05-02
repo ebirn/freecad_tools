@@ -390,7 +390,7 @@ class TestSlicerIntegration:
             cmd, output_path = fc_export.build_slicer_command(item, "/tmp/input.3mf")
 
         # Assert
-        assert cmd[0] == "prusa-slicer"
+        assert cmd[0].endswith("prusa-slicer") or cmd[0].endswith("PrusaSlicer")
         assert "--export-gcode" in cmd
         assert "/tmp/input.3mf" in cmd
         assert "--output" in cmd
@@ -426,7 +426,7 @@ class TestSlicerIntegration:
         cmd, output_path = fc_export.build_slicer_command(item, "/tmp/input.3mf")
 
         # Assert
-        assert cmd[0] == "orca-slicer"
+        assert cmd[0].endswith("orca-slicer") or cmd[0].endswith("OrcaSlicer")
         assert "--printer-profile" in cmd
         assert str(profile_dir / "printer.ini") in cmd
         assert "--print-profile" in cmd
