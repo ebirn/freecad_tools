@@ -205,7 +205,11 @@ jobs:
             cmd_str+="$(printf '%q' "$part") "
           done
           docker exec "${exec_args[@]}" "$EXPORT_CONTAINER_NAME" /bin/bash -lc \
-            "cd /workspace && uv run python tools/export.py ${cmd_str}"
+            "cd /workspace && if [[ -x .venv/bin/python ]]; then \
+              .venv/bin/python tools/export.py ${cmd_str}; \
+            else \
+              python3 tools/export.py ${cmd_str}; \
+            fi"
 
       - name: Stop export container service
         if: always()
