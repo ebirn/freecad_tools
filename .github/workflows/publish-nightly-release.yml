@@ -33,6 +33,11 @@ on:
         required: false
         default: "ghcr.io/ebirn/freecad_tools:freecad-latest"
         type: string
+      freecad_gui_binary:
+        description: Optional FreeCAD GUI binary path inside container
+        required: false
+        default: ""
+        type: string
       nightly_tag:
         description: Rolling release tag to maintain
         required: false
@@ -66,6 +71,7 @@ jobs:
         prints/**
         docs/**
       container_image: ${{ inputs.container_image }}
+      freecad_gui_binary: ${{ inputs.freecad_gui_binary }}
       runner: ${{ inputs.runner }}
 
   publish-nightly-release:

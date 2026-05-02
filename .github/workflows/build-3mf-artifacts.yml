@@ -43,6 +43,11 @@ on:
         required: false
         default: "ubuntu-latest"
         type: string
+      freecad_gui_binary:
+        description: Optional FreeCAD GUI binary path inside container
+        required: false
+        default: ""
+        type: string
   workflow_dispatch:
     inputs:
       config_path:
@@ -88,6 +93,11 @@ on:
         required: false
         default: "ubuntu-latest"
         type: string
+      freecad_gui_binary:
+        description: Optional FreeCAD GUI binary path inside container
+        required: false
+        default: ""
+        type: string
 
 jobs:
   build-3mf-artifacts:
@@ -129,6 +139,7 @@ jobs:
             dry_run="${{ github.event.inputs.dry_run || 'true' }}"
           fi
           project_root="${{ inputs.project_root || github.event.inputs.project_root || '.' }}"
+          freecad_gui_binary="${{ inputs.freecad_gui_binary || github.event.inputs.freecad_gui_binary }}"
           workspace_project_dir="$GITHUB_WORKSPACE/$project_root"
           config_file_host="$workspace_project_dir/$config_path"
           config_file_container="/project/$project_root/$config_path"
@@ -149,11 +160,16 @@ jobs:
           printf 'Running export command in container: %q ' "${cmd[@]}"
           printf '\n'
 
-          docker run --rm \
-            -e VIRTUAL_ENV= \
-            -e UV_LINK_MODE=copy \
-            -v "$GITHUB_WORKSPACE:/project" \
-            "$image" "${cmd[@]}"
+          docker_args=(
+            --rm
+            -e VIRTUAL_ENV=
+            -e UV_LINK_MODE=copy
+            -v "$GITHUB_WORKSPACE:/project"
+          )
+          if [[ -n "$freecad_gui_binary" ]]; then
+            docker_args+=( -e "FREECAD_GUI_BINARY=$freecad_gui_binary" )
+          fi
+          docker run "${docker_args[@]}" "$image" "${cmd[@]}"
 
       - name: Upload artifacts
         if: ${{ always() && inputs.dry_run != true && github.event.inputs.dry_run != 'true' }}
