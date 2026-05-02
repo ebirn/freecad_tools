@@ -5,8 +5,9 @@ on:
     inputs:
       config_path:
         description: Path to export YAML config file
-        required: true
+        required: false
         type: string
+        default: "export_config.yml"
       export_name:
         description: Optional single export item name
         required: false
@@ -25,12 +26,12 @@ on:
       dry_run:
         description: Validate workflow without running slicers/exports
         required: false
-        default: false
+        default: true
         type: boolean
       artifact_glob:
         description: Artifact path glob to upload
         required: false
-        default: "test_output/**"
+        default: "prints/**"
         type: string
       container_image:
         description: Container image used to run export workflow
@@ -47,7 +48,7 @@ on:
       config_path:
         description: Path to export YAML config file
         required: true
-        default: "tests/export_test_config.yml"
+        default: "export_config.yml"
         type: string
       export_name:
         description: Optional single export item name
@@ -75,7 +76,7 @@ on:
       artifact_glob:
         description: Artifact path glob to upload
         required: false
-        default: "test_output/**"
+        default: "prints/**"
         type: string
       container_image:
         description: Container image used to run export workflow
@@ -111,27 +112,6 @@ jobs:
             'ghcr.io/ebirn/freecad_tools:latest' }}"
           docker pull "$image"
 
-      - name: Build export arguments
-        id: build_cmd
-        shell: bash
-        run: |
-          set -euo pipefail
-          config_path="${{ inputs.config_path || github.event.inputs.config_path }}"
-          export_name="${{ inputs.export_name || github.event.inputs.export_name }}"
-          gui_session="${{ inputs.gui_session || github.event.inputs.gui_session || 'item' }}"
-          dry_run="${{ inputs.dry_run || github.event.inputs.dry_run || 'false' }}"
-
-          args="$config_path --gui-session $gui_session"
-          if [[ -n "$export_name" ]]; then
-            args="$args --name $export_name"
-          fi
-          if [[ "$dry_run" == "true" ]]; then
-            args="$args --dry-run --slicer-dry-run"
-          fi
-
-          echo "args=$args" >> "$GITHUB_OUTPUT"
-          printf 'Args: %s\n' "$args"
-
       - name: Run export
         shell: bash
         run: |
@@ -139,16 +119,32 @@ jobs:
           image="${{ inputs.container_image ||
             github.event.inputs.container_image ||
             'ghcr.io/ebirn/freecad_tools:latest' }}"
+          config_path="${{ inputs.config_path || github.event.inputs.config_path || 'export_config.yml' }}"
+          export_name="${{ inputs.export_name || github.event.inputs.export_name }}"
+          gui_session="${{ inputs.gui_session || github.event.inputs.gui_session || 'item' }}"
+          dry_run="${{ inputs.dry_run || github.event.inputs.dry_run || 'true' }}"
           project_root="${{ inputs.project_root || github.event.inputs.project_root || '.' }}"
+
+          cmd=("$config_path" "--gui-session" "$gui_session")
+          if [[ -n "$export_name" ]]; then
+            cmd+=("--name" "$export_name")
+          fi
+          if [[ "$dry_run" == "true" ]]; then
+            cmd+=("--dry-run" "--slicer-dry-run")
+          fi
+
+          printf 'Running export command in container: %q ' "${cmd[@]}"
+          printf '\n'
+
           docker run --rm \
             -v "$GITHUB_WORKSPACE:/workspace" \
             -w "/workspace/$project_root" \
-            "$image" ${{ steps.build_cmd.outputs.args }}
+            "$image" "${cmd[@]}"
 
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: freecad-tools-artifacts
-          path: ${{ inputs.artifact_glob || github.event.inputs.artifact_glob || 'test_output/**' }}
+          path: ${{ inputs.artifact_glob || github.event.inputs.artifact_glob || 'prints/**' }}
           if-no-files-found: warn
