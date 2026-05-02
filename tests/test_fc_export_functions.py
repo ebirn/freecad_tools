@@ -886,7 +886,9 @@ class TestSlicerConfigAndCommands:
         }
         cmd, _ = fc_export.build_slicer_command(item, "/tmp/in.3mf")
         assert cmd[0].endswith("orca-slicer") or cmd[0].endswith("OrcaSlicer")
-        assert "--load" in cmd
+        assert "--slice" in cmd
+        assert "--outputdir" in cmd
+        assert "--load-settings" in cmd
         assert "/tmp/orca.ini" in cmd
 
     def test_run_slicer_for_export_item_respects_dry_run(self):

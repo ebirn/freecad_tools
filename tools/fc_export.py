@@ -393,20 +393,26 @@ def build_slicer_command(export_item, output_3mf_path):
     output_name = _format_slicer_output_name(output_name_template, export_item.get("name", "export"), engine)
     output_path = os.path.join(output_dir, output_name)
 
-    cmd = [binary, "--export-gcode", output_3mf_path, "--output", output_path]
+    if engine == "prusa":
+        cmd = [binary, "--export-gcode", output_3mf_path, "--output", output_path]
 
-    if slicer.get("use_config_bundle", False) and slicer.get("config_bundle"):
-        cmd.extend(["--load", slicer["config_bundle"]])
+        if slicer.get("use_config_bundle", False) and slicer.get("config_bundle"):
+            cmd.extend(["--load", slicer["config_bundle"]])
 
-    profile_map = {
-        "printer_profile": "--printer-profile",
-        "print_profile": "--print-profile",
-        "material_profile": "--material-profile",
-    }
-    for key, flag in profile_map.items():
-        value = engine_cfg.get(key)
-        if value:
-            cmd.extend([flag, value])
+        profile_map = {
+            "printer_profile": "--printer-profile",
+            "print_profile": "--print-profile",
+            "material_profile": "--material-profile",
+        }
+        for key, flag in profile_map.items():
+            value = engine_cfg.get(key)
+            if value:
+                cmd.extend([flag, value])
+    else:
+        cmd = [binary, "--slice", "0", "--outputdir", output_dir]
+        if slicer.get("use_config_bundle", False) and slicer.get("config_bundle"):
+            cmd.extend(["--load-settings", slicer["config_bundle"]])
+        cmd.append(output_3mf_path)
 
     cmd.extend(engine_cfg.get("extra_args", []))
     return cmd, output_path
@@ -437,6 +443,25 @@ def run_slicer_for_export_item(export_item, output_3mf_path):
         stderr_summary = summarize_subprocess_stderr(result.stderr)
         log_failure(f"Slicer failed (exit {result.returncode}): {stderr_summary}")
         return False
+
+    slicer = export_item.get("slicer", {})
+    if slicer.get("engine") == "orca":
+        output_dir = slicer.get("output_dir") or os.path.dirname(output_3mf_path)
+        if not os.path.exists(output_path):
+            gcode_files = [
+                os.path.join(output_dir, entry)
+                for entry in os.listdir(output_dir)
+                if entry.lower().endswith(".gcode") and os.path.isfile(os.path.join(output_dir, entry))
+            ]
+            if gcode_files:
+                latest_gcode = max(gcode_files, key=os.path.getmtime)
+                if latest_gcode != output_path:
+                    try:
+                        os.replace(latest_gcode, output_path)
+                    except OSError:
+                        output_path = latest_gcode
+                else:
+                    output_path = latest_gcode
 
     if output_path and os.path.exists(output_path):
         file_size = os.path.getsize(output_path)
@@ -942,7 +967,7 @@ if _test_mode:
     if "Part" not in sys.modules:
         sys.modules["Part"] = MagicMock()
     # Replace sys.exit if not already mocked
-    if sys.exit.__code__ is not mock_exit.__code__:
+    if getattr(sys.exit, "__code__", None) is not mock_exit.__code__:
         sys.exit = mock_exit
 
 freecad_found = False

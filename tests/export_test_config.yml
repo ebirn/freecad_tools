@@ -190,3 +190,23 @@ export:
       #   printer_profile: "Original Prusa MK4"
       #   print_profile: "0.20mm SPEED"
       #   material_profile: "Prusament PLA"
+
+  # 15. SLICER EXAMPLE - Orca native profile mode
+  - name: slicer_orca_example
+    source: ../examples/example.FCStd
+    body_source: config
+    bodies:
+      - Body001
+    output: ../test_output/slicer_orca_example.3mf
+    template: ../examples/template_print_settings.3mf
+    keep_stl: false
+    slicer:
+      enabled: true
+      engine: orca
+      output_dir: ../test_output/gcode/
+      output_name: "{name}_{engine}_{date}.gcode"
+      run_after_export: true
+      # orca:
+      #   printer_profile: "My Orca Printer"
+      #   print_profile: "0.20mm Standard"
+      #   material_profile: "Generic PLA"

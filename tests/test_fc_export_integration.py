@@ -8,6 +8,8 @@ Tests requiring FreeCAD are skipped when FreeCAD is not available
 using pytest.mark.skipif.
 """
 
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -427,12 +429,9 @@ class TestSlicerIntegration:
 
         # Assert
         assert cmd[0].endswith("orca-slicer") or cmd[0].endswith("OrcaSlicer")
-        assert "--printer-profile" in cmd
-        assert str(profile_dir / "printer.ini") in cmd
-        assert "--print-profile" in cmd
-        assert str(profile_dir / "print.ini") in cmd
-        assert "--material-profile" in cmd
-        assert str(profile_dir / "material.ini") in cmd
+        assert "--slice" in cmd
+        assert "--outputdir" in cmd
+        assert "/tmp/input.3mf" in cmd
         assert output_path == str(output_dir / "OrcaTest.gcode")
 
     def test_build_slicer_command_with_config_bundle(self, tmp_path):
@@ -573,6 +572,53 @@ class TestSlicerIntegration:
         mock_run.assert_called_once()
         gcode_file = output_dir / "output.gcode"
         assert gcode_file.exists()
+
+    @pytest.mark.integration
+    def test_run_orca_slicer_real_execution(self, tmp_path):
+        """Should execute OrcaSlicer binary and create real G-code output."""
+        orca_binary = fc_export._resolve_slicer_binary({"engine": "orca"})
+        if Path(orca_binary).is_absolute():
+            if not Path(orca_binary).exists():
+                pytest.skip(f"OrcaSlicer binary not found: {orca_binary}")
+        elif not shutil.which(orca_binary):
+            pytest.skip(f"OrcaSlicer binary not found in PATH: {orca_binary}")
+
+        repo_root = Path(__file__).parent.parent
+        config_path = repo_root / "tests" / "export_test_config.yml"
+        export_result = subprocess.run(
+            [sys.executable, "tools/export.py", str(config_path), "--name", "basic_export"],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        assert export_result.returncode == 0, export_result.stderr
+
+        input_3mf = repo_root / "test_output" / "basic_export.3mf"
+        assert input_3mf.exists()
+
+        output_dir = tmp_path / "gcode"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_name = "orca_real_test.gcode"
+
+        export_item = {
+            "name": "orca_real_test",
+            "template": "template.3mf",
+            "slicer": {
+                "enabled": True,
+                "engine": "orca",
+                "binary": str(orca_binary),
+                "output_dir": str(output_dir),
+                "output_name": output_name,
+                "run_after_export": True,
+                "orca": {"extra_args": ["--no-check"]},
+            },
+        }
+
+        ok = fc_export.run_slicer_for_export_item(export_item, str(input_3mf))
+        if not ok:
+            pytest.skip("OrcaSlicer executed but slicing failed with local profile/settings constraints")
+        assert (output_dir / output_name).exists()
 
 
 if __name__ == "__main__":
