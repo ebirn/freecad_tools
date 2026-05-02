@@ -32,10 +32,10 @@ on:
         required: false
         default: "test_output/**"
         type: string
-      python_version:
-        description: Python version used for tooling
+      container_image:
+        description: Container image used to run export workflow
         required: false
-        default: "3.13"
+        default: "ghcr.io/ebirn/freecad_tools:latest"
         type: string
       runner:
         description: GitHub runner label (must provide FreeCAD for non-dry runs)
@@ -77,10 +77,10 @@ on:
         required: false
         default: "test_output/**"
         type: string
-      python_version:
-        description: Python version used for tooling
+      container_image:
+        description: Container image used to run export workflow
         required: false
-        default: "3.13"
+        default: "ghcr.io/ebirn/freecad_tools:latest"
         type: string
       runner:
         description: GitHub runner label (must provide FreeCAD for non-dry runs)
@@ -95,16 +95,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6.0.2
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@05143d3dcd540a42aa638bb0920ac4e3123808a5 # v8.1.0
+      - name: Log in to GHCR
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1 # v3.3.0
         with:
-          enable-cache: true
-          python-version: ${{ inputs.python_version || github.event.inputs.python_version || '3.13' }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Sync dependencies
-        run: uv sync --extra dev
+      - name: Pull container image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="${{ inputs.container_image ||
+            github.event.inputs.container_image ||
+            'ghcr.io/ebirn/freecad_tools:latest' }}"
+          docker pull "$image"
 
-      - name: Build export command
+      - name: Build export arguments
         id: build_cmd
         shell: bash
         run: |
@@ -114,21 +121,29 @@ jobs:
           gui_session="${{ inputs.gui_session || github.event.inputs.gui_session || 'item' }}"
           dry_run="${{ inputs.dry_run || github.event.inputs.dry_run || 'false' }}"
 
-          cmd="uv run python tools/export.py \"$config_path\" --gui-session \"$gui_session\""
+          args="$config_path --gui-session $gui_session"
           if [[ -n "$export_name" ]]; then
-            cmd="$cmd --name \"$export_name\""
+            args="$args --name $export_name"
           fi
           if [[ "$dry_run" == "true" ]]; then
-            cmd="$cmd --dry-run --slicer-dry-run"
+            args="$args --dry-run --slicer-dry-run"
           fi
 
-          echo "command=$cmd" >> "$GITHUB_OUTPUT"
-          printf 'Command: %s\n' "$cmd"
+          echo "args=$args" >> "$GITHUB_OUTPUT"
+          printf 'Args: %s\n' "$args"
 
       - name: Run export
         shell: bash
-        working-directory: ${{ inputs.project_root || github.event.inputs.project_root || '.' }}
-        run: ${{ steps.build_cmd.outputs.command }}
+        run: |
+          set -euo pipefail
+          image="${{ inputs.container_image ||
+            github.event.inputs.container_image ||
+            'ghcr.io/ebirn/freecad_tools:latest' }}"
+          project_root="${{ inputs.project_root || github.event.inputs.project_root || '.' }}"
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w "/workspace/$project_root" \
+            "$image" ${{ steps.build_cmd.outputs.args }}
 
       - name: Upload artifacts
         if: always()

@@ -133,6 +133,32 @@ just export-item <name>
 just gcode-bounds test_output/gcode/<file>.gcode
 ```
 
+### Container Image Workflow
+
+This repository can build and publish a container image to GHCR via:
+
+- `.github/workflows/build-container-image.yml`
+
+Triggers:
+- Pushes to branches (including `main`)
+- Version tags (`v*`)
+- Manual run (`workflow_dispatch`)
+
+Published image tags include:
+- `latest` (default branch)
+- branch tags
+- release tag names
+- commit SHA tag
+
+Example usage:
+
+```bash
+docker pull ghcr.io/ebirn/freecad_tools:latest
+docker run --rm -v "$PWD:/workspace" ghcr.io/ebirn/freecad_tools:latest tests/export_test_config.yml --dry-run
+```
+
+Note: Full export/slicer runs still require a runtime environment with FreeCAD available.
+
 **Config File Discovery** (when not specified):
 1. `.freecad_tools/export.yml` (per-project config)
 2. `export_config.yml` (legacy config in current directory)
