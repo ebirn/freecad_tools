@@ -1092,10 +1092,16 @@ except ImportError as e:
     # Common FreeCAD Python interpreter locations
     interpreter_paths = [
         "/Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd",
-        "/usr/bin/freecadcmd",
+        "/opt/freecad/usr/bin/freecadcmd",
         "/opt/freecad/bin/freecadcmd",
+        "/usr/bin/freecadcmd",
         "/usr/local/bin/freecadcmd",
     ]
+
+    # PATH fallback for Linux/container installations
+    path_freecadcmd = shutil.which("freecadcmd")
+    if path_freecadcmd and path_freecadcmd not in interpreter_paths:
+        interpreter_paths.append(path_freecadcmd)
 
     for path in interpreter_paths:
         logger.debug(f"Checking for FreeCAD interpreter at: {path}")
