@@ -893,6 +893,27 @@ class TestSlicerConfigAndCommands:
         assert "--load-settings" in cmd
         assert "/tmp/orca.ini" in cmd
 
+    def test_build_orca_command_uses_template_bundle_when_no_config_bundle(self, tmp_path):
+        template_3mf = tmp_path / "template.3mf"
+        cfg = "; print_settings_id = 0.20mm STRUCTURAL @MINIIS 0.4 - Flo\n"
+        with zipfile.ZipFile(template_3mf, "w") as archive:
+            archive.writestr("Metadata/Slic3r_PE.config", cfg)
+
+        item = {
+            "name": "demo",
+            "template": str(template_3mf),
+            "slicer": {
+                "enabled": True,
+                "engine": "orca",
+                "output_dir": str(tmp_path),
+                "orca": {},
+            },
+        }
+        cmd, _, temp_bundle = fc_export.build_slicer_command(item, "/tmp/in.3mf")
+        assert "--load-settings" in cmd
+        assert temp_bundle is not None
+        assert os.path.exists(temp_bundle)
+
     def test_run_slicer_for_export_item_respects_dry_run(self):
         item = {
             "name": "demo",

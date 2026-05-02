@@ -13,6 +13,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Real Orca execution integration coverage (with environment-aware skip when local slicer settings reject slice validity).
 - `Justfile` recipes mirroring Makefile workflows plus export item helpers (`export-list`, `export-item`, `export-item-dry-run`).
 - Prusa template settings fallback: when slicer profile overrides are omitted, slicer settings are loaded from `Metadata/Slic3r_PE.config` in template 3MF files via temporary `--load` config bundles.
+- Orca template settings fallback: when `template` is set and no explicit config bundle is provided, slicer settings are loaded from `Metadata/Slic3r_PE.config` via temporary `--load-settings` bundles.
 
 ### Changed
 

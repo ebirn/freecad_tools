@@ -228,3 +228,21 @@ export:
       output_name: "{name}_{engine}_{date}.gcode"
       run_after_export: true
       prusa: {}
+
+  # 17. SLICER EXAMPLE - Orca settings from template metadata
+  # Leaves orca config empty; settings are loaded from Metadata/Slic3r_PE.config
+  - name: slicer_orca_template_profiles
+    source: ../examples/example.FCStd
+    body_source: config
+    bodies:
+      - Body
+    output: ../test_output/slicer_orca_template_profiles.3mf
+    template: ../examples/default.3mf
+    keep_stl: false
+    slicer:
+      enabled: true
+      engine: orca
+      output_dir: ../test_output/gcode/
+      output_name: "{name}_{engine}_{date}.gcode"
+      run_after_export: true
+      orca: {}
