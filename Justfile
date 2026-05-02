@@ -44,6 +44,10 @@ export-item-dry-run name:
 export-show-commands:
     python3 -c "import yaml; cfg=yaml.safe_load(open('{{test_config}}', encoding='utf-8')) or {}; ex=cfg.get('export', []); [print(f'python3 tools/export.py {{test_config}} --name {i.get(\"name\", \"\")} --gui-session run') for i in ex if i.get('name')]"
 
+# Report XY extents from G-code, e.g. `just gcode-bounds test_output/gcode/file.gcode`
+gcode-bounds file:
+    python3 tools/gcode_bounds.py {{file}}
+
 # Remove generated test output artifacts
 clean:
     if [ -d "test_output" ]; then \

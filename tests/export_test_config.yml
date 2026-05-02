@@ -186,10 +186,10 @@ export:
       output_dir: ../test_output/gcode/
       output_name: "{name}_{engine}_{date}.gcode"
       run_after_export: true
-      # prusa:
-      #   printer_profile: "Original Prusa MK4"
-      #   print_profile: "0.20mm SPEED"
-      #   material_profile: "Prusament PLA"
+      prusa:
+        printer_profile: "Original Prusa MINI & MINI+ Input Shaper"
+        print_profile: "0.20mm STRUCTURAL @MINIIS 0.4 - Flo"
+        material_profile: "Generic PLA @MINIIS"
 
   # 15. SLICER EXAMPLE - Orca native profile mode
   - name: slicer_orca_example

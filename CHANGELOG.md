@@ -5,6 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Optional `slicer:` post-export automation block with native-profile support for PrusaSlicer and OrcaSlicer.
+- New CLI flag `--slicer-dry-run` to build/log slicer commands without executing slicers.
+- `tools/gcode_bounds.py` utility and `just gcode-bounds` recipe to report XY extents from generated G-code.
+- Real Orca execution integration coverage (with environment-aware skip when local slicer settings reject slice validity).
+- `Justfile` recipes mirroring Makefile workflows plus export item helpers (`export-list`, `export-item`, `export-item-dry-run`).
+
+### Changed
+
+- Slicer binary resolution now auto-detects common macOS app binaries and PATH names.
+- `tests/export_test_config.yml` includes Prusa and Orca slicer examples with explicit profile/config patterns.
+
+### Fixed
+
+- Orca slicing command generation now uses Orca-native CLI flags (`--slice`, `--outputdir`, `--load-settings`) instead of Prusa-only flags.
+- Test-mode `sys.exit` mocking no longer crashes when `sys.exit` is a built-in callable.
+- Integration tests now tolerate resolved absolute slicer binaries instead of requiring bare executable names.
+
 ## [v0.4.0] - 2026-05-01
 
 ### Added
