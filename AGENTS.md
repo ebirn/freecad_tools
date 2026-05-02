@@ -1,8 +1,8 @@
 # FreeCAD Tools - Agent Documentation
 
-> **Bootstrap Prompt**: _"Read AGENTS.md and TODO.md, then continue work on the next open task."_
+> **Bootstrap Prompt**: _"Read AGENTS.md, then continue work on the next open GitHub Issue in the Development project."_
 
-**IMPORTANT**: This file provides process guidance, architecture overview, and development context. **Task tracking is in TODO.md - NOT in this file.** Refer to TODO.md for open tasks and feature status.
+**IMPORTANT**: This file provides process guidance, architecture overview, and development context. **Task tracking is in GitHub Issues + the Development project - NOT in this file.** Use issues for open tasks and feature status.
 
 ## Project Overview
 
@@ -370,7 +370,7 @@ export:
    - Description: Copy from CHANGELOG.md `[vX.Y.Z]` section
 
 7. **Post-Release**
-   - Update TODO.md if needed
+   - Ensure open follow-up work is captured in GitHub Issues/Development project
    - Announce in appropriate channels
    - Open PR for next version development
 
@@ -461,33 +461,10 @@ git pull origin main
 git branch -d agent_body_orientation
 ```
 
-### Current Open Features (from TODO.md)
+### Current Open Features
 
-These features are not yet implemented and are good candidates for new `agent_` branches:
-
-1. **Body Duplication with Orientation**
-   - Branch: `agent_body_orientation`
-   - Support rotation/position specs in config
-   - Embed orientation transforms in 3MF
-
-2. **Template Metadata Merging**
-   - Branch: `agent_template_metadata`
-   - Merge template metadata with generated 3MF
-   - Preserve printer settings from templates
-
-3. **Multi-Document Support**
-   - Branch: `agent_multi_document`
-   - Export from multiple FCStd files in one config
-
-4. **Batch Processing**
-   - Branch: `agent_batch_processing`
-   - Queue multiple export jobs
-   - Process in parallel
-
-5. **Quality Metrics**
-   - Branch: `agent_quality_metrics`
-   - Report mesh stats (vertices, triangles, file size)
-   - Validate output structure
+Use GitHub Issues and the Development project as the source of truth for open features.
+When starting work, pick the next prioritized issue and create a matching `agent_<feature_name>` branch.
 
 ---
 
@@ -965,7 +942,7 @@ This project uses exactly **four** markdown files. Do NOT create additional `.md
 |------|---------|----------|
 | `README.md` | All user-facing documentation | Humans |
 | `AGENTS.md` | Agent process guidance, architecture, dev context | Agents |
-| `TODO.md` | Task tracking and planning | Agents |
+| `TODO.md` | Pointer to issue-based task tracking | Agents |
 | `CHANGELOG.md` | Version history (standard convention) | Both |
 
 ### Rules for Agents
@@ -973,20 +950,19 @@ This project uses exactly **four** markdown files. Do NOT create additional `.md
 - **NEVER create new `.md` files** (no PHASE_SUMMARY.md, no TESTING.md, no DESIGN.md, etc.)
 - **User-facing docs** (usage, features, troubleshooting, API) go in `README.md`
 - **Agent-facing docs** (architecture, process, testing strategy) go in `AGENTS.md`
-- **Task tracking** (open tasks, completed tasks, priorities) goes in `TODO.md`
+- **Task tracking** (open tasks, priorities, status) goes in GitHub Issues + Development project
 - **Release notes** go in `CHANGELOG.md`
 - If you need to document something, find the right section in one of these four files
 - When in doubt, add to `AGENTS.md` for dev context or `README.md` for user docs
 
-### TODO.md Hygiene
+### Issue Tracking Hygiene
 
-Keep TODO.md compact and actionable:
+Use GitHub Issues + Development project as the source of truth:
 
-- **Only open tasks** belong in TODO.md. No completed items.
-- When a task is finished, **move it to CHANGELOG.md** under the appropriate version section, then **remove it from TODO.md**.
-- User-relevant information from completed tasks (new features, config options) must be documented in **README.md**.
-- Do not accumulate "Files Modified" lists, phase summaries, or implementation details for completed work in TODO.md - that belongs in CHANGELOG.md or git history.
-- Renumber tasks when removing completed ones to keep the list sequential.
+- Keep issue status current in the project board (Backlog/Ready/In Progress/Blocked/Done).
+- Use structured issue templates for new tasks.
+- When a task is finished, document shipped user-facing changes in **CHANGELOG.md** and **README.md** as needed.
+- Keep `TODO.md` minimal as a pointer; do not duplicate issue-level task details there.
 
 ### Release Process
 
@@ -995,7 +971,7 @@ When the user asks to cut a release:
 1. **Pre-release checklist** (verify all before proceeding):
    - All tests pass (`python -m pytest` via venv)
    - CHANGELOG.md is up to date (no items left under `[Unreleased]` without a version)
-   - TODO.md is clean (no completed tasks — they belong in CHANGELOG.md)
+   - Open follow-up work is captured as GitHub issues in the Development project
    - README.md reflects all current features and config options
    - Linter passes (`ruff check`, `ruff format --check`)
 
