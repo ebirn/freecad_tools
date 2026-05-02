@@ -92,6 +92,8 @@ on:
 jobs:
   build-3mf-artifacts:
     runs-on: ${{ inputs.runner || github.event.inputs.runner || 'ubuntu-latest' }}
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6.0.2
@@ -145,11 +147,13 @@ jobs:
           printf '\n'
 
           docker run --rm \
+            -e VIRTUAL_ENV= \
+            -e UV_LINK_MODE=copy \
             -v "$GITHUB_WORKSPACE:/project" \
             "$image" "${cmd[@]}"
 
       - name: Upload artifacts
-        if: always()
+        if: ${{ always() && inputs.dry_run != true && github.event.inputs.dry_run != 'true' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: freecad-tools-artifacts
