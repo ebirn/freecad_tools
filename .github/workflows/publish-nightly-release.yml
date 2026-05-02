@@ -51,7 +51,7 @@ on:
       generated_paths:
         description: Space-separated generated output paths to include
         required: false
-        default: "generated/prints generated/docs"
+        default: "generated"
         type: string
 
 jobs:
