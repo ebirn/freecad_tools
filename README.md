@@ -145,19 +145,21 @@ Triggers:
 - Manual run (`workflow_dispatch`)
 
 Published image tags include:
-- `latest` (default branch)
-- branch tags
-- release tag names
-- commit SHA tag
+- `latest` for slim image (default branch)
+- `freecad-latest` for FreeCAD-enabled image (default branch)
+- variant-prefixed branch/tag/SHA tags (for example `slim-main`, `freecad-main`, `slim-<sha>`, `freecad-<sha>`)
 
 Example usage:
 
 ```bash
 docker pull ghcr.io/ebirn/freecad_tools:latest
 docker run --rm -v "$PWD:/workspace" ghcr.io/ebirn/freecad_tools:latest tests/export_test_config.yml --dry-run
+
+docker pull ghcr.io/ebirn/freecad_tools:freecad-latest
+docker run --rm -v "$PWD:/workspace" ghcr.io/ebirn/freecad_tools:freecad-latest tests/export_test_config.yml
 ```
 
-Note: Full export/slicer runs still require a runtime environment with FreeCAD available.
+Use `:latest` for lightweight tooling tasks and `:freecad-latest` for full export runs requiring FreeCAD.
 
 **Config File Discovery** (when not specified):
 1. `.freecad_tools/export.yml` (per-project config)

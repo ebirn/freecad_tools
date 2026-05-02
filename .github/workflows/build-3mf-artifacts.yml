@@ -36,7 +36,7 @@ on:
       container_image:
         description: Container image used to run export workflow
         required: false
-        default: "ghcr.io/ebirn/freecad_tools:latest"
+        default: "ghcr.io/ebirn/freecad_tools:freecad-latest"
         type: string
       runner:
         description: GitHub runner label (must provide FreeCAD for non-dry runs)
@@ -81,7 +81,7 @@ on:
       container_image:
         description: Container image used to run export workflow
         required: false
-        default: "ghcr.io/ebirn/freecad_tools:latest"
+        default: "ghcr.io/ebirn/freecad_tools:freecad-latest"
         type: string
       runner:
         description: GitHub runner label (must provide FreeCAD for non-dry runs)
@@ -109,7 +109,7 @@ jobs:
           set -euo pipefail
           image="${{ inputs.container_image ||
             github.event.inputs.container_image ||
-            'ghcr.io/ebirn/freecad_tools:latest' }}"
+            'ghcr.io/ebirn/freecad_tools:freecad-latest' }}"
           docker pull "$image"
 
       - name: Run export
@@ -118,7 +118,7 @@ jobs:
           set -euo pipefail
           image="${{ inputs.container_image ||
             github.event.inputs.container_image ||
-            'ghcr.io/ebirn/freecad_tools:latest' }}"
+            'ghcr.io/ebirn/freecad_tools:freecad-latest' }}"
           config_path="${{ inputs.config_path || github.event.inputs.config_path || 'export_config.yml' }}"
           export_name="${{ inputs.export_name || github.event.inputs.export_name }}"
           gui_session="${{ inputs.gui_session || github.event.inputs.gui_session || 'item' }}"

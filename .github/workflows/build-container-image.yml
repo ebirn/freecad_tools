@@ -15,6 +15,16 @@ jobs:
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: slim
+            dockerfile: Dockerfile
+            latest_tag: latest
+          - variant: freecad
+            dockerfile: Dockerfile.freecad
+            latest_tag: freecad-latest
 
     steps:
       - name: Checkout repository
@@ -36,16 +46,16 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=sha
-            type=ref,event=branch
-            type=ref,event=tag
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=${{ matrix.variant }}-
+            type=ref,event=branch,prefix=${{ matrix.variant }}-
+            type=ref,event=tag,prefix=${{ matrix.variant }}-
+            type=raw,value=${{ matrix.latest_tag }},enable={{is_default_branch}}
 
       - name: Build and push image
         uses: docker/build-push-action@f2a1d5e99ed3f6024f2fd59f932a9f4f9f79b43f # v6.18.0
         with:
           context: .
-          file: ./Dockerfile
+          file: ./${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
