@@ -1,18 +1,9 @@
 #!/usr/bin/env yaml
-# Comprehensive test configuration for all export features
+# Comprehensive test configuration for export features
 # Run from project root: python3 tools/export.py tests/export_test_config.yml
-# Run single export: python3 tools/export.py tests/export_test_config.yml --name <name>
-#
-# All output goes to test_output/ directory (git-ignored)
-# Paths are relative to config file location (tests/)
-# Use ../examples/ to reference examples/ directory from tests/
-# Git metadata is automatically captured (GitCommit, GitBranch, GitTag, GitDirty)
-# and embedded in 3MF files when run from a git repo
 
 export:
-  # ============================================================================
   # 1. BASIC EXPORT - Simple body list
-  # ============================================================================
   - name: basic_export
     source: ../examples/example.FCStd
     body_source: config
@@ -20,13 +11,8 @@ export:
       - Body
     output: ../test_output/basic_export.3mf
     keep_stl: false
-    metadata:
-      Test: "Basic export"
-      Description: "Single body export test"
 
-  # ============================================================================
-  # 2. MULTIPLE BODIES - Export multiple bodies
-  # ============================================================================
+  # 2. MULTIPLE BODIES
   - name: multiple_bodies
     source: ../examples/example.FCStd
     body_source: config
@@ -35,13 +21,8 @@ export:
       - Body001
     output: ../test_output/multiple_bodies.3mf
     keep_stl: false
-    metadata:
-      Test: "Multiple bodies"
-      Description: "Export multiple bodies in one 3MF"
 
-  # ============================================================================
-  # 3. DUPLICATE BODY - Same body exported twice (for making pairs)
-  # ============================================================================
+  # 3. DUPLICATE BODY
   - name: duplicate_body
     source: ../examples/example.FCStd
     body_source: config
@@ -50,13 +31,8 @@ export:
       - Body
     output: ../test_output/duplicate_body.3mf
     keep_stl: false
-    metadata:
-      Test: "Duplicate body"
-      Description: "Export same body twice for mirrored parts"
 
-  # ============================================================================
-  # 4. TEMPLATE EXPORT - Use a template 3MF file
-  # ============================================================================
+  # 4. TEMPLATE EXPORT
   - name: template_export
     source: ../examples/example.FCStd
     body_source: config
@@ -65,13 +41,8 @@ export:
     output: ../test_output/template_export.3mf
     template: ../examples/template_print_settings.3mf
     keep_stl: false
-    metadata:
-      Test: "Template export"
-      Description: "Export with template for printer settings"
 
-  # ============================================================================
-  # 5. STL RETENTION - Keep generated STL files
-  # ============================================================================
+  # 5. STL RETENTION
   - name: stl_retention
     source: ../examples/example.FCStd
     body_source: config
@@ -81,13 +52,8 @@ export:
     output: ../test_output/stl_retention.3mf
     keep_stl: true
     stl_output_dir: ../test_output/stl/
-    metadata:
-      Test: "STL retention"
-      Description: "Keep STL files after export"
 
-  # ============================================================================
-  # 6. CUSTOM METADATA - Full metadata example
-  # ============================================================================
+  # 6. CUSTOM METADATA
   - name: custom_metadata
     source: ../examples/example.FCStd
     body_source: config
@@ -99,27 +65,15 @@ export:
       Project: "Custom Metadata Test"
       Version: "1.0.0"
       Author: "Test Author"
-      License: "CC-BY-SA-4.0"
-      Description: "Test with custom metadata fields"
-      CustomField: "CustomValue"
 
-  # ============================================================================
-  # 7. PROPERTY-BASED EXPORT - Bodies marked with ExportTo3MF=True
-  # Uses FreeCAD custom properties on bodies
-  # ============================================================================
+  # 7. PROPERTY-BASED EXPORT
   - name: property_export
     source: ../examples/example_properties.FCStd
     body_source: properties
     output: ../test_output/property_export.3mf
     keep_stl: false
-    metadata:
-      Test: "Property-based export"
-      Description: "Bodies with ExportTo3MF=True property are exported"
 
-  # ============================================================================
-  # 8. TECHDRAW EXPORT - Generate PDF from TechDraw pages
-  # Requires: FreeCAD GUI binary (not freecadcmd)
-  # ============================================================================
+  # 8. TECHDRAW EXPORT
   - name: techdraw_export
     source: ../examples/example_techdraw.FCStd
     body_source: config
@@ -129,25 +83,17 @@ export:
       - Box
     output: ../test_output/techdraw_export.3mf
     keep_stl: false
-    metadata:
-      Project: "TechDraw Export"
-      Version: "1.0"
-
     techdraw:
       pages: []
       output_dir: ../test_output/drawings/
       format: pdf
-      instructions: ../examples/INSTRUCTIONS.md
-
     bom:
       source: assembly
       output: ../test_output/bom.csv
       fields:
         - material
 
-  # ============================================================================
-  # 9. TECHDRAW ONLY (no BOM)
-  # ============================================================================
+  # 9. TECHDRAW ONLY
   - name: techdraw_only
     source: ../examples/example_techdraw.FCStd
     body_source: config
@@ -160,9 +106,7 @@ export:
       output_dir: ../test_output/drawings/
       format: pdf
 
-  # ============================================================================
-  # 10. BOM ONLY (no TechDraw)
-  # ============================================================================
+  # 10. BOM ONLY
   - name: bom_only
     source: ../examples/example_techdraw.FCStd
     body_source: config
@@ -177,10 +121,7 @@ export:
       fields:
         - material
 
-  # ============================================================================
-  # 11. SCREENSHOTS - Generate screenshots for Thingiverse/Printables
-  # Requires: FreeCAD GUI binary (not freecadcmd)
-  # ============================================================================
+  # 11. SCREENSHOTS FULL
   - name: screenshots_full
     source: ../examples/example.FCStd
     body_source: config
@@ -196,13 +137,8 @@ export:
       background: [255, 255, 255, 255]
       format: png
       composite: true
-    metadata:
-      Test: "Screenshots"
-      Description: "Generate screenshots for publication"
 
-  # ============================================================================
-  # 12. SCREENSHOTS MINIMAL - Minimal config with explicit output path
-  # ============================================================================
+  # 12. SCREENSHOTS MINIMAL
   - name: screenshots_minimal
     source: ../examples/example.FCStd
     body_source: config
@@ -212,13 +148,8 @@ export:
     screenshots:
       enabled: true
       output_dir: ../test_output/images/
-    metadata:
-      Test: "Minimal screenshots"
 
-  # ============================================================================
   # 13. COMBINED: TechDraw + BOM + Screenshots
-  # Requires: FreeCAD GUI binary for TechDraw and screenshots
-  # ============================================================================
   - name: combined_export
     source: ../examples/example_techdraw.FCStd
     body_source: config
@@ -239,6 +170,23 @@ export:
     bom:
       source: assembly
       output: ../test_output/bom_combined.csv
-    metadata:
-      Project: "Combined Export"
-      Description: "3MF + PDF + CSV + images all in one run"
+
+  # 14. SLICER EXAMPLE - Native profile mode
+  - name: slicer_prusa_example
+    source: ../examples/example.FCStd
+    body_source: config
+    bodies:
+      - Body
+    output: ../test_output/slicer_prusa_example.3mf
+    template: ../examples/template_print_settings.3mf
+    keep_stl: false
+    slicer:
+      enabled: true
+      engine: prusa
+      output_dir: ../test_output/gcode/
+      output_name: "{name}_{engine}_{date}.gcode"
+      run_after_export: true
+      prusa:
+        printer_profile: "Original Prusa MK4"
+        print_profile: "0.20mm SPEED"
+        material_profile: "Prusament PLA"

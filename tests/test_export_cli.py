@@ -27,6 +27,12 @@ class TestExportParseArgs:
 
         assert args.gui_session == "run"
 
+    def test_parse_args_slicer_dry_run(self):
+        with patch.object(sys, "argv", ["export.py", "--slicer-dry-run"]):
+            args = export_cli.parse_args()
+
+        assert args.slicer_dry_run is True
+
 
 class TestExportMainPassthrough:
     def test_main_passes_new_flags_to_fc_export(self):
@@ -87,3 +93,58 @@ class TestExportMainPassthrough:
         assert "--list-exports" in cmd
         assert "--gui-only" in cmd
         assert "--screenshots-only" in cmd
+
+    def test_dry_run_sets_environment_variable(self):
+        with (
+            patch.object(
+                sys,
+                "argv",
+                ["export.py", "--dry-run"],
+            ),
+            patch("export.subprocess.run") as mock_run,
+            patch("export.Path.exists", return_value=True),
+            patch("export.sys.exit", side_effect=SystemExit),
+        ):
+            mock_run.return_value.returncode = 0
+            with pytest.raises(SystemExit):
+                export_cli.main()
+
+        # Check that FREECAD_TOOLS_DRY_RUN was set in environment
+        call_env = mock_run.call_args.kwargs.get("env", {})
+        assert call_env.get("FREECAD_TOOLS_DRY_RUN") == "true"
+
+    def test_dry_run_with_slicer_flags(self):
+        with (
+            patch.object(
+                sys,
+                "argv",
+                ["export.py", "--dry-run", "--name", "slicer_test"],
+            ),
+            patch("export.subprocess.run") as mock_run,
+            patch("export.Path.exists", return_value=True),
+            patch("export.sys.exit", side_effect=SystemExit),
+        ):
+            mock_run.return_value.returncode = 0
+            with pytest.raises(SystemExit):
+                export_cli.main()
+
+        cmd = mock_run.call_args.args[0]
+        assert "--dry-run" in cmd
+        assert "--name" in cmd
+        assert "slicer_test" in cmd
+
+    def test_main_passes_slicer_dry_run_to_fc_export(self):
+        with (
+            patch.object(sys, "argv", ["export.py", "--slicer-dry-run"]),
+            patch("export.subprocess.run") as mock_run,
+            patch("export.Path.exists", return_value=True),
+            patch("export.sys.exit", side_effect=SystemExit),
+        ):
+            mock_run.return_value.returncode = 0
+            with pytest.raises(SystemExit):
+                export_cli.main()
+
+        cmd = mock_run.call_args.args[0]
+        assert "--slicer-dry-run" in cmd
+        call_env = mock_run.call_args.kwargs.get("env", {})
+        assert call_env.get("FREECAD_TOOLS_SLICER_DRY_RUN") == "true"

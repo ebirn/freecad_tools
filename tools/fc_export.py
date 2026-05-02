@@ -55,6 +55,11 @@ def parse_args():
         help="Validate config without performing export",
     )
     parser.add_argument(
+        "--slicer-dry-run",
+        action="store_true",
+        help="Build slicer commands but do not execute slicers",
+    )
+    parser.add_argument(
         "--name",
         "-n",
         type=str,
@@ -122,6 +127,7 @@ args = parse_args()
 # Check for verbose flag from CLI or environment
 verbose_cli = args.verbose
 dry_run_mode = args.dry_run
+slicer_dry_run_mode = args.slicer_dry_run
 name_filter = args.name
 list_exports_mode = args.list_exports
 gui_only_mode = args.gui_only
@@ -132,6 +138,8 @@ gui_session_mode = args.gui_session
 log_level_env = os.environ.get("FREECAD_TOOLS_LOG_LEVEL")
 if os.environ.get("FREECAD_TOOLS_DRY_RUN", "").lower() == "true":
     dry_run_mode = True
+if os.environ.get("FREECAD_TOOLS_SLICER_DRY_RUN", "").lower() == "true":
+    slicer_dry_run_mode = True
 if os.environ.get("FREECAD_TOOLS_NAME") and not name_filter:
     name_filter = os.environ.get("FREECAD_TOOLS_NAME")
 if os.environ.get("FREECAD_TOOLS_LIST_EXPORTS", "").lower() == "true":
@@ -390,7 +398,7 @@ def run_slicer_for_export_item(export_item, output_3mf_path):
     log_action(f"Slicer command: {cmd_display}")
 
     slicer = export_item.get("slicer", {})
-    slicer_dry_run = bool(slicer.get("dry_run", False) or dry_run_mode)
+    slicer_dry_run = bool(slicer.get("dry_run", False) or slicer_dry_run_mode or dry_run_mode)
     if slicer_dry_run:
         log_action("Skipping slicer execution in dry-run mode")
         return True

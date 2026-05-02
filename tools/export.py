@@ -52,6 +52,11 @@ def parse_args():
         help="Validate config without performing export",
     )
     parser.add_argument(
+        "--slicer-dry-run",
+        action="store_true",
+        help="Build slicer commands but do not execute slicers",
+    )
+    parser.add_argument(
         "--name",
         "-n",
         type=str,
@@ -136,6 +141,8 @@ def main():
         env["FREECAD_TOOLS_DRY_RUN"] = "true"
         if args.verbose:
             env["FREECAD_TOOLS_LOG_LEVEL"] = "DEBUG"
+        if args.slicer_dry_run:
+            env["FREECAD_TOOLS_SLICER_DRY_RUN"] = "true"
 
         # Pass environment for config discovery
         env["FREECAD_TOOLS_PROJECT_ROOT"] = str(PROJECT_ROOT)
@@ -160,6 +167,8 @@ def main():
             fc_args.extend(["--name", args.name])
         if args.gui_session:
             fc_args.extend(["--gui-session", args.gui_session])
+        if args.slicer_dry_run:
+            fc_args.append("--slicer-dry-run")
 
         result = subprocess.run(fc_args, env=env, text=True)
         sys.exit(result.returncode)
@@ -179,6 +188,8 @@ def main():
         fc_args.append("--screenshots-only")
     if args.gui_session:
         fc_args.extend(["--gui-session", args.gui_session])
+    if args.slicer_dry_run:
+        fc_args.append("--slicer-dry-run")
 
     # Pass PROJECT_ROOT and CONFIG_FILE via environment variables for subprocess
     env = os.environ.copy()
@@ -190,6 +201,8 @@ def main():
         env["FREECAD_TOOLS_NAME"] = args.name
     if args.verbose:
         env["FREECAD_TOOLS_LOG_LEVEL"] = "DEBUG"
+    if args.slicer_dry_run:
+        env["FREECAD_TOOLS_SLICER_DRY_RUN"] = "true"
 
     # Run fc_export.py with the same Python interpreter
     result = subprocess.run(fc_args, env=env, text=True)
