@@ -20,11 +20,11 @@ jobs:
       matrix:
         include:
           - variant: slim
-            dockerfile: Dockerfile
             latest_tag: latest
+            target: slim
           - variant: freecad
-            dockerfile: Dockerfile.freecad
             latest_tag: freecad-latest
+            target: freecad
 
     steps:
       - name: Checkout repository
@@ -55,7 +55,8 @@ jobs:
         uses: docker/build-push-action@f2a1d5e99ed3f6024f2fd59f932a9f4f9f79b43f # v6.18.0
         with:
           context: .
-          file: ./${{ matrix.dockerfile }}
+          file: ./Dockerfile
+          target: ${{ matrix.target }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
