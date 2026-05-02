@@ -429,14 +429,39 @@ def _extract_prusa_profiles_from_template(template_path):
     return extracted
 
 
+def _extract_template_slic3r_config_to_temp(template_path):
+    """Extract Metadata/Slic3r_PE.config from a 3MF template into a temp file."""
+    if not template_path or not os.path.exists(template_path):
+        return None
+
+    try:
+        with zipfile.ZipFile(template_path) as archive:
+            if "Metadata/Slic3r_PE.config" not in archive.namelist():
+                return None
+            config_text = archive.read("Metadata/Slic3r_PE.config").decode("utf-8", errors="ignore")
+    except Exception as exc:
+        logger.debug(f"Failed to extract Slic3r config from template: {exc}")
+        return None
+
+    temp_file = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".ini", delete=False)
+    temp_file.write(config_text)
+    temp_file.flush()
+    temp_file.close()
+    return temp_file.name
+
+
 def build_slicer_command(export_item, output_3mf_path):
     """Build slicer CLI command for a generated 3MF output."""
     slicer = export_item.get("slicer", {})
     if not slicer.get("enabled", False):
-        return None, None
+        return None, None, None
 
     engine = slicer["engine"]
-    engine_cfg = dict(slicer.get(engine, {}) or {})
+    raw_engine_cfg = dict(slicer.get(engine, {}) or {})
+    engine_cfg = dict(raw_engine_cfg)
+    explicit_profile_overrides = any(
+        raw_engine_cfg.get(key) for key in ("printer_profile", "print_profile", "material_profile")
+    )
 
     if engine == "prusa":
         template_profiles = _extract_prusa_profiles_from_template(export_item.get("template"))
@@ -453,22 +478,28 @@ def build_slicer_command(export_item, output_3mf_path):
     output_name_template = slicer.get("output_name", "{name}_{engine}_{date}.gcode")
     output_name = _format_slicer_output_name(output_name_template, export_item.get("name", "export"), engine)
     output_path = os.path.join(output_dir, output_name)
+    temp_bundle_path = None
 
     if engine == "prusa":
         cmd = [binary, "--export-gcode", output_3mf_path, "--output", output_path]
 
         if slicer.get("use_config_bundle", False) and slicer.get("config_bundle"):
             cmd.extend(["--load", slicer["config_bundle"]])
+        elif not explicit_profile_overrides:
+            temp_bundle_path = _extract_template_slic3r_config_to_temp(export_item.get("template"))
+            if temp_bundle_path:
+                cmd.extend(["--load", temp_bundle_path])
 
         profile_map = {
             "printer_profile": "--printer-profile",
             "print_profile": "--print-profile",
             "material_profile": "--material-profile",
         }
-        for key, flag in profile_map.items():
-            value = engine_cfg.get(key)
-            if value:
-                cmd.extend([flag, value])
+        if explicit_profile_overrides:
+            for key, flag in profile_map.items():
+                value = engine_cfg.get(key)
+                if value:
+                    cmd.extend([flag, value])
     else:
         cmd = [binary, "--slice", "0", "--outputdir", output_dir]
         if slicer.get("use_config_bundle", False) and slicer.get("config_bundle"):
@@ -476,12 +507,12 @@ def build_slicer_command(export_item, output_3mf_path):
         cmd.append(output_3mf_path)
 
     cmd.extend(engine_cfg.get("extra_args", []))
-    return cmd, output_path
+    return cmd, output_path, temp_bundle_path
 
 
 def run_slicer_for_export_item(export_item, output_3mf_path):
     """Run optional slicer stage after 3MF export."""
-    cmd, output_path = build_slicer_command(export_item, output_3mf_path)
+    cmd, output_path, temp_bundle_path = build_slicer_command(export_item, output_3mf_path)
     if not cmd:
         return True
 
@@ -498,11 +529,15 @@ def run_slicer_for_export_item(export_item, output_3mf_path):
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
     except Exception as exc:
         log_failure(f"Slicer execution failed: {exc}")
+        if temp_bundle_path and os.path.exists(temp_bundle_path):
+            os.unlink(temp_bundle_path)
         return False
 
     if result.returncode != 0:
         stderr_summary = summarize_subprocess_stderr(result.stderr)
         log_failure(f"Slicer failed (exit {result.returncode}): {stderr_summary}")
+        if temp_bundle_path and os.path.exists(temp_bundle_path):
+            os.unlink(temp_bundle_path)
         return False
 
     slicer = export_item.get("slicer", {})
@@ -529,6 +564,10 @@ def run_slicer_for_export_item(export_item, output_3mf_path):
         log_success(f"Slicer output generated: {os.path.basename(output_path)} ({_format_bytes(file_size)})")
     else:
         log_warning_msg("Slicer completed but output file was not found at expected path")
+
+    if temp_bundle_path and os.path.exists(temp_bundle_path):
+        os.unlink(temp_bundle_path)
+
     return True
 
 

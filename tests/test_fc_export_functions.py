@@ -18,6 +18,7 @@ This module tests:
 
 import json
 import logging
+import os
 import sys
 import zipfile
 from pathlib import Path
@@ -865,7 +866,7 @@ class TestSlicerConfigAndCommands:
                 "output_name": "{name}_{engine}.gcode",
             },
         }
-        cmd, output_path = fc_export.build_slicer_command(item, "/tmp/in.3mf")
+        cmd, output_path, _ = fc_export.build_slicer_command(item, "/tmp/in.3mf")
         assert cmd[0].endswith("prusa-slicer") or cmd[0].endswith("PrusaSlicer")
         assert "--printer-profile" in cmd
         assert "--print-profile" in cmd
@@ -885,7 +886,7 @@ class TestSlicerConfigAndCommands:
                 "orca": {},
             },
         }
-        cmd, _ = fc_export.build_slicer_command(item, "/tmp/in.3mf")
+        cmd, _, _ = fc_export.build_slicer_command(item, "/tmp/in.3mf")
         assert cmd[0].endswith("orca-slicer") or cmd[0].endswith("OrcaSlicer")
         assert "--slice" in cmd
         assert "--outputdir" in cmd
@@ -936,7 +937,7 @@ class TestSlicerConfigAndCommands:
         assert result["print_profile"] == "0.20mm STRUCTURAL @MINIIS 0.4 - Flo"
         assert result["material_profile"] == "Prusament PLA @MINIIS - Flo"
 
-    def test_build_slicer_command_uses_template_profiles_when_missing(self, tmp_path):
+    def test_build_slicer_command_uses_template_bundle_when_profiles_missing(self, tmp_path):
         template_3mf = tmp_path / "template.3mf"
         cfg = """; print_settings_id = 0.20mm STRUCTURAL @MINIIS 0.4 - Flo
 ; filament_settings_id = Generic PLA @MINIIS
@@ -956,13 +957,34 @@ class TestSlicerConfigAndCommands:
             },
         }
 
-        cmd, _ = fc_export.build_slicer_command(item, "/tmp/in.3mf")
-        assert "--printer-profile" in cmd
-        assert "Original Prusa MINI & MINI+ Input Shaper" in cmd
-        assert "--print-profile" in cmd
-        assert "0.20mm STRUCTURAL @MINIIS 0.4 - Flo" in cmd
-        assert "--material-profile" in cmd
-        assert "Generic PLA @MINIIS" in cmd
+        cmd, _, temp_bundle = fc_export.build_slicer_command(item, "/tmp/in.3mf")
+        assert "--load" in cmd
+        assert temp_bundle is not None
+        assert os.path.exists(temp_bundle)
+
+    def test_build_slicer_command_uses_template_config_bundle_when_no_overrides(self, tmp_path):
+        template_3mf = tmp_path / "template.3mf"
+        cfg = """; print_settings_id = 0.20mm STRUCTURAL @MINIIS 0.4 - Flo
+; filament_settings_id = Generic PLA @MINIIS
+; printer_settings_id = Original Prusa MINI & MINI+ Input Shaper
+"""
+        with zipfile.ZipFile(template_3mf, "w") as archive:
+            archive.writestr("Metadata/Slic3r_PE.config", cfg)
+
+        item = {
+            "name": "demo",
+            "template": str(template_3mf),
+            "slicer": {
+                "enabled": True,
+                "engine": "prusa",
+                "output_dir": str(tmp_path),
+                "prusa": {},
+            },
+        }
+
+        cmd, _, temp_bundle = fc_export.build_slicer_command(item, "/tmp/in.3mf")
+        assert "--load" in cmd
+        assert temp_bundle is not None
 
     def test_resolve_slicer_binary_prefers_path_candidate(self):
         cfg = {"engine": "prusa"}

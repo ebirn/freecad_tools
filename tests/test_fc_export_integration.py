@@ -389,7 +389,7 @@ class TestSlicerIntegration:
 
         # Mock current date for predictable output name
         with patch("fc_export.time.strftime", return_value="20240101"):
-            cmd, output_path = fc_export.build_slicer_command(item, "/tmp/input.3mf")
+            cmd, output_path, _ = fc_export.build_slicer_command(item, "/tmp/input.3mf")
 
         # Assert
         assert cmd[0].endswith("prusa-slicer") or cmd[0].endswith("PrusaSlicer")
@@ -425,7 +425,7 @@ class TestSlicerIntegration:
             },
         }
 
-        cmd, output_path = fc_export.build_slicer_command(item, "/tmp/input.3mf")
+        cmd, output_path, _ = fc_export.build_slicer_command(item, "/tmp/input.3mf")
 
         # Assert
         assert cmd[0].endswith("orca-slicer") or cmd[0].endswith("OrcaSlicer")
@@ -454,7 +454,7 @@ class TestSlicerIntegration:
             },
         }
 
-        cmd, _ = fc_export.build_slicer_command(item, "/tmp/input.3mf")
+        cmd, _, _ = fc_export.build_slicer_command(item, "/tmp/input.3mf")
 
         # Assert
         assert "--load" in cmd
