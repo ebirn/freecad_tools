@@ -19,6 +19,7 @@ This module tests:
 import json
 import logging
 import sys
+import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -920,6 +921,48 @@ class TestSlicerConfigAndCommands:
         with patch("fc_export.subprocess.run", return_value=proc):
             ok = fc_export.run_slicer_for_export_item(item, "/tmp/in.3mf")
         assert ok is False
+
+    def test_extract_prusa_profiles_from_template_3mf(self, tmp_path):
+        template_3mf = tmp_path / "template.3mf"
+        cfg = """; print_settings_id = 0.20mm STRUCTURAL @MINIIS 0.4 - Flo
+; filament_settings_id = \"Prusament PLA @MINIIS - Flo\"
+; printer_settings_id = Original Prusa MINI & MINI+ Input Shaper
+"""
+        with zipfile.ZipFile(template_3mf, "w") as archive:
+            archive.writestr("Metadata/Slic3r_PE.config", cfg)
+
+        result = fc_export._extract_prusa_profiles_from_template(str(template_3mf))
+        assert result["printer_profile"] == "Original Prusa MINI & MINI+ Input Shaper"
+        assert result["print_profile"] == "0.20mm STRUCTURAL @MINIIS 0.4 - Flo"
+        assert result["material_profile"] == "Prusament PLA @MINIIS - Flo"
+
+    def test_build_slicer_command_uses_template_profiles_when_missing(self, tmp_path):
+        template_3mf = tmp_path / "template.3mf"
+        cfg = """; print_settings_id = 0.20mm STRUCTURAL @MINIIS 0.4 - Flo
+; filament_settings_id = Generic PLA @MINIIS
+; printer_settings_id = Original Prusa MINI & MINI+ Input Shaper
+"""
+        with zipfile.ZipFile(template_3mf, "w") as archive:
+            archive.writestr("Metadata/Slic3r_PE.config", cfg)
+
+        item = {
+            "name": "demo",
+            "template": str(template_3mf),
+            "slicer": {
+                "enabled": True,
+                "engine": "prusa",
+                "output_dir": str(tmp_path),
+                "prusa": {},
+            },
+        }
+
+        cmd, _ = fc_export.build_slicer_command(item, "/tmp/in.3mf")
+        assert "--printer-profile" in cmd
+        assert "Original Prusa MINI & MINI+ Input Shaper" in cmd
+        assert "--print-profile" in cmd
+        assert "0.20mm STRUCTURAL @MINIIS 0.4 - Flo" in cmd
+        assert "--material-profile" in cmd
+        assert "Generic PLA @MINIIS" in cmd
 
     def test_resolve_slicer_binary_prefers_path_candidate(self):
         cfg = {"engine": "prusa"}

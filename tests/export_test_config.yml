@@ -210,3 +210,21 @@ export:
       #   printer_profile: "My Orca Printer"
       #   print_profile: "0.20mm Standard"
       #   material_profile: "Generic PLA"
+
+  # 16. SLICER EXAMPLE - Prusa profiles from template metadata
+  # Leaves prusa profile fields empty; values are derived from Metadata/Slic3r_PE.config
+  - name: slicer_prusa_template_profiles
+    source: ../examples/example.FCStd
+    body_source: config
+    bodies:
+      - Body
+    output: ../test_output/slicer_prusa_template_profiles.3mf
+    template: ../examples/default.3mf
+    keep_stl: false
+    slicer:
+      enabled: true
+      engine: prusa
+      output_dir: ../test_output/gcode/
+      output_name: "{name}_{engine}_{date}.gcode"
+      run_after_export: true
+      prusa: {}
