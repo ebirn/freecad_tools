@@ -31,10 +31,10 @@ jobs:
         uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6.0.2
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4f5f6fd85f7f9c9e40fa264fa9c7e74d81d57e4f # v3.11.1
+        uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
-        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1 # v3.3.0
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -42,7 +42,7 @@ jobs:
 
       - name: Extract image metadata
         id: meta
-        uses: docker/metadata-action@902fa8ec7d6ecbf8d84f0d59f0b1a0475f8ecf89 # v5.7.0
+        uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
@@ -52,7 +52,7 @@ jobs:
             type=raw,value=${{ matrix.latest_tag }},enable={{is_default_branch}}
 
       - name: Build and push image
-        uses: docker/build-push-action@f2a1d5e99ed3f6024f2fd59f932a9f4f9f79b43f # v6.18.0
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
