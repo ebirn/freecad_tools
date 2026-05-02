@@ -124,15 +124,16 @@ jobs:
           gui_session="${{ inputs.gui_session || github.event.inputs.gui_session || 'item' }}"
           dry_run="${{ inputs.dry_run || github.event.inputs.dry_run || 'true' }}"
           project_root="${{ inputs.project_root || github.event.inputs.project_root || '.' }}"
-          project_dir="/project/$project_root"
-          config_file="$project_dir/$config_path"
+          workspace_project_dir="$GITHUB_WORKSPACE/$project_root"
+          config_file_host="$workspace_project_dir/$config_path"
+          config_file_container="/project/$project_root/$config_path"
 
-          if [[ ! -f "$config_file" ]]; then
-            echo "Config file not found in caller repository: $config_file" >&2
+          if [[ ! -f "$config_file_host" ]]; then
+            echo "Config file not found in caller repository: $config_file_host" >&2
             exit 1
           fi
 
-          cmd=("--config" "$config_file" "--gui-session" "$gui_session")
+          cmd=("--config" "$config_file_container" "--gui-session" "$gui_session")
           if [[ -n "$export_name" ]]; then
             cmd+=("--name" "$export_name")
           fi
