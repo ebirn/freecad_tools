@@ -124,7 +124,10 @@ jobs:
           config_path="${{ inputs.config_path || github.event.inputs.config_path || 'export_config.yml' }}"
           export_name="${{ inputs.export_name || github.event.inputs.export_name }}"
           gui_session="${{ inputs.gui_session || github.event.inputs.gui_session || 'item' }}"
-          dry_run="${{ inputs.dry_run || github.event.inputs.dry_run || 'true' }}"
+          dry_run="${{ inputs.dry_run }}"
+          if [[ -z "$dry_run" ]]; then
+            dry_run="${{ github.event.inputs.dry_run || 'true' }}"
+          fi
           project_root="${{ inputs.project_root || github.event.inputs.project_root || '.' }}"
           workspace_project_dir="$GITHUB_WORKSPACE/$project_root"
           config_file_host="$workspace_project_dir/$config_path"
