@@ -3,6 +3,9 @@
 set shell := ["bash", "-cu"]
 
 test_config := "tests/export_test_config.yml"
+container_engine := env_var_or_default("CONTAINER_ENGINE", "podman")
+image_repo := env_var_or_default("IMAGE_REPO", "ghcr.io/ebirn/freecad_tools")
+image_tag := env_var_or_default("IMAGE_TAG", "local")
 
 # Run all tests (unit only, without FreeCAD)
 test: test-unit
@@ -56,3 +59,28 @@ clean:
     else \
         echo "No test_output directory found"; \
     fi
+
+# Build slim runtime image (Python-only)
+build-image-slim:
+    {{container_engine}} build \
+        --target slim \
+        -t {{image_repo}}:slim-{{image_tag}} \
+        .
+
+# Build FreeCAD runtime image (GUI-capable)
+build-image-freecad:
+    {{container_engine}} build \
+        --target freecad \
+        -t {{image_repo}}:freecad-{{image_tag}} \
+        .
+
+# Build both container image variants with standard tags
+build-images: build-image-slim build-image-freecad
+
+# Add conventional latest-style aliases to locally built images
+tag-images:
+    {{container_engine}} tag {{image_repo}}:slim-{{image_tag}} {{image_repo}}:latest
+    {{container_engine}} tag {{image_repo}}:freecad-{{image_tag}} {{image_repo}}:freecad-latest
+
+# Build both images and add latest aliases
+build-and-tag-images: build-images tag-images

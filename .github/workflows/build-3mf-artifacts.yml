@@ -141,7 +141,6 @@ jobs:
             -e VIRTUAL_ENV=
             -e UV_LINK_MODE=copy
             -v "$GITHUB_WORKSPACE:/project"
-            --entrypoint /init
           )
           freecad_gui_binary="${{ inputs.freecad_gui_binary || github.event.inputs.freecad_gui_binary }}"
           if [[ -n "$freecad_gui_binary" ]]; then
@@ -173,7 +172,7 @@ jobs:
 
           readiness_cmd="test -x /opt/freecad/usr/bin/freecadcmd"
           readiness_cmd+=" || test -x /usr/bin/freecadcmd"
-          readiness_cmd+=" || test -x /workspace/tools/export.py"
+          readiness_cmd+=" || test -x /freecad_tools/export.sh"
           for _ in $(seq 1 45); do
             if docker exec "$EXPORT_CONTAINER_NAME" /bin/sh -lc \
               "$readiness_cmd" \
@@ -205,11 +204,7 @@ jobs:
             cmd_str+="$(printf '%q' "$part") "
           done
           docker exec "${exec_args[@]}" "$EXPORT_CONTAINER_NAME" /bin/bash -lc \
-            "cd /workspace && if [[ -x .venv/bin/python ]]; then \
-              .venv/bin/python tools/export.py ${cmd_str}; \
-            else \
-              python3 tools/export.py ${cmd_str}; \
-            fi"
+            "/freecad_tools/export.sh ${cmd_str}"
 
       - name: Stop export container service
         if: always()

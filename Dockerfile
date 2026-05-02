@@ -20,13 +20,13 @@ FROM lscr.io/linuxserver/freecad:latest AS freecad
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-WORKDIR /workspace
+
+COPY . /freecad_tools
+WORKDIR /freecad_tools
 
 RUN python3 -m pip install --no-cache-dir uv
 
-COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --extra dev
 
-COPY . .
-
-ENTRYPOINT ["uv", "run", "python", "tools/export.py"]
+# restore original
+WORKDIR /
