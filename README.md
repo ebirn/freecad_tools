@@ -70,6 +70,9 @@ python3 tools/export.py --config path/to/config.yml
 # Validate config without exporting
 python3 tools/export.py path/to/config.yml --dry-run
 
+# Build slicer commands but do not execute slicers
+python3 tools/export.py path/to/config.yml --slicer-dry-run
+
 # Verbose logging
 python3 tools/export.py path/to/config.yml --verbose
 python3 tools/export.py path/to/config.yml -v
@@ -97,6 +100,7 @@ python3 tools/export.py --help
 | `--config PATH` | `-c PATH` | Specify YAML config file path |
 | `--verbose` | `-v` | Enable debug logging output |
 | `--dry-run` | | Validate config without performing export |
+| `--slicer-dry-run` | | Build slicer commands but skip slicer execution |
 | `--name NAME` | `-n NAME` | Export only the item with this name (from multi-item config) |
 | `--list-exports` | | Print available export item names and exit |
 | `--gui-only` | | Run GUI tasks only (screenshots/TechDraw), skip 3MF export |
@@ -118,6 +122,15 @@ To remove generated artifacts from `test_output/`:
 
 ```bash
 make clean
+```
+
+Equivalent `just` recipes:
+
+```bash
+just export
+just export-list
+just export-item <name>
+just gcode-bounds test_output/gcode/<file>.gcode
 ```
 
 **Config File Discovery** (when not specified):
@@ -598,6 +611,38 @@ bom:                                # Optional: generate bill of materials
     - price
     - dimensions
 ```
+
+### Slicer Configuration (PrusaSlicer / OrcaSlicer)
+
+```yaml
+slicer:
+  enabled: true
+  engine: prusa                    # prusa | orca
+  binary: /path/to/slicer          # optional override; auto-detected on macOS/PATH
+  output_dir: test_output/gcode    # where generated gcode is written
+  output_name: "{name}_{engine}_{date}.gcode"
+  run_after_export: true           # optional, default true
+  dry_run: false                   # optional per-item slicer dry run
+
+  # Optional: use slicer settings bundle instead of profile triplet
+  use_config_bundle: false
+  config_bundle: profiles/prusa.ini
+
+  prusa:                           # used when engine=prusa
+    printer_profile: "Original Prusa MINI & MINI+ Input Shaper"
+    print_profile: "0.20mm STRUCTURAL @MINIIS 0.4 - Flo"
+    material_profile: "Generic PLA @MINIIS"
+    extra_args: []
+
+  orca:                            # used when engine=orca
+    extra_args: []
+```
+
+Notes:
+- Native-profile mode only: no profile translation between slicers.
+- If `template` is set on the export item, profile fields may be omitted.
+- Without `template`, provide either profile fields or `use_config_bundle: true`.
+- Prusa binary G-code may not be plain text; use `tools/gcode_bounds.py` to report XY bounds.
 
 **Multiple BOMs from Different Assemblies**:
 ```yaml
