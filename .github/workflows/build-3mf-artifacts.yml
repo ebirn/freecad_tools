@@ -1,0 +1,139 @@
+name: Build 3MF Artifacts
+
+on:
+  workflow_call:
+    inputs:
+      config_path:
+        description: Path to export YAML config file
+        required: true
+        type: string
+      export_name:
+        description: Optional single export item name
+        required: false
+        default: ""
+        type: string
+      project_root:
+        description: Working directory for the export command
+        required: false
+        default: "."
+        type: string
+      gui_session:
+        description: GUI session mode (item or run)
+        required: false
+        default: "item"
+        type: string
+      dry_run:
+        description: Validate workflow without running slicers/exports
+        required: false
+        default: false
+        type: boolean
+      artifact_glob:
+        description: Artifact path glob to upload
+        required: false
+        default: "test_output/**"
+        type: string
+      python_version:
+        description: Python version used for tooling
+        required: false
+        default: "3.13"
+        type: string
+      runner:
+        description: GitHub runner label (must provide FreeCAD for non-dry runs)
+        required: false
+        default: "ubuntu-latest"
+        type: string
+  workflow_dispatch:
+    inputs:
+      config_path:
+        description: Path to export YAML config file
+        required: true
+        default: "tests/export_test_config.yml"
+        type: string
+      export_name:
+        description: Optional single export item name
+        required: false
+        default: ""
+        type: string
+      project_root:
+        description: Working directory for the export command
+        required: false
+        default: "."
+        type: string
+      gui_session:
+        description: GUI session mode
+        required: false
+        default: "item"
+        type: choice
+        options:
+          - item
+          - run
+      dry_run:
+        description: Validate only (recommended unless runner has FreeCAD)
+        required: false
+        default: true
+        type: boolean
+      artifact_glob:
+        description: Artifact path glob to upload
+        required: false
+        default: "test_output/**"
+        type: string
+      python_version:
+        description: Python version used for tooling
+        required: false
+        default: "3.13"
+        type: string
+      runner:
+        description: GitHub runner label (must provide FreeCAD for non-dry runs)
+        required: false
+        default: "ubuntu-latest"
+        type: string
+
+jobs:
+  build-3mf-artifacts:
+    runs-on: ${{ inputs.runner || github.event.inputs.runner || 'ubuntu-latest' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6.0.2
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@05143d3dcd540a42aa638bb0920ac4e3123808a5 # v8.1.0
+        with:
+          enable-cache: true
+          python-version: ${{ inputs.python_version || github.event.inputs.python_version || '3.13' }}
+
+      - name: Sync dependencies
+        run: uv sync --extra dev
+
+      - name: Build export command
+        id: build_cmd
+        shell: bash
+        run: |
+          set -euo pipefail
+          config_path="${{ inputs.config_path || github.event.inputs.config_path }}"
+          export_name="${{ inputs.export_name || github.event.inputs.export_name }}"
+          gui_session="${{ inputs.gui_session || github.event.inputs.gui_session || 'item' }}"
+          dry_run="${{ inputs.dry_run || github.event.inputs.dry_run || 'false' }}"
+
+          cmd="uv run python tools/export.py \"$config_path\" --gui-session \"$gui_session\""
+          if [[ -n "$export_name" ]]; then
+            cmd="$cmd --name \"$export_name\""
+          fi
+          if [[ "$dry_run" == "true" ]]; then
+            cmd="$cmd --dry-run --slicer-dry-run"
+          fi
+
+          echo "command=$cmd" >> "$GITHUB_OUTPUT"
+          printf 'Command: %s\n' "$cmd"
+
+      - name: Run export
+        shell: bash
+        working-directory: ${{ inputs.project_root || github.event.inputs.project_root || '.' }}
+        run: ${{ steps.build_cmd.outputs.command }}
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: freecad-tools-artifacts
+          path: ${{ inputs.artifact_glob || github.event.inputs.artifact_glob || 'test_output/**' }}
+          if-no-files-found: warn
