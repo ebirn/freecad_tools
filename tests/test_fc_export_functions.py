@@ -49,6 +49,7 @@ class TestParseArgs:
         assert args.config is None
         assert args.verbose is False
         assert args.dry_run is False
+        assert args.slicer_dry_run is False
         assert args.list_exports is False
 
     def test_parse_args_with_config_positional(self):
@@ -103,6 +104,13 @@ class TestParseArgs:
 
         # Then
         assert args.dry_run is True
+
+    def test_parse_args_with_slicer_dry_run_flag(self):
+        """Should parse --slicer-dry-run flag."""
+        with patch.object(sys, "argv", ["fc_export.py", "--slicer-dry-run"]):
+            args = fc_export.parse_args()
+
+        assert args.slicer_dry_run is True
 
     def test_parse_args_with_list_exports_flag(self):
         """Should parse --list-exports flag."""
@@ -910,6 +918,53 @@ class TestSlicerConfigAndCommands:
         with patch("fc_export.subprocess.run", return_value=proc):
             ok = fc_export.run_slicer_for_export_item(item, "/tmp/in.3mf")
         assert ok is False
+
+    @pytest.mark.integration
+    def test_main_runs_slicer_stage_after_3mf_export(self, tmp_path):
+        source_path = tmp_path / "example.FCStd"
+        source_path.write_text("stub", encoding="utf-8")
+        output_path = tmp_path / "out.3mf"
+        output_path.write_text("3mf", encoding="utf-8")
+
+        doc = MagicMock()
+        doc.Name = "Doc"
+        doc.FileName = str(source_path)
+        doc.Objects = []
+
+        export_item = {
+            "name": "demo",
+            "source": str(source_path),
+            "output": str(output_path),
+            "template": "template.3mf",
+            "bodies": ["Body"],
+            "slicer": {
+                "enabled": True,
+                "engine": "prusa",
+                "prusa": {},
+                "run_after_export": True,
+            },
+        }
+
+        with (
+            patch.object(fc_export, "dry_run_mode", False),
+            patch.object(fc_export, "list_exports_mode", False),
+            patch.object(fc_export, "gui_only_mode", False),
+            patch.object(fc_export, "screenshots_only_mode", False),
+            patch.object(fc_export, "name_filter", None),
+            patch("fc_export.load_config", return_value=[export_item]),
+            patch("fc_export.FreeCAD.open", return_value=doc),
+            patch("fc_export.FreeCAD.setActiveDocument"),
+            patch("fc_export.FreeCAD.closeDocument"),
+            patch("fc_export.resolve_template_path", return_value="template.3mf"),
+            patch("fc_export.export_bodies_to_3mf_with_template", return_value=True),
+            patch("fc_export.run_gui_tasks_for_item"),
+            patch("fc_export.run_slicer_for_export_item", return_value=True) as mock_run_slicer,
+            patch("fc_export.sys.exit", side_effect=SystemExit),
+        ):
+            with pytest.raises(SystemExit):
+                fc_export.main()
+
+        mock_run_slicer.assert_called_once_with(export_item, str(output_path))
 
 
 class TestColIndexToLetter:

@@ -361,5 +361,219 @@ class TestExportBodiesTo3MFIntegration:
             FreeCAD.closeDocument(doc.Name)
 
 
+class TestSlicerIntegration:
+    """Integration tests for slicer functionality.
+
+    Note: These tests validate slicer command building with real paths
+    but mock the actual slicer binary execution.
+    """
+
+    def test_build_slicer_command_with_real_paths(self, tmp_path):
+        """Should build slicer command with real output paths."""
+        # Create output directory
+        output_dir = tmp_path / "gcode"
+        output_dir.mkdir()
+
+        item = {
+            "name": "TestExport",
+            "slicer": {
+                "enabled": True,
+                "engine": "prusa",
+                "output_dir": str(output_dir),
+                "output_name": "{name}_{engine}.gcode",
+                "prusa": {},
+            },
+        }
+
+        # Mock current date for predictable output name
+        with patch("fc_export.time.strftime", return_value="20240101"):
+            cmd, output_path = fc_export.build_slicer_command(item, "/tmp/input.3mf")
+
+        # Assert
+        assert cmd[0] == "prusa-slicer"
+        assert "--export-gcode" in cmd
+        assert "/tmp/input.3mf" in cmd
+        assert "--output" in cmd
+        assert output_path == str(output_dir / "TestExport_prusa.gcode")
+        assert output_path.endswith(".gcode")
+
+    def test_build_slicer_command_orca_with_profiles(self, tmp_path):
+        """Should build OrcaSlicer command with profile arguments."""
+        output_dir = tmp_path / "gcode"
+        output_dir.mkdir()
+
+        profile_dir = tmp_path / "profiles"
+        profile_dir.mkdir()
+        (profile_dir / "printer.ini").write_text("[profile]\n")
+        (profile_dir / "print.ini").write_text("[profile]\n")
+        (profile_dir / "material.ini").write_text("[profile]\n")
+
+        item = {
+            "name": "OrcaTest",
+            "slicer": {
+                "enabled": True,
+                "engine": "orca",
+                "output_dir": str(output_dir),
+                "output_name": "{name}.gcode",
+                "orca": {
+                    "printer_profile": str(profile_dir / "printer.ini"),
+                    "print_profile": str(profile_dir / "print.ini"),
+                    "material_profile": str(profile_dir / "material.ini"),
+                },
+            },
+        }
+
+        cmd, output_path = fc_export.build_slicer_command(item, "/tmp/input.3mf")
+
+        # Assert
+        assert cmd[0] == "orca-slicer"
+        assert "--printer-profile" in cmd
+        assert str(profile_dir / "printer.ini") in cmd
+        assert "--print-profile" in cmd
+        assert str(profile_dir / "print.ini") in cmd
+        assert "--material-profile" in cmd
+        assert str(profile_dir / "material.ini") in cmd
+        assert output_path == str(output_dir / "OrcaTest.gcode")
+
+    def test_build_slicer_command_with_config_bundle(self, tmp_path):
+        """Should build slicer command with --load config bundle."""
+        output_dir = tmp_path / "gcode"
+        output_dir.mkdir()
+
+        bundle_path = tmp_path / "prusa_bundle.ini"
+        bundle_path.write_text("[bundle]\n")
+
+        item = {
+            "name": "BundleTest",
+            "slicer": {
+                "enabled": True,
+                "engine": "prusa",
+                "use_config_bundle": True,
+                "config_bundle": str(bundle_path),
+                "output_dir": str(output_dir),
+                "prusa": {},
+            },
+        }
+
+        cmd, _ = fc_export.build_slicer_command(item, "/tmp/input.3mf")
+
+        # Assert
+        assert "--load" in cmd
+        assert str(bundle_path) in cmd
+
+    def test_validate_slicer_config_with_template(self):
+        """Should allow slicer without profiles when template is present."""
+        item = {
+            "name": "TemplateTest",
+            "template": "template.3mf",
+            "slicer": {
+                "enabled": True,
+                "engine": "prusa",
+                "prusa": {},  # No profiles
+            },
+        }
+
+        valid, error = fc_export.validate_slicer_config(item)
+        assert valid is True
+        assert error is None
+
+    def test_validate_slicer_config_requires_profiles_without_template(self):
+        """Should require profiles when no template is present."""
+        item = {
+            "name": "NoTemplateTest",
+            "slicer": {
+                "enabled": True,
+                "engine": "prusa",
+                "prusa": {},  # No profiles, no template
+            },
+        }
+
+        valid, error = fc_export.validate_slicer_config(item)
+        assert valid is False
+        assert "requires either profiles" in error
+
+    def test_validate_slicer_config_invalid_engine(self):
+        """Should reject invalid slicer engine."""
+        item = {
+            "name": "InvalidEngineTest",
+            "slicer": {
+                "enabled": True,
+                "engine": "invalid_engine",
+            },
+        }
+
+        valid, error = fc_export.validate_slicer_config(item)
+        assert valid is False
+        assert "slicer.engine" in error
+
+    def test_run_slicer_for_export_item_dry_run_mode(self, tmp_path):
+        """Should skip slicer execution in dry-run mode."""
+        output_dir = tmp_path / "gcode"
+        output_dir.mkdir()
+
+        item = {
+            "name": "DryRunTest",
+            "template": "template.3mf",
+            "slicer": {
+                "enabled": True,
+                "engine": "prusa",
+                "dry_run": True,
+                "output_dir": str(output_dir),
+                "prusa": {},
+            },
+        }
+
+        # Create a dummy 3MF file
+        dummy_3mf = tmp_path / "input.3mf"
+        dummy_3mf.write_text("dummy")
+
+        with patch("fc_export.subprocess.run") as mock_run:
+            ok = fc_export.run_slicer_for_export_item(item, str(dummy_3mf))
+
+        assert ok is True
+        mock_run.assert_not_called()
+
+    def test_run_slicer_for_export_item_creates_output(self, tmp_path):
+        """Should run slicer and create output file."""
+        output_dir = tmp_path / "gcode"
+        output_dir.mkdir()
+
+        item = {
+            "name": "RealRunTest",
+            "template": "template.3mf",
+            "slicer": {
+                "enabled": True,
+                "engine": "prusa",
+                "output_dir": str(output_dir),
+                "output_name": "output.gcode",
+                "prusa": {},
+            },
+        }
+
+        # Create a dummy 3MF file
+        dummy_3mf = tmp_path / "input.3mf"
+        dummy_3mf.write_text("dummy")
+
+        # Mock successful slicer execution
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = ""
+        mock_result.stderr = ""
+
+        # Create the expected output file after "execution"
+        def create_gcode_file(*args, **kwargs):
+            gcode_path = output_dir / "output.gcode"
+            gcode_path.write_text("G28\nG1 X0 Y0\n")
+            return mock_result
+
+        with patch("fc_export.subprocess.run", side_effect=create_gcode_file) as mock_run:
+            ok = fc_export.run_slicer_for_export_item(item, str(dummy_3mf))
+
+        assert ok is True
+        mock_run.assert_called_once()
+        gcode_file = output_dir / "output.gcode"
+        assert gcode_file.exists()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
