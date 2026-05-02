@@ -18,6 +18,11 @@ on:
         required: false
         default: "run"
         type: string
+      dry_run:
+        description: Run export in dry-run mode
+        required: false
+        default: false
+        type: boolean
       runner:
         description: Runner label
         required: false
@@ -43,6 +48,11 @@ on:
         required: false
         default: "README.md export_config.yml example.FCStd .github/workflows"
         type: string
+      generated_paths:
+        description: Space-separated generated output paths to include
+        required: false
+        default: "prints docs"
+        type: string
 
 jobs:
   validate-export-config:
@@ -51,7 +61,7 @@ jobs:
       config_path: ${{ inputs.config_path }}
       project_root: ${{ inputs.project_root }}
       gui_session: ${{ inputs.gui_session }}
-      dry_run: true
+      dry_run: ${{ inputs.dry_run }}
       artifact_glob: prints/**
       container_image: ${{ inputs.container_image }}
       runner: ${{ inputs.runner }}
@@ -80,7 +90,15 @@ jobs:
           } > dist/nightly-metadata.txt
 
           bundle_paths="${{ inputs.bundle_paths }}"
-          tar -czf "dist/${{ inputs.bundle_name }}" $bundle_paths dist/nightly-metadata.txt
+          generated_paths="${{ inputs.generated_paths }}"
+          include_paths=()
+          for p in $bundle_paths $generated_paths; do
+            if [[ -e "$p" ]]; then
+              include_paths+=("$p")
+            fi
+          done
+          include_paths+=("dist/nightly-metadata.txt")
+          tar -czf "dist/${{ inputs.bundle_name }}" "${include_paths[@]}"
 
           {
             echo "# Nightly Release"
@@ -91,7 +109,7 @@ jobs:
             echo "- ${{ inputs.bundle_name }}"
             echo
             echo "## Validation"
-            echo "- export config validation (dry-run): passed"
+            echo "- export workflow completed (dry_run=${{ inputs.dry_run }})"
           } > dist/nightly-release-notes.md
 
       - name: Create or update nightly release
