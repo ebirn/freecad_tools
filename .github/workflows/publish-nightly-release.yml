@@ -51,7 +51,7 @@ on:
       generated_paths:
         description: Space-separated generated output paths to include
         required: false
-        default: "prints docs"
+        default: "generated/prints generated/docs"
         type: string
 
 jobs:
@@ -62,7 +62,9 @@ jobs:
       project_root: ${{ inputs.project_root }}
       gui_session: ${{ inputs.gui_session }}
       dry_run: ${{ inputs.dry_run }}
-      artifact_glob: prints/**
+      artifact_glob: |
+        prints/**
+        docs/**
       container_image: ${{ inputs.container_image }}
       runner: ${{ inputs.runner }}
 
@@ -77,6 +79,15 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98 # v6.0.2
+
+      - name: Download generated export artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p generated
+          gh run download "$GITHUB_RUN_ID" \
+            --name freecad-tools-artifacts \
+            --dir generated
 
       - name: Build nightly bundle and notes
         shell: bash

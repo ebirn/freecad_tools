@@ -51,7 +51,7 @@ on:
       generated_paths:
         description: Space-separated generated output paths to include
         required: false
-        default: "prints docs"
+        default: "generated/prints generated/docs"
         type: string
 
 jobs:
@@ -62,7 +62,9 @@ jobs:
       project_root: ${{ inputs.project_root }}
       gui_session: ${{ inputs.gui_session }}
       dry_run: ${{ inputs.dry_run }}
-      artifact_glob: prints/**
+      artifact_glob: |
+        prints/**
+        docs/**
       container_image: ${{ inputs.container_image }}
       runner: ${{ inputs.runner }}
 
@@ -101,6 +103,24 @@ jobs:
             echo "commit=${GITHUB_SHA}"
             echo "generated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } > dist/release-metadata.txt
+
+      - name: Download generated export artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p generated
+          gh run download "$GITHUB_RUN_ID" \
+            --name freecad-tools-artifacts \
+            --dir generated
+
+      - name: Build release bundle and notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_tag="${RELEASE_TAG:-${{ inputs.release_tag }}}"
+          if [[ -z "$release_tag" ]]; then
+            release_tag="${GITHUB_REF_NAME:-}"
+          fi
 
           bundle_name="${{ inputs.bundle_name_prefix }}-${release_tag}.tar.gz"
           bundle_paths="${{ inputs.bundle_paths }}"
