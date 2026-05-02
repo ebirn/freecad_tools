@@ -12,7 +12,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - `tools/gcode_bounds.py` utility and `just gcode-bounds` recipe to report XY extents from generated G-code.
 - Real Orca execution integration coverage (with environment-aware skip when local slicer settings reject slice validity).
 - `Justfile` recipes mirroring Makefile workflows plus export item helpers (`export-list`, `export-item`, `export-item-dry-run`).
-- Prusa template profile fallback: when slicer profile fields are omitted, profile names are auto-derived from `Metadata/Slic3r_PE.config` in template 3MF files.
+- Prusa template settings fallback: when slicer profile overrides are omitted, slicer settings are loaded from `Metadata/Slic3r_PE.config` in template 3MF files via temporary `--load` config bundles.
 
 ### Changed
 

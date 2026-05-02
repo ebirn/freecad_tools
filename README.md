@@ -642,7 +642,7 @@ Notes:
 - Native-profile mode only: no profile translation between slicers.
 - If `template` is set on the export item, profile fields may be omitted.
 - Without `template`, provide either profile fields or `use_config_bundle: true`.
-- For `engine: prusa`, missing `printer_profile` / `print_profile` / `material_profile` are auto-derived from `Metadata/Slic3r_PE.config` in the template 3MF when available.
+- For `engine: prusa`, if profile overrides are omitted and `template` is set, slicer settings are loaded from `Metadata/Slic3r_PE.config` in the template 3MF via a temporary `--load` config bundle.
 - Prusa binary G-code may not be plain text; use `tools/gcode_bounds.py` to report XY bounds.
 
 **Multiple BOMs from Different Assemblies**:
