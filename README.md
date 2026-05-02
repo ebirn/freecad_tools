@@ -643,6 +643,7 @@ Notes:
 - If `template` is set on the export item, profile fields may be omitted.
 - Without `template`, provide either profile fields or `use_config_bundle: true`.
 - For `engine: prusa`, if profile overrides are omitted and `template` is set, slicer settings are loaded from `Metadata/Slic3r_PE.config` in the template 3MF via a temporary `--load` config bundle.
+- For `engine: orca`, if `template` is set and no explicit config bundle is provided, the same template config is passed via `--load-settings`.
 - Prusa binary G-code may not be plain text; use `tools/gcode_bounds.py` to report XY bounds.
 
 **Multiple BOMs from Different Assemblies**:

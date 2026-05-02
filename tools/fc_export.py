@@ -504,6 +504,10 @@ def build_slicer_command(export_item, output_3mf_path):
         cmd = [binary, "--slice", "0", "--outputdir", output_dir]
         if slicer.get("use_config_bundle", False) and slicer.get("config_bundle"):
             cmd.extend(["--load-settings", slicer["config_bundle"]])
+        elif export_item.get("template"):
+            temp_bundle_path = _extract_template_slic3r_config_to_temp(export_item.get("template"))
+            if temp_bundle_path:
+                cmd.extend(["--load-settings", temp_bundle_path])
         cmd.append(output_3mf_path)
 
     cmd.extend(engine_cfg.get("extra_args", []))
