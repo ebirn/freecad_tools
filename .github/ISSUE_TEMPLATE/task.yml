@@ -1,0 +1,77 @@
+name: Development Task
+description: Reusable template for planned development work
+title: "task: "
+labels:
+  - task
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Goal
+      description: What are we solving, and why now?
+      placeholder: Describe the problem and expected outcome.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: task_type
+    attributes:
+      label: Task Type
+      options:
+        - feature
+        - bug
+        - tech-debt
+        - research
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What is included and explicitly excluded?
+      placeholder: |
+        In scope:
+        - ...
+
+        Out of scope:
+        - ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Definition of done for this task
+      placeholder: |
+        - [ ] Behavior X works
+        - [ ] Edge case Y handled
+        - [ ] CI is green
+    validations:
+      required: true
+
+  - type: textarea
+    id: tests
+    attributes:
+      label: Test Plan (TDD)
+      description: Add tests first, confirm they fail, then implement to green
+      placeholder: |
+        - Failing test(s) to add:
+        - Why they should fail initially:
+        - Final verification steps:
+    validations:
+      required: true
+
+  - type: textarea
+    id: docs
+    attributes:
+      label: Documentation Impact
+      description: Which docs must be updated?
+      placeholder: README / AGENTS / CHANGELOG / Wiki pages
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Extra Context
+      description: Links, references, constraints, known risks

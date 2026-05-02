@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Project Documentation
+    url: https://github.com/ebirn/freecad_tools/wiki
+    about: Use the wiki for stable architecture and workflow documentation.
