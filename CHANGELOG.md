@@ -14,12 +14,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - `Justfile` recipes mirroring Makefile workflows plus export item helpers (`export-list`, `export-item`, `export-item-dry-run`).
 - Prusa template settings fallback: when slicer profile overrides are omitted, slicer settings are loaded from `Metadata/Slic3r_PE.config` in template 3MF files via temporary `--load` config bundles.
 - Orca template settings fallback: when `template` is set and no explicit config bundle is provided, slicer settings are loaded from `Metadata/Slic3r_PE.config` via temporary `--load-settings` bundles.
+- Consumer-facing workflow `.github/workflows/build-3mf-artifacts.yml` for containerized 3MF artifact generation via `workflow_call`/`workflow_dispatch`.
+- Container image workflow `.github/workflows/build-container-image.yml` to build and publish GHCR images for branches, main/default, and release tags.
+- Multi-stage `Dockerfile` with two targets: `slim` (tooling) and `freecad` (FreeCAD-enabled runtime).
 
 ### Changed
 
 - Slicer binary resolution now auto-detects common macOS app binaries and PATH names.
 - `tests/export_test_config.yml` includes Prusa and Orca slicer examples with explicit profile/config patterns.
 - Slicer precedence is now explicit: config profile overrides take priority; when omitted, template metadata config is used via temporary bundle load.
+- 3MF artifact workflow now runs export commands inside container images (default `ghcr.io/ebirn/freecad_tools:freecad-latest`) and uses consistent defaults (`export_config.yml`, `prints/**`, dry-run true).
+- Container publishing now emits variant-prefixed tags (`slim-*`, `freecad-*`) plus stable default-branch tags (`latest`, `freecad-latest`).
 
 ### Docs
 
