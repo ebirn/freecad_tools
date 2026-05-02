@@ -124,13 +124,35 @@ jobs:
             'ghcr.io/ebirn/freecad_tools:freecad-latest' }}"
           docker pull "$image"
 
-      - name: Run export
+      - name: Start export container service
         shell: bash
         run: |
           set -euo pipefail
           image="${{ inputs.container_image ||
             github.event.inputs.container_image ||
             'ghcr.io/ebirn/freecad_tools:freecad-latest' }}"
+          container_name="freecad-tools-export-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "EXPORT_CONTAINER_NAME=$container_name" >> "$GITHUB_ENV"
+
+          docker_args=(
+            -d
+            --rm
+            --name "$container_name"
+            -e VIRTUAL_ENV=
+            -e UV_LINK_MODE=copy
+            -v "$GITHUB_WORKSPACE:/project"
+            --entrypoint /init
+          )
+          freecad_gui_binary="${{ inputs.freecad_gui_binary || github.event.inputs.freecad_gui_binary }}"
+          if [[ -n "$freecad_gui_binary" ]]; then
+            docker_args+=( -e "FREECAD_GUI_BINARY=$freecad_gui_binary" )
+          fi
+          docker run "${docker_args[@]}" "$image"
+
+      - name: Run export
+        shell: bash
+        run: |
+          set -euo pipefail
           config_path="${{ inputs.config_path || github.event.inputs.config_path || 'export_config.yml' }}"
           export_name="${{ inputs.export_name || github.event.inputs.export_name }}"
           gui_session="${{ inputs.gui_session || github.event.inputs.gui_session || 'item' }}"
@@ -149,6 +171,18 @@ jobs:
             exit 1
           fi
 
+          readiness_cmd="test -x /opt/freecad/usr/bin/freecadcmd"
+          readiness_cmd+=" || test -x /usr/bin/freecadcmd"
+          readiness_cmd+=" || test -x /workspace/tools/export.py"
+          for _ in $(seq 1 45); do
+            if docker exec "$EXPORT_CONTAINER_NAME" /bin/sh -lc \
+              "$readiness_cmd" \
+              >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+
           cmd=("--config" "$config_file_container" "--gui-session" "$gui_session")
           if [[ -n "$export_name" ]]; then
             cmd+=("--name" "$export_name")
@@ -159,17 +193,28 @@ jobs:
 
           printf 'Running export command in container: %q ' "${cmd[@]}"
           printf '\n'
-
-          docker_args=(
-            --rm
+          exec_args=(
             -e VIRTUAL_ENV=
             -e UV_LINK_MODE=copy
-            -v "$GITHUB_WORKSPACE:/project"
           )
           if [[ -n "$freecad_gui_binary" ]]; then
-            docker_args+=( -e "FREECAD_GUI_BINARY=$freecad_gui_binary" )
+            exec_args+=( -e "FREECAD_GUI_BINARY=$freecad_gui_binary" )
           fi
-          docker run "${docker_args[@]}" "$image" "${cmd[@]}"
+          cmd_str=""
+          for part in "${cmd[@]}"; do
+            cmd_str+="$(printf '%q' "$part") "
+          done
+          docker exec "${exec_args[@]}" "$EXPORT_CONTAINER_NAME" /bin/bash -lc \
+            "cd /workspace && uv run python tools/export.py ${cmd_str}"
+
+      - name: Stop export container service
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${EXPORT_CONTAINER_NAME:-}" ]]; then
+            docker stop "$EXPORT_CONTAINER_NAME" >/dev/null 2>&1 || true
+          fi
 
       - name: Upload artifacts
         if: ${{ always() && inputs.dry_run != true && github.event.inputs.dry_run != 'true' }}
