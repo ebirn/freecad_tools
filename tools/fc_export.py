@@ -108,13 +108,16 @@ def configure_logging(verbose=False, log_level_env=None):
     # Clean console format: LEVEL - message (no module name)
     console_format = "%(levelname)s - %(message)s"
     file_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    handlers = [logging.StreamHandler(sys.stderr)]
+    try:
+        handlers.insert(0, logging.FileHandler(log_file))
+    except OSError:
+        pass
+
     logging.basicConfig(
         level=log_level,
         format=console_format,
-        handlers=[
-            logging.FileHandler(log_file),
-            logging.StreamHandler(sys.stderr),
-        ],
+        handlers=handlers,
     )
     # Set file handler to use more detailed format
     for handler in logging.root.handlers:
@@ -756,8 +759,21 @@ def run_gui_tasks_for_item(doc, item, export_name, source_path, project_root, re
     if task_plan["run_screenshots"] and task_plan["run_techdraw"]:
         batched_results = run_gui_tasks_batched(doc, item, export_name, source_path, project_root, resolved_bodies)
         if batched_results.get("screenshot") is not None or batched_results.get("techdraw") is not None:
-            return batched_results
-        log_warning_msg("Batched GUI path unavailable, falling back to sequential GUI steps")
+            screenshot_result = batched_results.get("screenshot") or {}
+            techdraw_result = batched_results.get("techdraw") or {}
+            screenshot_ok = bool(screenshot_result.get("success"))
+            techdraw_ok = bool(techdraw_result.get("success"))
+            if screenshot_ok and techdraw_ok:
+                return batched_results
+            if screenshot_ok:
+                results["screenshot"] = screenshot_result
+                task_plan["run_screenshots"] = False
+            if techdraw_ok:
+                results["techdraw"] = techdraw_result
+                task_plan["run_techdraw"] = False
+            log_warning_msg("Batched GUI run incomplete; falling back to sequential GUI steps")
+        else:
+            log_warning_msg("Batched GUI path unavailable, falling back to sequential GUI steps")
 
     if task_plan["run_screenshots"]:
         log_action("Generating screenshots")
@@ -925,7 +941,13 @@ def run_gui_tasks_batched(doc, item, export_name, source_path, project_root, res
             json.dump(batch_cfg, f, indent=2)
 
         cmd = [freecad_gui, script_path, config_path]
-        gui_result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        gui_result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            env=_build_gui_subprocess_env(),
+        )
         if gui_result.stderr:
             logger.debug(f"Batched GUI stderr: {gui_result.stderr[:1000]}")
             logger.info(f"Batched GUI stderr summary: {summarize_subprocess_stderr(gui_result.stderr)}")
@@ -977,7 +999,13 @@ def run_gui_tasks_shared_session(gui_jobs, project_root):
             json.dump({"jobs": gui_jobs, "result_file": result_file}, f, indent=2)
 
         cmd = [freecad_gui, script_path, cfg_path]
-        gui_result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+        gui_result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=900,
+            env=_build_gui_subprocess_env(),
+        )
         if gui_result.stderr:
             logger.info(f"Shared GUI stderr summary: {summarize_subprocess_stderr(gui_result.stderr)}")
         if not os.path.exists(result_file):
@@ -2098,6 +2126,24 @@ def _find_venv_python():
     return sys.executable
 
 
+def _build_gui_subprocess_env(base_env=None):
+    """Build environment for FreeCAD GUI subprocesses in containers/CI."""
+    env = dict(base_env) if base_env is not None else os.environ.copy()
+
+    pixel_wayland = env.get("PIXELFLUX_WAYLAND", "").lower() in ("1", "true", "yes")
+    has_lsio_runtime = os.path.isdir("/config/.XDG")
+
+    if pixel_wayland or has_lsio_runtime:
+        env["XDG_RUNTIME_DIR"] = "/config/.XDG"
+        env["WAYLAND_DISPLAY"] = "wayland-0"
+        env["DISPLAY"] = ":0"
+        env["QT_QPA_PLATFORM"] = "xcb"
+    else:
+        env.setdefault("LIBGL_ALWAYS_SOFTWARE", "1")
+
+    return env
+
+
 def _find_freecad_gui_binary():
     """
     Find the FreeCAD GUI binary for TechDraw PDF export and screenshot generation.
@@ -2113,6 +2159,9 @@ def _find_freecad_gui_binary():
     gui_paths = [
         # macOS
         "/Applications/FreeCAD.app/Contents/MacOS/FreeCAD",
+        # LinuxServer FreeCAD image
+        "/opt/freecad/AppRun",
+        "/opt/freecad/usr/bin/freecad",
         # Linux common locations
         "/usr/bin/freecad",
         "/usr/local/bin/freecad",
@@ -2220,7 +2269,13 @@ def _run_techdraw_pipeline(
     logger.info(f"Exporting TechDraw pages via GUI: {freecad_gui}")
     logger.debug(f"Running: {' '.join(cmd)}")
 
-    gui_result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    gui_result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=_build_gui_subprocess_env(),
+    )
 
     if gui_result.stdout:
         logger.debug(f"GUI export stdout: {gui_result.stdout[:500]}")
@@ -2412,7 +2467,7 @@ def run_screenshot_generation(export_item, project_root):
 
         gui_result = subprocess.run(
             cmd,
-            env=env,
+            env=_build_gui_subprocess_env(env),
             capture_output=True,
             text=True,
             timeout=300,
