@@ -140,6 +140,8 @@ jobs:
             --name "$container_name"
             -e VIRTUAL_ENV=
             -e UV_LINK_MODE=copy
+            -e "PUID=$(id -u)"
+            -e "PGID=$(id -g)"
             -v "$GITHUB_WORKSPACE:/project"
           )
           freecad_gui_binary="${{ inputs.freecad_gui_binary || github.event.inputs.freecad_gui_binary }}"
