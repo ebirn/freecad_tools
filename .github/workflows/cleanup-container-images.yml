@@ -1,0 +1,153 @@
+name: Cleanup Container Images
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview deletions without removing package versions"
+        required: false
+        default: true
+        type: boolean
+      max_age_days:
+        description: "Delete candidates older than this many days"
+        required: false
+        default: "7"
+        type: string
+
+jobs:
+  cleanup-ghcr:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OWNER: ${{ github.repository_owner }}
+      REPO: ${{ github.event.repository.name }}
+      PACKAGE_NAME: freecad_tools
+      DEFAULT_DRY_RUN: "false"
+      DEFAULT_MAX_AGE_DAYS: "7"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Cleanup old non-active container versions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          dry_run="${{ inputs.dry_run }}"
+          if [[ -z "${dry_run}" ]]; then
+            dry_run="$DEFAULT_DRY_RUN"
+          fi
+
+          max_age_days="${{ inputs.max_age_days }}"
+          if [[ -z "${max_age_days}" ]]; then
+            max_age_days="$DEFAULT_MAX_AGE_DAYS"
+          fi
+
+          cutoff_epoch=$(date -u -d "-${max_age_days} days" +%s)
+          now_epoch=$(date -u +%s)
+
+          echo "Owner: $OWNER"
+          echo "Repo: $REPO"
+          echo "Package: $PACKAGE_NAME"
+          echo "Dry run: $dry_run"
+          echo "Max age days: $max_age_days"
+          echo "Cutoff epoch: $cutoff_epoch"
+
+          keep_tags_file=$(mktemp)
+          versions_file=$(mktemp)
+
+          # Always keep canonical latest tags.
+          printf '%s\n' "tools-latest" "freecad-latest" "latest" > "$keep_tags_file"
+
+          # Keep branch-derived tags for active branches.
+          gh api --paginate "repos/${OWNER}/${REPO}/branches?per_page=100" \
+            --jq '.[].name' | while IFS= read -r branch; do
+              printf '%s\n' "tools-${branch}" "freecad-${branch}" >> "$keep_tags_file"
+            done
+
+          # Keep tag-derived tags for existing Git tags.
+          gh api --paginate "repos/${OWNER}/${REPO}/tags?per_page=100" \
+            --jq '.[].name' | while IFS= read -r tag; do
+              printf '%s\n' "tools-${tag}" "freecad-${tag}" >> "$keep_tags_file"
+            done
+
+          # Keep release-derived tags (explicit release refs).
+          gh api --paginate "repos/${OWNER}/${REPO}/releases?per_page=100" \
+            --jq '.[].tag_name' | while IFS= read -r rel_tag; do
+              [[ -z "$rel_tag" || "$rel_tag" == "null" ]] && continue
+              printf '%s\n' "tools-${rel_tag}" "freecad-${rel_tag}" >> "$keep_tags_file"
+            done
+
+          # Keep tags for open PR head branches (extra safety).
+          gh api --paginate "repos/${OWNER}/${REPO}/pulls?state=open&per_page=100" \
+            --jq '.[].head.ref' | while IFS= read -r pr_branch; do
+              [[ -z "$pr_branch" || "$pr_branch" == "null" ]] && continue
+              printf '%s\n' "tools-${pr_branch}" "freecad-${pr_branch}" >> "$keep_tags_file"
+            done
+
+          sort -u "$keep_tags_file" -o "$keep_tags_file"
+          keep_count=$(wc -l < "$keep_tags_file" | tr -d ' ')
+          echo "Keep-tag set size: $keep_count"
+
+          # Fetch all package versions.
+          gh api --paginate "users/${OWNER}/packages/container/${PACKAGE_NAME}/versions?per_page=100" > "$versions_file"
+
+          total_versions=$(jq 'length' "$versions_file")
+          echo "Total container versions found: $total_versions"
+
+          deleted=0
+          skipped_recent=0
+          skipped_keep_tag=0
+          deleted_ids=()
+
+          while IFS= read -r row; do
+            version_id=$(jq -r '.id' <<< "$row")
+            updated_at=$(jq -r '.updated_at' <<< "$row")
+            tags_json=$(jq -c '.metadata.container.tags // []' <<< "$row")
+
+            updated_epoch=$(date -u -d "$updated_at" +%s)
+            age_days=$(( (now_epoch - updated_epoch) / 86400 ))
+
+            if (( updated_epoch >= cutoff_epoch )); then
+              skipped_recent=$((skipped_recent + 1))
+              continue
+            fi
+
+            keep_due_to_tag=false
+            while IFS= read -r tag; do
+              [[ -z "$tag" ]] && continue
+              if grep -Fxq "$tag" "$keep_tags_file"; then
+                keep_due_to_tag=true
+                break
+              fi
+            done < <(jq -r '.[]' <<< "$tags_json")
+
+            if [[ "$keep_due_to_tag" == "true" ]]; then
+              skipped_keep_tag=$((skipped_keep_tag + 1))
+              continue
+            fi
+
+            tags_csv=$(jq -r 'join(",")' <<< "$tags_json")
+            if [[ "$dry_run" == "true" ]]; then
+              echo "[dry-run] delete version_id=${version_id} age_days=${age_days} tags=${tags_csv}"
+            else
+              echo "Deleting version_id=${version_id} age_days=${age_days} tags=${tags_csv}"
+              gh api -X DELETE "users/${OWNER}/packages/container/${PACKAGE_NAME}/versions/${version_id}"
+              deleted_ids+=("$version_id")
+            fi
+            deleted=$((deleted + 1))
+          done < <(jq -c '.[]' "$versions_file")
+
+          echo "Summary:"
+          echo "- recent (kept): $skipped_recent"
+          echo "- active-tag (kept): $skipped_keep_tag"
+          echo "- delete candidates: $deleted"
+
+          if [[ "$dry_run" != "true" && ${#deleted_ids[@]} -gt 0 ]]; then
+            printf 'Deleted version IDs: %s\n' "${deleted_ids[*]}"
+          fi
