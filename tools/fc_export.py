@@ -248,6 +248,33 @@ def plan_gui_tasks(export_item, screenshots_only=False):
     }
 
 
+def body_specs_to_identifiers(bodies):
+    """Convert mixed body specs into plain body identifiers."""
+    identifiers = []
+    for spec in bodies or []:
+        if isinstance(spec, str):
+            identifiers.append(spec)
+        elif isinstance(spec, dict) and spec.get("body"):
+            identifiers.append(spec["body"])
+    return identifiers
+
+
+def resolve_screenshot_bodies(item, resolved_bodies):
+    """Resolve screenshot body identifiers using screenshot_source selector."""
+    source = item.get("screenshot_source", SCREENSHOT_SOURCE_EXPORT)
+    if source == SCREENSHOT_SOURCE_EXPORT:
+        return body_specs_to_identifiers(resolved_bodies)
+    return (item.get("screenshots") or {}).get("bodies", [])
+
+
+def resolve_techdraw_pages(item):
+    """Resolve TechDraw pages using techdraw_source selector."""
+    source = item.get("techdraw_source", TECHDRAW_SOURCE_ALL)
+    if source == TECHDRAW_SOURCE_ALL:
+        return []
+    return (item.get("techdraw") or {}).get("pages", [])
+
+
 def _compute_image_stddev(image_path):
     """Return average RGB stddev for an image, or None if unavailable."""
     try:
@@ -575,21 +602,19 @@ def run_slicer_for_export_item(export_item, output_3mf_path):
     return True
 
 
-def build_gui_batch_config(item, source_path, project_root, temp_dir):
+def build_gui_batch_config(item, source_path, project_root, temp_dir, resolved_bodies):
     """Build JSON-serializable config payload for batched GUI subprocess."""
     screenshot_cfg = item.get("screenshots") if isinstance(item.get("screenshots"), dict) else {}
     screenshot_output_dir = screenshot_cfg.get("output_dir", "prints/images/")
     if not os.path.isabs(screenshot_output_dir):
         screenshot_output_dir = os.path.abspath(os.path.join(project_root, screenshot_output_dir))
 
-    techdraw_cfg = item.get("techdraw") or {}
-
     return {
         "source": source_path,
         "run_screenshots": True,
         "run_techdraw": True,
         "screenshots": {
-            "bodies": item.get("bodies", []),
+            "bodies": resolve_screenshot_bodies(item, resolved_bodies),
             "output_dir": screenshot_output_dir,
             "views": screenshot_cfg.get("views", ["isometric"]),
             "resolution": screenshot_cfg.get("resolution", [1920, 1080]),
@@ -597,7 +622,7 @@ def build_gui_batch_config(item, source_path, project_root, temp_dir):
             "composite": screenshot_cfg.get("composite", True),
         },
         "techdraw": {
-            "pages": techdraw_cfg.get("pages", []),
+            "pages": resolve_techdraw_pages(item),
             "output_dir": temp_dir,
         },
     }
@@ -717,7 +742,7 @@ def summarize_run_stats(run_stats):
     )
 
 
-def run_gui_tasks_for_item(doc, item, export_name, source_path, project_root, screenshots_only=False):
+def run_gui_tasks_for_item(doc, item, export_name, source_path, project_root, resolved_bodies, screenshots_only=False):
     """Run GUI-dependent tasks for one export item and return task results."""
     results = {
         "screenshot": None,
@@ -729,14 +754,18 @@ def run_gui_tasks_for_item(doc, item, export_name, source_path, project_root, sc
     logger.debug(f"GUI task plan: {task_plan}")
 
     if task_plan["run_screenshots"] and task_plan["run_techdraw"]:
-        batched_results = run_gui_tasks_batched(doc, item, export_name, source_path, project_root)
+        batched_results = run_gui_tasks_batched(doc, item, export_name, source_path, project_root, resolved_bodies)
         if batched_results.get("screenshot") is not None or batched_results.get("techdraw") is not None:
             return batched_results
         log_warning_msg("Batched GUI path unavailable, falling back to sequential GUI steps")
 
     if task_plan["run_screenshots"]:
         log_action("Generating screenshots")
-        screenshot_success, screenshot_result = run_screenshot_generation(item, project_root)
+        screenshot_item = dict(item)
+        screenshot_cfg = dict(item.get("screenshots") or {})
+        screenshot_cfg["bodies"] = resolve_screenshot_bodies(item, resolved_bodies)
+        screenshot_item["screenshots"] = screenshot_cfg
+        screenshot_success, screenshot_result = run_screenshot_generation(screenshot_item, project_root)
         results["screenshot"] = {
             "success": screenshot_success,
             "result": screenshot_result,
@@ -758,7 +787,7 @@ def run_gui_tasks_for_item(doc, item, export_name, source_path, project_root, sc
     techdraw_config = item.get("techdraw")
     if task_plan["run_techdraw"]:
         log_action("Processing TechDraw export")
-        pages_to_export = techdraw_config.get("pages", [])
+        pages_to_export = resolve_techdraw_pages(item)
         techdraw_output_dir = techdraw_config.get("output_dir", "docs")
         techdraw_format = techdraw_config.get("format", "pdf")
 
@@ -876,7 +905,7 @@ def run_gui_tasks_for_item(doc, item, export_name, source_path, project_root, sc
     return results
 
 
-def run_gui_tasks_batched(doc, item, export_name, source_path, project_root):
+def run_gui_tasks_batched(doc, item, export_name, source_path, project_root, resolved_bodies):
     """Run screenshots and TechDraw in a single GUI subprocess."""
     results = {"screenshot": None, "techdraw": None, "last_bom_csv": None}
     freecad_gui = _find_freecad_gui_binary()
@@ -889,7 +918,7 @@ def run_gui_tasks_batched(doc, item, export_name, source_path, project_root):
         config_path = os.path.join(temp_dir, "batch_config.json")
         script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gui_batch_export.py")
 
-        batch_cfg = build_gui_batch_config(item, source_path, project_root, temp_dir)
+        batch_cfg = build_gui_batch_config(item, source_path, project_root, temp_dir, resolved_bodies)
         batch_cfg["result_file"] = result_file
 
         with open(config_path, "w", encoding="utf-8") as f:
@@ -959,12 +988,12 @@ def run_gui_tasks_shared_session(gui_jobs, project_root):
         return payload.get("results", {})
 
 
-def build_shared_gui_job(item, export_name, source, project_root, screenshots_only=False):
+def build_shared_gui_job(item, export_name, source, project_root, resolved_bodies, screenshots_only=False):
     """Build one shared-session GUI job payload from export item."""
     techdraw_cfg = item.get("techdraw") or {}
     screenshots_cfg = item.get("screenshots")
 
-    techdraw_enabled = should_run_techdraw(item, screenshots_only=screenshots_only)
+    techdraw_enabled = should_run_techdraw(techdraw_cfg, screenshots_only=screenshots_only)
     screenshot_enabled = bool(screenshots_cfg)
 
     screenshot_output_dir = None
@@ -981,7 +1010,7 @@ def build_shared_gui_job(item, export_name, source, project_root, screenshots_on
         "source": source,
         "techdraw": {
             "enabled": techdraw_enabled,
-            "pages": techdraw_cfg.get("pages", []),
+            "pages": resolve_techdraw_pages(item),
             "temp_dir": os.path.join(project_root, "test_output", "_gui_pages", export_name),
             "output_dir": techdraw_cfg.get("output_dir", "docs"),
         },
@@ -992,7 +1021,7 @@ def build_shared_gui_job(item, export_name, source, project_root, screenshots_on
             "resolution": (screenshots_cfg or {}).get("resolution", [1920, 1080]),
             "format": (screenshots_cfg or {}).get("format", "png"),
             "composite": (screenshots_cfg or {}).get("composite", True),
-            "bodies": (screenshots_cfg or {}).get("bodies", []),
+            "bodies": resolve_screenshot_bodies(item, resolved_bodies),
         },
     }
 
@@ -1231,6 +1260,14 @@ BODY_SOURCE_CONFIG = "config"  # Bodies specified explicitly in config
 BODY_SOURCE_PROPERTIES = "properties"  # Bodies selected via FreeCAD properties
 BODY_SOURCE_OPTIONS = (BODY_SOURCE_CONFIG, BODY_SOURCE_PROPERTIES)
 
+TECHDRAW_SOURCE_ALL = "all"
+TECHDRAW_SOURCE_CONFIG = "config"
+TECHDRAW_SOURCE_OPTIONS = (TECHDRAW_SOURCE_ALL, TECHDRAW_SOURCE_CONFIG)
+
+SCREENSHOT_SOURCE_EXPORT = "export"
+SCREENSHOT_SOURCE_CONFIG = "config"
+SCREENSHOT_SOURCE_OPTIONS = (SCREENSHOT_SOURCE_EXPORT, SCREENSHOT_SOURCE_CONFIG)
+
 
 def resolve_object_identifier(doc, identifier):
     """
@@ -1439,6 +1476,37 @@ def validate_body_source_config(item):
         "to avoid this warning."
     )
     return True, inferred_source, warning
+
+
+def validate_gui_source_config(item):
+    """Validate source selector fields for TechDraw and screenshot tasks."""
+    name = item.get("name", "unnamed")
+
+    techdraw_cfg = item.get("techdraw")
+    if isinstance(techdraw_cfg, dict):
+        techdraw_source = item.get("techdraw_source")
+        if techdraw_source not in TECHDRAW_SOURCE_OPTIONS:
+            return (
+                False,
+                f"Export item '{name}': techdraw_source must be one of {TECHDRAW_SOURCE_OPTIONS} when techdraw is set.",
+            )
+        pages = techdraw_cfg.get("pages", [])
+        if techdraw_source == TECHDRAW_SOURCE_CONFIG and (not isinstance(pages, list) or not pages):
+            return False, f"Export item '{name}': techdraw_source 'config' requires non-empty techdraw.pages"
+
+    screenshot_cfg = item.get("screenshots")
+    if isinstance(screenshot_cfg, dict):
+        screenshot_source = item.get("screenshot_source")
+        if screenshot_source not in SCREENSHOT_SOURCE_OPTIONS:
+            return (
+                False,
+                f"Export item '{name}': screenshot_source must be one of {SCREENSHOT_SOURCE_OPTIONS} when screenshots is set.",
+            )
+        bodies = screenshot_cfg.get("bodies", [])
+        if screenshot_source == SCREENSHOT_SOURCE_CONFIG and (not isinstance(bodies, list) or not bodies):
+            return False, f"Export item '{name}': screenshot_source 'config' requires non-empty screenshots.bodies"
+
+    return True, None
 
 
 def parse_body_specs(bodies_config):
@@ -1722,6 +1790,11 @@ def load_config():
         slicer_valid, slicer_error = validate_slicer_config(item)
         if not slicer_valid:
             logger.error(f"Export item '{item.get('name', 'unnamed')}': {slicer_error}")
+            sys.exit(1)
+
+        gui_valid, gui_error = validate_gui_source_config(item)
+        if not gui_valid:
+            logger.error(gui_error)
             sys.exit(1)
 
     return result
@@ -2939,6 +3012,7 @@ def main():
                         export_name,
                         source,
                         PROJECT_ROOT or os.getcwd(),
+                        bodies,
                         screenshots_only=screenshots_only_mode,
                     )
                 )
@@ -2949,6 +3023,7 @@ def main():
                     export_name,
                     source,
                     PROJECT_ROOT or os.getcwd(),
+                    bodies,
                     screenshots_only=screenshots_only_mode,
                 )
             timing_data["gui_seconds"] = time.time() - gui_start
