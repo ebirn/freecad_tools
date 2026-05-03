@@ -140,8 +140,6 @@ jobs:
             --name "$container_name"
             -e VIRTUAL_ENV=
             -e UV_LINK_MODE=copy
-            -e "PUID=$(id -u)"
-            -e "PGID=$(id -g)"
             -v "$GITHUB_WORKSPACE:/project"
           )
           freecad_gui_binary="${{ inputs.freecad_gui_binary || github.event.inputs.freecad_gui_binary }}"
@@ -183,6 +181,12 @@ jobs:
             fi
             sleep 2
           done
+
+          # Ensure mounted workspace is writable by container app user.
+          docker exec "$EXPORT_CONTAINER_NAME" /bin/sh -lc \
+            "mkdir -p /project/$project_root/prints /project/$project_root/docs"
+          docker exec "$EXPORT_CONTAINER_NAME" /bin/sh -lc \
+            "chown -R abc:abc /project/$project_root"
 
           cmd=("--config" "$config_file_container" "--gui-session" "$gui_session")
           if [[ -n "$export_name" ]]; then
