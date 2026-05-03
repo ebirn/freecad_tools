@@ -116,7 +116,19 @@ jobs:
           bundle_base="${bundle_base%.tar.gz}"
           bundle_base="${bundle_base%.zip}"
           include_paths=()
-          for p in $bundle_paths $generated_paths; do
+          missing_bundle_paths=()
+          for p in $bundle_paths; do
+            if [[ -e "$p" ]]; then
+              include_paths+=("$p")
+            else
+              missing_bundle_paths+=("$p")
+            fi
+          done
+          if (( ${#missing_bundle_paths[@]} > 0 )); then
+            printf 'Missing required bundle path: %s\n' "${missing_bundle_paths[@]}" >&2
+            exit 1
+          fi
+          for p in $generated_paths; do
             if [[ -e "$p" ]]; then
               include_paths+=("$p")
             elif [[ -e "generated/$p" ]]; then
@@ -124,6 +136,7 @@ jobs:
             fi
           done
           include_paths+=("dist/nightly-metadata.txt")
+          printf 'Including bundle paths:\n%s\n' "${include_paths[*]}"
           tar -czf "dist/${bundle_base}.tar.gz" "${include_paths[@]}"
           zip -r "dist/${bundle_base}.zip" "${include_paths[@]}"
 
