@@ -172,6 +172,10 @@ jobs:
           project_root="${{ inputs.project_root || github.event.inputs.project_root || '.' }}"
           freecad_gui_binary="${{ inputs.freecad_gui_binary || github.event.inputs.freecad_gui_binary }}"
           output_root="${{ inputs.output_root || github.event.inputs.output_root }}"
+          project_root_clean="${project_root#./}"
+          if [[ -z "$project_root_clean" || "$project_root_clean" == "." ]]; then
+            project_root_clean=""
+          fi
           workspace_project_dir="$GITHUB_WORKSPACE/$project_root"
           config_file_host="$workspace_project_dir/$config_path"
           config_file_container="/project/$project_root/$config_path"
@@ -232,7 +236,8 @@ jobs:
           for part in "${cmd[@]}"; do
             cmd_str+="$(printf '%q' "$part") "
           done
-          docker exec --user abc "${exec_args[@]}" "$EXPORT_CONTAINER_NAME" /bin/bash -lc \
+          exec_workdir="/project/${project_root_clean}"
+          docker exec --user abc --workdir "$exec_workdir" "${exec_args[@]}" "$EXPORT_CONTAINER_NAME" /bin/bash -lc \
             "/freecad_tools/export.sh ${cmd_str}"
 
       - name: Stop export container service
