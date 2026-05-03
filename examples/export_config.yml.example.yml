@@ -100,8 +100,9 @@ export:
     output: prints/MyAssembly.3mf
 
     # TechDraw pages → multi-page PDF (with BOM table + instructions)
+    techdraw_source: all                 # all = export every TechDraw page; config = use techdraw.pages
     techdraw:
-      pages: []                          # Empty = all TechDraw pages
+      pages: []                          # Used only when techdraw_source: config
       output_dir: docs                   # Output directory for PDF
       format: pdf                        # Generates {name}.pdf
       instructions: INSTRUCTIONS.md      # Optional: markdown included in PDF
@@ -122,6 +123,7 @@ export:
     output: prints/MyProject.3mf
 
     # Screenshot generation for publication platforms
+    screenshot_source: export            # export = use export bodies; config = use screenshots.bodies
     screenshots:
       enabled: true                     # Enable screenshot generation
       output_dir: docs/images/          # Where to save screenshot images
