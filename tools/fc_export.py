@@ -763,15 +763,15 @@ def run_gui_tasks_for_item(doc, item, export_name, source_path, project_root, re
             techdraw_result = batched_results.get("techdraw") or {}
             screenshot_ok = bool(screenshot_result.get("success"))
             techdraw_ok = bool(techdraw_result.get("success"))
-            if screenshot_ok and techdraw_ok:
-                return batched_results
             if screenshot_ok:
                 results["screenshot"] = screenshot_result
                 task_plan["run_screenshots"] = False
-            if techdraw_ok:
-                results["techdraw"] = techdraw_result
-                task_plan["run_techdraw"] = False
-            log_warning_msg("Batched GUI run incomplete; falling back to sequential GUI steps")
+            # Always run the full TechDraw pipeline sequentially so cover page,
+            # metadata, BOM, and instructions are included in the final merged PDF.
+            if screenshot_ok and techdraw_ok:
+                logger.info("Batched GUI run complete; re-running TechDraw sequentially for full PDF assembly")
+            else:
+                log_warning_msg("Batched GUI run incomplete; falling back to sequential GUI steps")
         else:
             log_warning_msg("Batched GUI path unavailable, falling back to sequential GUI steps")
 
