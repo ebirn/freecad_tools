@@ -979,7 +979,11 @@ def run_gui_tasks_batched(doc, item, export_name, source_path, project_root, res
 
         page_pdfs = [p.get("pdf_path") for p in batch_result["techdraw"]["pages"] if p.get("pdf_path")]
         if page_pdfs:
-            final_pdf = os.path.abspath(os.path.join(project_root, "docs", f"{export_name}.pdf"))
+            techdraw_cfg = item.get("techdraw") if isinstance(item.get("techdraw"), dict) else {}
+            techdraw_output_dir = techdraw_cfg.get("output_dir", "docs")
+            if not os.path.isabs(techdraw_output_dir):
+                techdraw_output_dir = os.path.join(project_root, techdraw_output_dir)
+            final_pdf = os.path.abspath(os.path.join(techdraw_output_dir, f"{export_name}.pdf"))
             techdraw_success = merge_techdraw_pdfs(page_pdfs, final_pdf, temp_dir)
             results["techdraw"] = {"success": techdraw_success, "output": final_pdf}
             if techdraw_success:
@@ -2432,8 +2436,10 @@ def run_screenshot_generation(export_item, project_root):
         logger.warning(f"Invalid screenshot config: {e}")
         return False, {"success": False, "images": [], "error": str(e)}
 
-    # Build full screenshot config (preflight only; GUI process reads YAML directly)
-    body_screenshot.build_screenshot_config(export_item, raw_screenshot_cfg)
+    # Build full screenshot config to pass explicitly to GUI subprocess.
+    # This avoids YAML re-loading inside the GUI process, which may resolve
+    # legacy relative paths outside the configured output root.
+    screenshot_config = body_screenshot.build_screenshot_config(export_item, raw_screenshot_cfg)
 
     # Find FreeCAD GUI binary
     freecad_gui = _find_freecad_gui_binary()
@@ -2460,9 +2466,13 @@ def run_screenshot_generation(export_item, project_root):
         logger.warning(f"Screenshot source file not found: {source_path}")
         return False, {"success": False, "images": [], "error": f"Source file not found: {source_path}"}
 
-    # Create temp directory for result exchange only; screenshot script reads YAML config directly.
+    # Create temp directory for result/config exchange.
     with tempfile.TemporaryDirectory(prefix="screenshot_") as tmpdir:
         result_path = os.path.join(tmpdir, "result.json")
+        config_path = os.path.join(tmpdir, "screenshot_config.json")
+
+        with open(config_path, "w", encoding="utf-8") as config_file:
+            json.dump(screenshot_config, config_file)
 
         tools_dir = os.path.dirname(os.path.abspath(__file__))
         body_screenshot_path = os.path.join(tools_dir, "body_screenshot.py")
@@ -2477,12 +2487,13 @@ def run_screenshot_generation(export_item, project_root):
                 "import os,sys; "
                 f"os.chdir({tmpdir!r}); "
                 f"sys.path.insert(0,{tools_dir!r}); "
+                f"sys.argv=['body_screenshot.py',{config_path!r}]; "
                 f"exec(open({body_screenshot_path!r}).read())"
             ),
         ]
 
         env = os.environ.copy()
-        # Pass selection to the GUI process; body_screenshot.py will read YAML itself.
+        # Keep YAML env vars for compatibility/fallback diagnostics.
         if os.environ.get("FREECAD_TOOLS_CONFIG"):
             env["FREECAD_TOOLS_CONFIG"] = os.environ["FREECAD_TOOLS_CONFIG"]
         elif CONFIG_FILE:

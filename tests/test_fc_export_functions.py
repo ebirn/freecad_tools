@@ -345,7 +345,7 @@ class TestModeHelpers:
             "screenshots": {"output_dir": "prints/images", "views": ["front"]},
             "techdraw": {"pages": ["Page"]},
         }
-        cfg = fc_export.build_gui_batch_config(item, "example.FCStd", str(tmp_path), str(tmp_path / "temp"))
+        cfg = fc_export.build_gui_batch_config(item, "example.FCStd", str(tmp_path), str(tmp_path / "temp"), ["Body"])
         assert cfg["source"] == "example.FCStd"
         assert cfg["screenshots"]["output_dir"].startswith(str(tmp_path))
         assert cfg["techdraw"]["output_dir"].endswith("temp")
@@ -451,6 +451,7 @@ class TestModeHelpers:
 
     def test_build_shared_gui_job_with_relative_paths(self):
         item = {
+            "techdraw_source": "config",
             "techdraw": {"pages": ["Page"], "output_dir": "docs"},
             "screenshots": {
                 "output_dir": "images",
@@ -462,7 +463,14 @@ class TestModeHelpers:
             },
         }
 
-        job = fc_export.build_shared_gui_job(item, "Demo", "src.FCStd", "/tmp/project", screenshots_only=False)
+        job = fc_export.build_shared_gui_job(
+            item,
+            "Demo",
+            "src.FCStd",
+            "/tmp/project",
+            ["Body"],
+            screenshots_only=False,
+        )
 
         assert job["name"] == "Demo"
         assert job["source"] == "src.FCStd"
@@ -480,7 +488,7 @@ class TestModeHelpers:
     def test_build_shared_gui_job_screenshots_only_disables_techdraw(self):
         item = {"techdraw": {"pages": ["Page"]}, "screenshots": {"bodies": ["Body"]}}
 
-        job = fc_export.build_shared_gui_job(item, "Demo", "src.FCStd", "/tmp/project", screenshots_only=True)
+        job = fc_export.build_shared_gui_job(item, "Demo", "src.FCStd", "/tmp/project", ["Body"], screenshots_only=True)
 
         assert job["techdraw"]["enabled"] is False
         assert job["screenshots"]["enabled"] is True
@@ -510,6 +518,7 @@ class TestGuiTaskExecution:
                 "demo",
                 "example.FCStd",
                 str(tmp_path),
+                ["Body"],
                 screenshots_only=True,
             )
 
@@ -526,7 +535,10 @@ class TestGuiTaskExecution:
             "techdraw": {"pages": ["Page"]},
         }
 
-        with patch("fc_export.run_gui_tasks_batched") as mock_batched:
+        with (
+            patch("fc_export.run_gui_tasks_batched") as mock_batched,
+            patch("fc_export.export_techdraw_to_pdf", return_value=True),
+        ):
             mock_batched.return_value = {
                 "screenshot": {"success": True, "result": {"success": True, "images": []}},
                 "techdraw": {"success": True, "output": "demo.pdf"},
@@ -538,6 +550,7 @@ class TestGuiTaskExecution:
                 "demo",
                 "example.FCStd",
                 str(tmp_path),
+                ["Body"],
                 screenshots_only=False,
             )
 
@@ -573,6 +586,7 @@ class TestGuiTaskExecution:
                 "demo",
                 "example.FCStd",
                 str(tmp_path),
+                ["Body"],
                 screenshots_only=False,
             )
 
@@ -594,7 +608,7 @@ class TestGuiTaskExecution:
 
         gui_calls = {"count": 0}
 
-        def fake_run(cmd, capture_output, text, timeout):
+        def fake_run(cmd, capture_output, text, timeout, **kwargs):
             if cmd[1].endswith("gui_batch_export.py"):
                 gui_calls["count"] += 1
                 with open(cmd[2], encoding="utf-8") as f:
@@ -632,12 +646,66 @@ class TestGuiTaskExecution:
             patch("fc_export.subprocess.run", side_effect=fake_run),
             patch("fc_export.logger.info") as mock_info,
         ):
-            result = fc_export.run_gui_tasks_batched(doc, item, "demo", source_path, str(tmp_path))
+            result = fc_export.run_gui_tasks_batched(doc, item, "demo", source_path, str(tmp_path), ["Body"])
 
         assert gui_calls["count"] == 1
         assert result["screenshot"]["success"] is True
         assert result["techdraw"]["success"] is True
         assert any("GUI batch result:" in str(call.args[0]) for call in mock_info.call_args_list if call.args)
+
+    def test_run_gui_tasks_batched_respects_techdraw_output_dir(self, tmp_path):
+        doc = MagicMock()
+        source_path = str(tmp_path / "example.FCStd")
+        (tmp_path / "example.FCStd").write_text("stub", encoding="utf-8")
+        output_dir = tmp_path / "generated" / "docs"
+        item = {
+            "name": "demo",
+            "source": source_path,
+            "bodies": ["Body"],
+            "screenshots": {"enabled": True, "views": ["isometric"]},
+            "techdraw": {"pages": ["Page"], "output_dir": str(output_dir)},
+        }
+
+        def fake_run(cmd, capture_output, text, timeout, **kwargs):
+            if cmd[1].endswith("gui_batch_export.py"):
+                with open(cmd[2], encoding="utf-8") as f:
+                    batch_cfg = json.load(f)
+                with open(batch_cfg["result_file"], "w", encoding="utf-8") as f:
+                    json.dump(
+                        {
+                            "success": True,
+                            "screenshots": {"success": True, "images": [], "error": None, "skipped": False},
+                            "techdraw": {
+                                "success": True,
+                                "pages": [{"name": "Page", "pdf_path": str(tmp_path / "Page.pdf")}],
+                                "error": None,
+                            },
+                        },
+                        f,
+                    )
+                return MagicMock(returncode=0, stderr="", stdout="")
+
+            if cmd[1].endswith("techdraw_pdf.py"):
+                with open(cmd[2], encoding="utf-8") as f:
+                    merge_cfg = json.load(f)
+                output_path = merge_cfg["output_path"]
+                Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+                Path(output_path).write_text("pdf", encoding="utf-8")
+                return MagicMock(returncode=0, stderr="", stdout="")
+
+            raise AssertionError(f"Unexpected subprocess command: {cmd}")
+
+        with (
+            patch(
+                "fc_export._find_freecad_gui_binary", return_value="/Applications/FreeCAD.app/Contents/MacOS/FreeCAD"
+            ),
+            patch("fc_export._find_venv_python", return_value=sys.executable),
+            patch("fc_export.subprocess.run", side_effect=fake_run),
+        ):
+            result = fc_export.run_gui_tasks_batched(doc, item, "demo", source_path, str(tmp_path), ["Body"])
+
+        assert result["techdraw"]["success"] is True
+        assert result["techdraw"]["output"] == str(output_dir / "demo.pdf")
 
     def test_main_gui_only_uses_batched_path_once_for_combined_tasks(self, tmp_path):
         source_path = tmp_path / "example.FCStd"
@@ -681,7 +749,7 @@ class TestGuiTaskExecution:
 
         mock_batched.assert_called_once()
         mock_screenshots.assert_not_called()
-        mock_techdraw.assert_not_called()
+        mock_techdraw.assert_called_once()
 
     @pytest.mark.integration
     def test_main_gui_session_run_batches_multiple_jobs_once(self, tmp_path):
@@ -750,6 +818,44 @@ class TestGuiTaskExecution:
         queued_jobs = mock_shared.call_args.args[0]
         assert len(queued_jobs) == 2
         assert {job["name"] for job in queued_jobs} == {"one", "two"}
+
+    def test_run_screenshot_generation_passes_json_config_to_gui_subprocess(self, tmp_path):
+        source_path = tmp_path / "example.FCStd"
+        source_path.write_text("stub", encoding="utf-8")
+
+        export_item = {
+            "name": "demo",
+            "source": str(source_path),
+            "bodies": ["Body"],
+            "screenshots": {
+                "enabled": True,
+                "output_dir": str(tmp_path / "generated" / "docs" / "images"),
+                "views": ["isometric", "front"],
+                "format": "png",
+            },
+        }
+
+        def fake_run(cmd, env, capture_output, text, timeout, cwd):
+            assert cmd[1] == "-c"
+            script_expr = cmd[2]
+            assert "sys.argv=['body_screenshot.py'," in script_expr
+            assert "screenshot_config.json" in script_expr
+
+            result_file = env["FREECAD_TOOLS_SCREENSHOT_RESULT"]
+            with open(result_file, "w", encoding="utf-8") as result_handle:
+                json.dump({"success": True, "images": [{"path": "x.png"}], "error": None}, result_handle)
+
+            return MagicMock(returncode=0, stdout="", stderr="")
+
+        with (
+            patch("fc_export._find_freecad_gui_binary", return_value="/opt/freecad/usr/bin/freecad"),
+            patch("fc_export.subprocess.run", side_effect=fake_run),
+        ):
+            success, result = fc_export.run_screenshot_generation(export_item, str(tmp_path))
+
+        assert success is True
+        assert result["success"] is True
+        assert len(result["images"]) == 1
 
 
 class TestScreenshotValidation:
