@@ -2,12 +2,10 @@
 set -euo pipefail
 
 TOOL_DIR=$(dirname "$0")
-
-cd ${TOOL_DIR}
 export VIRTUAL_ENV=${TOOL_DIR}/.venv
 source ${VIRTUAL_ENV}/bin/activate
 
-if [[ ! -x .venv/bin/python ]]; then
+if [[ ! -x "${VIRTUAL_ENV}/bin/python" ]]; then
   uv sync --frozen --extra dev
 fi
 
@@ -20,4 +18,4 @@ if [[ -d /config/.XDG ]]; then
   export QT_QPA_PLATFORM=xcb
 fi
 
-exec .venv/bin/python tools/export.py "$@"
+exec "${VIRTUAL_ENV}/bin/python" "${TOOL_DIR}/tools/export.py" "$@"
