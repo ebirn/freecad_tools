@@ -11,6 +11,13 @@ if [[ ! -x .venv/bin/python ]]; then
   uv sync --frozen --extra dev
 fi
 
-export FREECAD_GUI_BINARY=${FREECAD_GUI_BINARY:-/opt/freecad/usr/bin/freecadcmd}
+export FREECAD_GUI_BINARY=${FREECAD_GUI_BINARY:-/opt/freecad/AppRun}
+
+if [[ -d /config/.XDG ]]; then
+  export XDG_RUNTIME_DIR=/config/.XDG
+  export WAYLAND_DISPLAY=wayland-0
+  export DISPLAY=:0
+  export QT_QPA_PLATFORM=xcb
+fi
 
 exec .venv/bin/python tools/export.py "$@"

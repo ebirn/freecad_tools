@@ -119,7 +119,9 @@ def main():
                 except Exception as e:
                     result["techdraw"]["pages"].append({"name": name, "pdf_path": None, "error": str(e)})
 
-            result["techdraw"]["success"] = all(p.get("pdf_path") for p in result["techdraw"]["pages"])
+            result["techdraw"]["success"] = bool(result["techdraw"]["pages"]) and all(
+                p.get("pdf_path") for p in result["techdraw"]["pages"]
+            )
             result["timing"]["techdraw_seconds"] = round(time.time() - techdraw_start, 3)
 
         if run_screenshots:
@@ -199,9 +201,12 @@ def main():
                                 view.saveImage(filepath, resolution[0], resolution[1], alpha_arg)
                                 image_rows.append({"body": body_name, "view": view_name, "path": filepath})
 
+                    existing_images = [
+                        row["path"] for row in image_rows if row.get("path") and os.path.exists(row["path"])
+                    ]
                     result["screenshots"]["images"] = image_rows
-                    result["artifacts"]["images"] = [row["path"] for row in image_rows if row.get("path")]
-                    result["screenshots"]["success"] = True
+                    result["artifacts"]["images"] = existing_images
+                    result["screenshots"]["success"] = bool(existing_images)
             result["timing"]["screenshots_seconds"] = round(time.time() - screenshots_start, 3)
 
         result["success"] = bool(result["techdraw"]["success"] and result["screenshots"]["success"])

@@ -24,6 +24,10 @@ FROM lscr.io/linuxserver/freecad:latest AS freecad
 COPY --from=tools /usr/local/bin/uv /usr/local/bin/uv
 # COPY --from=tools /freecad_tools /freecad_tools
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libxcb-cursor0 \
+    && rm -rf /var/lib/apt/lists/*
+
 
 WORKDIR /freecad_tools
 
