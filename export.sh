@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd $(dirname "$0")
+TOOL_DIR=$(dirname "$0")
+
+cd ${TOOL_DIR}
+export VIRTUAL_ENV=${TOOL_DIR}/.venv
+source ${VIRTUAL_ENV}/bin/activate
 
 if [[ ! -x .venv/bin/python ]]; then
   uv sync --frozen --extra dev

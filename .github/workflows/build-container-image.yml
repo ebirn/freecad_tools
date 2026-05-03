@@ -19,9 +19,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - variant: slim
+          - variant: tools
             latest_tag: latest
-            target: slim
+            target: tools
           - variant: freecad
             latest_tag: freecad-latest
             target: freecad
