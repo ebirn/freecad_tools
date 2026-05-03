@@ -132,7 +132,9 @@ jobs:
             if [[ -e "$p" ]]; then
               include_paths+=("$p")
             elif [[ -e "generated/$p" ]]; then
-              include_paths+=("generated/$p")
+              mkdir -p "$(dirname "$p")"
+              cp -R "generated/$p" "$p"
+              include_paths+=("$p")
             fi
           done
           include_paths+=("dist/nightly-metadata.txt")
