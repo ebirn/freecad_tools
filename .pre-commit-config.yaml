@@ -74,15 +74,17 @@ repos:
       - id: pylint-errors-tools
         name: Pylint errors/failures (tools)
         description: Run pylint E/F checks on tools scripts
-        entry: uv run pylint --disable=all --enable=E,F tools/*.py
+        entry: uv run pylint --disable=all --enable=E,F
         language: system
-        pass_filenames: false
+        files: ^tools/.*\.py$
+        types_or: [python, pyi]
         stages: [pre-push]
 
       - id: pylint-errors-macros
         name: Pylint errors/failures (macros)
         description: Run pylint E/F checks on macros with FreeCAD-specific allowances
-        entry: uv run pylint --disable=all --enable=E,F --disable=E0401,E1101 macros/*.py
+        entry: uv run pylint --disable=all --enable=E,F --disable=E0401,E1101
         language: system
-        pass_filenames: false
+        files: ^macros/.*\.py$
+        types_or: [python, pyi]
         stages: [pre-push]
