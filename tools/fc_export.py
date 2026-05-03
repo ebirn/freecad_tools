@@ -2285,6 +2285,11 @@ def _run_techdraw_pipeline(
 ):
     """Inner pipeline for TechDraw PDF export, runs inside a TemporaryDirectory context."""
     result_file = os.path.join(temp_dir, "result.json")
+    try:
+        techdraw_timeout = int(os.environ.get("FREECAD_TOOLS_TECHDRAW_TIMEOUT", "300"))
+    except ValueError:
+        techdraw_timeout = 300
+    techdraw_timeout = max(60, techdraw_timeout)
 
     # Build config for techdraw_export.py
     tools_dir = os.path.dirname(os.path.abspath(__file__))
@@ -2311,7 +2316,7 @@ def _run_techdraw_pipeline(
         cmd,
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=techdraw_timeout,
         env=_build_gui_subprocess_env(),
     )
 

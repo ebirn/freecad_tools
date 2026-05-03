@@ -122,7 +122,8 @@ def main():
 
     # Determine config file to use
     CONFIG_FILE = None  # noqa: N806
-    PROJECT_ROOT = Path.cwd()  # noqa: N806
+    project_root_env = os.environ.get("FREECAD_TOOLS_PROJECT_ROOT")
+    PROJECT_ROOT = Path(project_root_env).resolve() if project_root_env else Path.cwd()  # noqa: N806
 
     # Priority: --config flag > positional argument > auto-discovery
     config_from_flag = args.config if args.config else args.config_file

@@ -53,6 +53,11 @@ on:
         required: false
         default: ""
         type: string
+      techdraw_timeout:
+        description: Optional TechDraw timeout in seconds
+        required: false
+        default: "300"
+        type: string
   workflow_dispatch:
     inputs:
       config_path:
@@ -107,6 +112,11 @@ on:
         description: Optional output root override passed to export CLI
         required: false
         default: ""
+        type: string
+      techdraw_timeout:
+        description: Optional TechDraw timeout in seconds
+        required: false
+        default: "300"
         type: string
 
 jobs:
@@ -172,6 +182,7 @@ jobs:
           project_root="${{ inputs.project_root || github.event.inputs.project_root || '.' }}"
           freecad_gui_binary="${{ inputs.freecad_gui_binary || github.event.inputs.freecad_gui_binary }}"
           output_root="${{ inputs.output_root || github.event.inputs.output_root }}"
+          techdraw_timeout="${{ inputs.techdraw_timeout || github.event.inputs.techdraw_timeout }}"
           project_root_clean="${project_root#./}"
           if [[ -z "$project_root_clean" || "$project_root_clean" == "." ]]; then
             project_root_clean=""
@@ -231,6 +242,9 @@ jobs:
           )
           if [[ -n "$freecad_gui_binary" ]]; then
             exec_args+=( -e "FREECAD_GUI_BINARY=$freecad_gui_binary" )
+          fi
+          if [[ -n "$techdraw_timeout" ]]; then
+            exec_args+=( -e "FREECAD_TOOLS_TECHDRAW_TIMEOUT=$techdraw_timeout" )
           fi
           cmd_str=""
           for part in "${cmd[@]}"; do

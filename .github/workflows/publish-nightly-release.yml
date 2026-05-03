@@ -43,6 +43,11 @@ on:
         required: false
         default: "generated"
         type: string
+      techdraw_timeout:
+        description: Optional TechDraw timeout in seconds for export validation
+        required: false
+        default: "300"
+        type: string
       nightly_tag:
         description: Rolling release tag to maintain
         required: false
@@ -73,6 +78,7 @@ jobs:
       gui_session: ${{ inputs.gui_session }}
       dry_run: ${{ inputs.dry_run }}
       output_root: ${{ inputs.output_root }}
+      techdraw_timeout: ${{ inputs.techdraw_timeout }}
       artifact_glob: ${{ inputs.output_root }}/**
       container_image: ${{ inputs.container_image }}
       freecad_gui_binary: ${{ inputs.freecad_gui_binary }}
