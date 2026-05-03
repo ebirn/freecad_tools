@@ -203,7 +203,7 @@ jobs:
           for part in "${cmd[@]}"; do
             cmd_str+="$(printf '%q' "$part") "
           done
-          docker exec "${exec_args[@]}" "$EXPORT_CONTAINER_NAME" /bin/bash -lc \
+          docker exec --user abc "${exec_args[@]}" "$EXPORT_CONTAINER_NAME" /bin/bash -lc \
             "/freecad_tools/export.sh ${cmd_str}"
 
       - name: Stop export container service
