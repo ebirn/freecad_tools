@@ -48,7 +48,7 @@ on:
         required: false
         default: ""
         type: string
-      bundle_name_prefix:
+      bundle_name:
         description: Prefix for generated release bundle base name
         required: false
         default: "demo-artifacts"
@@ -132,7 +132,7 @@ jobs:
             release_tag="${GITHUB_REF_NAME:-}"
           fi
 
-          bundle_base="${{ inputs.bundle_name_prefix }}-${release_tag}"
+          bundle_base="${{ inputs.bundle_name }}-${release_tag}"
           bundle_base="${bundle_base%.tar.gz}"
           bundle_base="${bundle_base%.zip}"
           bundle_paths="${{ inputs.bundle_paths }}"
