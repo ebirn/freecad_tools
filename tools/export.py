@@ -133,7 +133,8 @@ def main():
             print(f"Error: Config file not found: {CONFIG_FILE}", file=sys.stderr)
             print("Use --help for usage information", file=sys.stderr)
             sys.exit(1)
-        PROJECT_ROOT = CONFIG_FILE.parent  # noqa: N806
+        # Keep project root anchored to current working directory.
+        # Config location should not redefine project root.
 
     elif os.path.exists("export_config.yml"):
         CONFIG_FILE = Path("export_config.yml").resolve()  # noqa: N806
