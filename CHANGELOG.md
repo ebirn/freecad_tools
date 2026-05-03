@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.5.0] - 2026-05-03
+
 ### Added
 
 - Optional `slicer:` post-export automation block with native-profile support for PrusaSlicer and OrcaSlicer.
@@ -17,6 +19,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Consumer-facing workflow `.github/workflows/build-3mf-artifacts.yml` for containerized 3MF artifact generation via `workflow_call`/`workflow_dispatch`.
 - Container image workflow `.github/workflows/build-container-image.yml` to build and publish GHCR images for branches, main/default, and release tags.
 - Multi-stage `Dockerfile` with two targets: `slim` (tooling) and `freecad` (FreeCAD-enabled runtime).
+- Output-root override support for export outputs via CLI (`--output-root`), environment (`FREECAD_TOOLS_OUTPUT_ROOT`), and config (`output_root`) with precedence `CLI > env > config > project root`.
 
 ### Changed
 
@@ -25,6 +28,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Slicer precedence is now explicit: config profile overrides take priority; when omitted, template metadata config is used via temporary bundle load.
 - 3MF artifact workflow now runs export commands inside container images (default `ghcr.io/ebirn/freecad_tools:freecad-latest`) and uses consistent defaults (`export_config.yml`, `prints/**`, dry-run true).
 - Container publishing now emits variant-prefixed tags (`slim-*`, `freecad-*`) plus stable default-branch tags (`latest`, `freecad-latest`).
+- Release workflows now upload both `.tar.gz` and `.zip` bundles and normalize bundle base names when extensions are provided.
+- Release workflows now fail fast when required `bundle_paths` entries are missing, and log included paths before archiving.
 
 ### Docs
 
@@ -35,6 +40,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Orca slicing command generation now uses Orca-native CLI flags (`--slice`, `--outputdir`, `--load-settings`) instead of Prusa-only flags.
 - Test-mode `sys.exit` mocking no longer crashes when `sys.exit` is a built-in callable.
 - Integration tests now tolerate resolved absolute slicer binaries instead of requiring bare executable names.
+- Batched GUI TechDraw merge now respects configured `techdraw.output_dir` instead of forcing `docs/`.
+- Screenshot GUI subprocess now consumes explicit JSON config payloads, avoiding YAML fallback path issues that could target `/project/docs` under output-root CI runs.
 
 ## [v0.4.0] - 2026-05-01
 

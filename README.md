@@ -89,6 +89,9 @@ python3 tools/export.py path/to/config.yml --screenshots-only
 # Queue GUI work and run one shared GUI session for the full run
 python3 tools/export.py path/to/config.yml --gui-session run
 
+# Redirect all generated outputs (prints/docs/images/bom/gcode)
+python3 tools/export.py path/to/config.yml --output-root generated
+
 # Show help
 python3 tools/export.py --help
 ```
@@ -106,6 +109,7 @@ python3 tools/export.py --help
 | `--gui-only` | | Run GUI tasks only (screenshots/TechDraw), skip 3MF export |
 | `--screenshots-only` | | Run screenshot tasks only, skip 3MF and TechDraw |
 | `--gui-session MODE` | | GUI batching mode: `item` (default) or `run` (shared GUI session for all queued GUI jobs) |
+| `--output-root PATH` | | Override base output directory for generated files |
 | `--help` | `-h` | Show usage information |
 
 **GUI Session Modes**:
@@ -164,6 +168,46 @@ Use `:latest` for lightweight tooling tasks and `:freecad-latest` for full expor
 **Config File Discovery** (when not specified):
 1. `.freecad_tools/export.yml` (per-project config)
 2. `export_config.yml` (legacy config in current directory)
+
+### Output Root Override
+
+You can relocate generated outputs (3MF, TechDraw PDFs, screenshots, BOM CSV, slicer G-code)
+without changing individual paths in each export item.
+
+Supported controls:
+- CLI: `--output-root PATH`
+- Environment: `FREECAD_TOOLS_OUTPUT_ROOT`
+- Config: top-level `output_root: PATH`
+
+Precedence:
+1. `--output-root`
+2. `FREECAD_TOOLS_OUTPUT_ROOT`
+3. `output_root` in YAML config
+4. Project root (default)
+
+Example:
+
+```yaml
+output_root: generated
+
+export:
+  - name: Demo
+    source: example.FCStd
+    output: prints/demo.3mf
+    techdraw:
+      output_dir: docs
+    screenshots:
+      enabled: true
+      output_dir: docs/images
+    bom:
+      output: docs/bom.csv
+```
+
+With this config, files resolve under `generated/`:
+- `generated/prints/demo.3mf`
+- `generated/docs/Demo.pdf`
+- `generated/docs/images/...`
+- `generated/docs/bom.csv`
 
 ---
 
@@ -595,6 +639,20 @@ bom:
 ---
 
 ## Full Configuration Reference
+
+### Top-Level Configuration
+
+```yaml
+output_root: generated               # Optional: base dir for relative output paths
+export:
+  - name: Example
+    source: example.FCStd
+```
+
+Notes:
+- `output_root` applies to relative output fields (`output`, `techdraw.output_dir`, `screenshots.output_dir`, `bom.output`, `slicer.output_dir`).
+- Absolute paths are preserved.
+- `source` remains resolved from project/config location.
 
 ### TechDraw Export Configuration
 
