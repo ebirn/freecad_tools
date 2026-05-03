@@ -48,6 +48,11 @@ on:
         required: false
         default: ""
         type: string
+      output_root:
+        description: Optional output root override passed to export CLI
+        required: false
+        default: ""
+        type: string
   workflow_dispatch:
     inputs:
       config_path:
@@ -95,6 +100,11 @@ on:
         type: string
       freecad_gui_binary:
         description: Optional FreeCAD GUI binary path inside container
+        required: false
+        default: ""
+        type: string
+      output_root:
+        description: Optional output root override passed to export CLI
         required: false
         default: ""
         type: string
@@ -161,6 +171,7 @@ jobs:
           fi
           project_root="${{ inputs.project_root || github.event.inputs.project_root || '.' }}"
           freecad_gui_binary="${{ inputs.freecad_gui_binary || github.event.inputs.freecad_gui_binary }}"
+          output_root="${{ inputs.output_root || github.event.inputs.output_root }}"
           workspace_project_dir="$GITHUB_WORKSPACE/$project_root"
           config_file_host="$workspace_project_dir/$config_path"
           config_file_container="/project/$project_root/$config_path"
@@ -182,11 +193,20 @@ jobs:
             sleep 2
           done
 
-          # Ensure mounted workspace is writable by container app user.
+          # Ensure output root is writable by container app user.
+          if [[ -n "$output_root" ]]; then
+            if [[ "$output_root" == /* ]]; then
+              output_root_container="$output_root"
+            else
+              output_root_container="/project/$project_root/$output_root"
+            fi
+          else
+            output_root_container="/project/$project_root"
+          fi
           docker exec "$EXPORT_CONTAINER_NAME" /bin/sh -lc \
-            "mkdir -p /project/$project_root/prints /project/$project_root/docs"
+            "mkdir -p ${output_root_container}"
           docker exec "$EXPORT_CONTAINER_NAME" /bin/sh -lc \
-            "chown -R abc:abc /project/$project_root"
+            "chown -R abc:abc ${output_root_container}"
 
           cmd=("--config" "$config_file_container" "--gui-session" "$gui_session")
           if [[ -n "$export_name" ]]; then
@@ -194,6 +214,9 @@ jobs:
           fi
           if [[ "$dry_run" == "true" ]]; then
             cmd+=("--dry-run" "--slicer-dry-run")
+          fi
+          if [[ -n "$output_root" ]]; then
+            cmd+=("--output-root" "$output_root")
           fi
 
           printf 'Running export command in container: %q ' "${cmd[@]}"

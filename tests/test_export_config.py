@@ -392,6 +392,25 @@ class TestPathResolution:
         assert all(Path(p).is_absolute() for p in resolved_paths)
         assert all(str(base_dir) in p for p in resolved_paths)
 
+    def test_resolve_output_root_defaults_to_project_dir(self, tmp_path):
+        """Should default output root to project directory when unset."""
+        resolved = fc_export.resolve_output_root({}, str(tmp_path), override=None)
+        assert resolved == str(tmp_path)
+
+    def test_resolve_output_root_from_config(self, tmp_path):
+        """Should resolve relative output_root from config against project root."""
+        resolved = fc_export.resolve_output_root({"output_root": "generated"}, str(tmp_path), override=None)
+        assert resolved == str(tmp_path / "generated")
+
+    def test_resolve_output_root_override_precedence(self, tmp_path):
+        """Should prioritize override over config output_root."""
+        resolved = fc_export.resolve_output_root(
+            {"output_root": "generated"},
+            str(tmp_path),
+            override="ci_output",
+        )
+        assert resolved == str(tmp_path / "ci_output")
+
 
 class TestTemplatePathResolution:
     """Tests for resolving template file paths."""

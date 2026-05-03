@@ -38,6 +38,11 @@ on:
         required: false
         default: ""
         type: string
+      output_root:
+        description: Output root override passed to export workflow
+        required: false
+        default: "generated"
+        type: string
       release_tag:
         description: Optional explicit release tag
         required: false
@@ -67,9 +72,8 @@ jobs:
       project_root: ${{ inputs.project_root }}
       gui_session: ${{ inputs.gui_session }}
       dry_run: ${{ inputs.dry_run }}
-      artifact_glob: |
-        prints/**
-        docs/**
+      output_root: ${{ inputs.output_root }}
+      artifact_glob: ${{ inputs.output_root }}/**
       container_image: ${{ inputs.container_image }}
       freecad_gui_binary: ${{ inputs.freecad_gui_binary }}
       runner: ${{ inputs.runner }}
@@ -129,6 +133,8 @@ jobs:
           fi
 
           bundle_base="${{ inputs.bundle_name_prefix }}-${release_tag}"
+          bundle_base="${bundle_base%.tar.gz}"
+          bundle_base="${bundle_base%.zip}"
           bundle_paths="${{ inputs.bundle_paths }}"
           generated_paths="${{ inputs.generated_paths }}"
 
@@ -136,6 +142,8 @@ jobs:
           for p in $bundle_paths $generated_paths; do
             if [[ -e "$p" ]]; then
               include_paths+=("$p")
+            elif [[ -e "generated/$p" ]]; then
+              include_paths+=("generated/$p")
             fi
           done
           include_paths+=("dist/release-metadata.txt")

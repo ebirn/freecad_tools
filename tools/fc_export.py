@@ -89,6 +89,12 @@ def parse_args():
         default="item",
         help="GUI session scope: per-item (default) or single session per run",
     )
+    parser.add_argument(
+        "--output-root",
+        type=str,
+        default=None,
+        help="Override output base directory for generated files",
+    )
     return parser.parse_args()
 
 
@@ -138,6 +144,7 @@ list_exports_mode = args.list_exports
 gui_only_mode = args.gui_only
 screenshots_only_mode = args.screenshots_only
 gui_session_mode = args.gui_session
+output_root_override = args.output_root
 
 # Check environment for verbose/log level (set by export.py)
 log_level_env = os.environ.get("FREECAD_TOOLS_LOG_LEVEL")
@@ -155,6 +162,8 @@ if os.environ.get("FREECAD_TOOLS_SCREENSHOTS_ONLY", "").lower() == "true":
     screenshots_only_mode = True
 if os.environ.get("FREECAD_TOOLS_GUI_SESSION") in ("item", "run"):
     gui_session_mode = os.environ.get("FREECAD_TOOLS_GUI_SESSION")
+if os.environ.get("FREECAD_TOOLS_OUTPUT_ROOT") and not output_root_override:
+    output_root_override = os.environ.get("FREECAD_TOOLS_OUTPUT_ROOT")
 
 # Configure logging (respects --verbose or env var)
 logger = configure_logging(verbose=verbose_cli, log_level_env=log_level_env)
@@ -1194,6 +1203,9 @@ except ImportError as e:
         if gui_session_mode:
             env["FREECAD_TOOLS_GUI_SESSION"] = gui_session_mode
             logger.debug(f"Passing FREECAD_TOOLS_GUI_SESSION={gui_session_mode} to subprocess")
+        if output_root_override:
+            env["FREECAD_TOOLS_OUTPUT_ROOT"] = output_root_override
+            logger.debug(f"Passing FREECAD_TOOLS_OUTPUT_ROOT={output_root_override} to subprocess")
         if verbose_cli or log_level_env:
             log_level_pass = "DEBUG" if verbose_cli else log_level_env
             env["FREECAD_TOOLS_LOG_LEVEL"] = log_level_pass
@@ -1650,6 +1662,14 @@ def resolve_relative_path(path, base_dir):
     return os.path.join(base_dir, path)
 
 
+def resolve_output_root(config, base_dir, override=None):
+    """Resolve output root with precedence override > config > project root."""
+    candidate = override if override else config.get("output_root")
+    if not candidate:
+        return base_dir
+    return resolve_relative_path(candidate, base_dir)
+
+
 def get_export_metadata(config_item, base_dir):
     """
     Extract metadata from config item and environment.
@@ -1749,17 +1769,25 @@ def load_config():
     if config is None:
         logger.error("Config file is empty or invalid YAML")
         sys.exit(1)
+    output_root_base = resolve_output_root(config, base_dir, output_root_override)
+    logger.info(f"Using output root: {output_root_base}")
+
     result = config.get("export", [])
     logger.debug(f"Export list type: {type(result)}, length: {len(result) if isinstance(result, list) else 'N/A'}")
     logger.debug(f"Export list: {result}")
 
     # Resolve relative paths in config items relative to project root
     for item in result:
-        # List of path fields to resolve
-        path_fields = ["source", "output", "template", "stl_output_dir"]
-        for field in path_fields:
+        for field in ["source", "template"]:
             if field in item and item[field]:
                 resolved = resolve_relative_path(item[field], base_dir)
+                if resolved != item[field]:
+                    logger.debug(f"Resolved {field} '{item[field]}' to: {resolved}")
+                item[field] = resolved
+
+        for field in ["output", "stl_output_dir"]:
+            if field in item and item[field]:
+                resolved = resolve_relative_path(item[field], output_root_base)
                 if resolved != item[field]:
                     logger.debug(f"Resolved {field} '{item[field]}' to: {resolved}")
                 item[field] = resolved
@@ -1768,7 +1796,7 @@ def load_config():
         if "techdraw" in item and isinstance(item["techdraw"], dict):
             td = item["techdraw"]
             if "output_dir" in td and td["output_dir"]:
-                resolved = resolve_relative_path(td["output_dir"], base_dir)
+                resolved = resolve_relative_path(td["output_dir"], output_root_base)
                 if resolved != td["output_dir"]:
                     logger.debug(f"Resolved techdraw.output_dir '{td['output_dir']}' to: {resolved}")
                 td["output_dir"] = resolved
@@ -1777,7 +1805,7 @@ def load_config():
         if "bom" in item and isinstance(item["bom"], dict):
             bom = item["bom"]
             if "output" in bom and bom["output"]:
-                resolved = resolve_relative_path(bom["output"], base_dir)
+                resolved = resolve_relative_path(bom["output"], output_root_base)
                 if resolved != bom["output"]:
                     logger.debug(f"Resolved bom.output '{bom['output']}' to: {resolved}")
                 bom["output"] = resolved
@@ -1786,7 +1814,7 @@ def load_config():
         screenshot_cfg = item.get("screenshots")
         if screenshot_cfg and isinstance(screenshot_cfg, dict):
             if "output_dir" in screenshot_cfg and screenshot_cfg["output_dir"]:
-                resolved = resolve_relative_path(screenshot_cfg["output_dir"], base_dir)
+                resolved = resolve_relative_path(screenshot_cfg["output_dir"], output_root_base)
                 if resolved != screenshot_cfg["output_dir"]:
                     logger.debug(f"Resolved screenshots.output_dir '{screenshot_cfg['output_dir']}' to: {resolved}")
                 screenshot_cfg["output_dir"] = resolved
@@ -1794,7 +1822,13 @@ def load_config():
         # Resolve nested paths in slicer section
         slicer_cfg = item.get("slicer")
         if slicer_cfg and isinstance(slicer_cfg, dict):
-            for nested_path in ["output_dir", "config_bundle", "binary"]:
+            if "output_dir" in slicer_cfg and slicer_cfg["output_dir"]:
+                resolved = resolve_relative_path(slicer_cfg["output_dir"], output_root_base)
+                if resolved != slicer_cfg["output_dir"]:
+                    logger.debug(f"Resolved slicer.output_dir '{slicer_cfg['output_dir']}' to: {resolved}")
+                slicer_cfg["output_dir"] = resolved
+
+            for nested_path in ["config_bundle", "binary"]:
                 if nested_path in slicer_cfg and slicer_cfg[nested_path]:
                     # Only resolve binary as a path if caller provided path-like content
                     if nested_path == "binary" and os.path.sep not in str(slicer_cfg[nested_path]):

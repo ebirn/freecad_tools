@@ -84,6 +84,12 @@ def parse_args():
         default="item",
         help="GUI session scope: per-item (default) or single session per run",
     )
+    parser.add_argument(
+        "--output-root",
+        type=str,
+        default=None,
+        help="Override output base directory for generated files",
+    )
     return parser.parse_args()
 
 
@@ -151,6 +157,8 @@ def main():
             env["FREECAD_TOOLS_CONFIG"] = str(CONFIG_FILE)
         if args.name:
             env["FREECAD_TOOLS_NAME"] = args.name
+        if args.output_root:
+            env["FREECAD_TOOLS_OUTPUT_ROOT"] = args.output_root
 
         # Build arguments for fc_export.py - config first, then flags
         fc_args = [sys.executable, str(FC_EXPORT_SCRIPT)]
@@ -169,6 +177,8 @@ def main():
             fc_args.extend(["--gui-session", args.gui_session])
         if args.slicer_dry_run:
             fc_args.append("--slicer-dry-run")
+        if args.output_root:
+            fc_args.extend(["--output-root", args.output_root])
 
         result = subprocess.run(fc_args, env=env, text=True)
         sys.exit(result.returncode)
@@ -190,6 +200,8 @@ def main():
         fc_args.extend(["--gui-session", args.gui_session])
     if args.slicer_dry_run:
         fc_args.append("--slicer-dry-run")
+    if args.output_root:
+        fc_args.extend(["--output-root", args.output_root])
 
     # Pass PROJECT_ROOT and CONFIG_FILE via environment variables for subprocess
     env = os.environ.copy()
@@ -199,6 +211,8 @@ def main():
         env["FREECAD_TOOLS_CONFIG"] = str(CONFIG_FILE)
     if args.name:
         env["FREECAD_TOOLS_NAME"] = args.name
+    if args.output_root:
+        env["FREECAD_TOOLS_OUTPUT_ROOT"] = args.output_root
     if args.verbose:
         env["FREECAD_TOOLS_LOG_LEVEL"] = "DEBUG"
     if args.slicer_dry_run:

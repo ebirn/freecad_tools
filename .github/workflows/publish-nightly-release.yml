@@ -38,6 +38,11 @@ on:
         required: false
         default: ""
         type: string
+      output_root:
+        description: Output root override passed to export workflow
+        required: false
+        default: "generated"
+        type: string
       nightly_tag:
         description: Rolling release tag to maintain
         required: false
@@ -67,9 +72,8 @@ jobs:
       project_root: ${{ inputs.project_root }}
       gui_session: ${{ inputs.gui_session }}
       dry_run: ${{ inputs.dry_run }}
-      artifact_glob: |
-        prints/**
-        docs/**
+      output_root: ${{ inputs.output_root }}
+      artifact_glob: ${{ inputs.output_root }}/**
       container_image: ${{ inputs.container_image }}
       freecad_gui_binary: ${{ inputs.freecad_gui_binary }}
       runner: ${{ inputs.runner }}
@@ -108,14 +112,18 @@ jobs:
 
           bundle_paths="${{ inputs.bundle_paths }}"
           generated_paths="${{ inputs.generated_paths }}"
+          bundle_base="${{ inputs.bundle_name }}"
+          bundle_base="${bundle_base%.tar.gz}"
+          bundle_base="${bundle_base%.zip}"
           include_paths=()
           for p in $bundle_paths $generated_paths; do
             if [[ -e "$p" ]]; then
               include_paths+=("$p")
+            elif [[ -e "generated/$p" ]]; then
+              include_paths+=("generated/$p")
             fi
           done
           include_paths+=("dist/nightly-metadata.txt")
-          bundle_base="${{ inputs.bundle_name }}"
           tar -czf "dist/${bundle_base}.tar.gz" "${include_paths[@]}"
           zip -r "dist/${bundle_base}.zip" "${include_paths[@]}"
 
@@ -152,6 +160,8 @@ jobs:
         run: |
           set -euo pipefail
           bundle_base="${{ inputs.bundle_name }}"
+          bundle_base="${bundle_base%.tar.gz}"
+          bundle_base="${bundle_base%.zip}"
           gh release upload "${{ inputs.nightly_tag }}" \
             "dist/${bundle_base}.tar.gz" \
             "dist/${bundle_base}.zip" \
