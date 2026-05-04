@@ -20,6 +20,10 @@ from pathlib import Path
 
 import FreeCAD
 
+MANAGED_COPY_GROUP_PROPERTY = "FreeCADToolsManagedCopyOnChange"
+ARRAY_NAME_PROPERTY = "FreeCADToolsArrayName"
+ARRAY_LABEL_PROPERTY = "FreeCADToolsArrayLabel"
+
 # Add parent directory to path to import macro_helper
 macro_dir = Path(__file__).parent
 if str(macro_dir) not in sys.path:
@@ -39,6 +43,251 @@ except ImportError as e:
 def get_object_by_user_label(doc, user_label):
     """Legacy helper function - use get_object_by_identifier instead."""
     return get_object_by_identifier(doc, user_label)
+
+
+def get_array_base_object(array):
+    """Return the source/base object used by common FreeCAD array types."""
+    return getattr(array, "Base", getattr(array, "Source", None))
+
+
+def set_array_dimensions(array, x_count, y_count, z_count=1):
+    """Set dimensions on supported FreeCAD array variants."""
+    if hasattr(array, "NumberX"):
+        array.NumberX = x_count
+        array.NumberY = y_count
+        if hasattr(array, "NumberZ"):
+            array.NumberZ = z_count
+        return True
+
+    if hasattr(array, "CountX"):
+        array.CountX = x_count
+        array.CountY = y_count
+        if hasattr(array, "CountZ"):
+            array.CountZ = z_count
+        return True
+
+    if hasattr(array, "XQuantity"):
+        array.XQuantity = x_count
+        array.YQuantity = y_count
+        if hasattr(array, "ZQuantity"):
+            array.ZQuantity = z_count
+        return True
+
+    return False
+
+
+def get_array_elements(array):
+    """Return generated array elements, excluding the base/source object."""
+    base_object = get_array_base_object(array)
+    candidates = []
+
+    if hasattr(array, "OutList"):
+        candidates = list(array.OutList)
+
+    if not candidates and hasattr(array, "Group"):
+        candidates = list(array.Group)
+
+    elements = []
+    for child in candidates:
+        if base_object and child.Name == base_object.Name:
+            continue
+        elements.append(child)
+
+    return elements
+
+
+def clear_config_override(element):
+    """Best-effort cleanup of config Copy-on-Write state on surviving elements."""
+    if hasattr(element, "config"):
+        for status in ("-CopyOnChange", "-Touched"):
+            try:
+                element.setPropertyStatus("config", status)
+            except Exception:
+                pass
+
+    if hasattr(element, "LinkCopyOnChange"):
+        try:
+            element.LinkCopyOnChange = "Disabled"
+        except Exception:
+            pass
+
+
+def get_property_value(obj, property_name):
+    """Return a FreeCAD property value from either an attribute or property lookup."""
+    if hasattr(obj, property_name):
+        return getattr(obj, property_name)
+
+    if hasattr(obj, "getPropertyByName"):
+        try:
+            return obj.getPropertyByName(property_name)
+        except Exception:
+            return None
+
+    return None
+
+
+def set_freecad_property(obj, property_name, value, property_type="String"):
+    """Set a FreeCAD object property, adding it first when possible."""
+    if not hasattr(obj, property_name) and hasattr(obj, "addProperty"):
+        try:
+            obj.addProperty(f"App::Property{property_type}", property_name, "freecad_tools", "Managed by freecad_tools")
+        except Exception:
+            try:
+                obj.addProperty(f"App::Property{property_type}", property_name)
+            except Exception:
+                pass
+
+    try:
+        setattr(obj, property_name, value)
+        return True
+    except Exception:
+        return False
+
+
+def is_hidden(obj):
+    """Return True when an object is hidden in the FreeCAD tree/view."""
+    view_object = getattr(obj, "ViewObject", None)
+    if view_object is not None and hasattr(view_object, "Visibility"):
+        return not bool(view_object.Visibility)
+
+    visibility = get_property_value(obj, "Visibility")
+    if visibility is not None:
+        return not bool(visibility)
+
+    return False
+
+
+def is_auto_delete_link(obj):
+    """Return True for FreeCAD link mode values equivalent to Auto Delete."""
+    link_mode = get_property_value(obj, "LinkMode")
+    if link_mode is None:
+        return False
+
+    normalized = str(link_mode).replace(" ", "").replace("_", "").replace("-", "").lower()
+    return normalized == "autodelete"
+
+
+def is_copy_on_change_group(obj):
+    """Return True for hidden groups FreeCAD creates for Copy-on-Write links."""
+    identifiers = [
+        getattr(obj, "Name", ""),
+        getattr(obj, "Label", ""),
+        getattr(obj, "TypeId", ""),
+    ]
+    return any("copyonchangegroup" in str(identifier).replace(" ", "").lower() for identifier in identifiers)
+
+
+def get_document_objects(doc):
+    """Return document objects when available."""
+    return list(getattr(doc, "Objects", []))
+
+
+def copy_group_matches_array(obj, array):
+    """Return True when a tagged CopyOnChangeGroup belongs to the target array."""
+    if not bool(get_property_value(obj, MANAGED_COPY_GROUP_PROPERTY)):
+        return False
+
+    array_name = getattr(array, "Name", None)
+    array_label = getattr(array, "Label", None)
+    tagged_array_name = get_property_value(obj, ARRAY_NAME_PROPERTY)
+    tagged_array_label = get_property_value(obj, ARRAY_LABEL_PROPERTY)
+
+    return bool((array_name and tagged_array_name == array_name) or (array_label and tagged_array_label == array_label))
+
+
+def tag_copy_on_change_group(obj, array):
+    """Tag a CopyOnChangeGroup so future cleanups can identify ownership."""
+    tagged = set_freecad_property(obj, MANAGED_COPY_GROUP_PROPERTY, True, "Bool")
+    tagged = set_freecad_property(obj, ARRAY_NAME_PROPERTY, getattr(array, "Name", ""), "String") and tagged
+    tagged = set_freecad_property(obj, ARRAY_LABEL_PROPERTY, getattr(array, "Label", ""), "String") and tagged
+    return tagged
+
+
+def tag_new_copy_on_change_groups(doc, array, before_names):
+    """Tag hidden auto-delete CopyOnChangeGroup objects created after before_names was captured."""
+    tagged_count = 0
+
+    for obj in get_document_objects(doc):
+        object_name = getattr(obj, "Name", None)
+        if not object_name or object_name in before_names:
+            continue
+
+        if not (is_copy_on_change_group(obj) and is_auto_delete_link(obj) and is_hidden(obj)):
+            continue
+
+        if tag_copy_on_change_group(obj, array):
+            tagged_count += 1
+            print(f"Tagged CopyOnChangeGroup object for cleanup: {object_name}")
+
+    return tagged_count
+
+
+def remove_hidden_auto_delete_copy_groups(doc, array=None, remove_untagged=True):
+    """Remove orphaned hidden CopyOnChangeGroup objects that are not array children."""
+    removed_count = 0
+
+    for obj in get_document_objects(doc):
+        object_name = getattr(obj, "Name", None)
+        if not object_name:
+            continue
+
+        if not (is_copy_on_change_group(obj) and is_auto_delete_link(obj) and is_hidden(obj)):
+            continue
+
+        is_tagged_match = array is not None and copy_group_matches_array(obj, array)
+        if not is_tagged_match and not remove_untagged:
+            continue
+
+        try:
+            doc.removeObject(object_name)
+            removed_count += 1
+            print(f"Removed hidden CopyOnChangeGroup object: {object_name}")
+        except Exception as e:
+            print(f"Warning: Could not remove hidden CopyOnChangeGroup object '{object_name}': {e}")
+
+    return removed_count
+
+
+def cleanup_array_before_assignment(doc, array, remove_untagged_copy_groups=True):
+    """
+    Shrink an array and remove stale generated elements from prior runs.
+
+    Only objects that were array elements before shrinking and are no longer
+    referenced by the array after shrinking are removed.
+    """
+    base_object = get_array_base_object(array)
+    previous_names = {element.Name for element in get_array_elements(array)}
+
+    if base_object:
+        previous_names.discard(base_object.Name)
+
+    if not set_array_dimensions(array, 1, 1, 1):
+        print("Warning: Could not resize array for cleanup; unsupported array property names.")
+        return
+
+    doc.recompute()
+
+    remaining_elements = get_array_elements(array)
+    remaining_names = {element.Name for element in remaining_elements}
+    stale_names = previous_names - remaining_names
+
+    for object_name in sorted(stale_names):
+        obj = doc.getObject(object_name)
+        if obj is None:
+            continue
+
+        try:
+            doc.removeObject(object_name)
+            print(f"Removed stale array element: {object_name}")
+        except Exception as e:
+            print(f"Warning: Could not remove stale array element '{object_name}': {e}")
+
+    for element in remaining_elements:
+        clear_config_override(element)
+
+    remove_hidden_auto_delete_copy_groups(doc, array, remove_untagged=remove_untagged_copy_groups)
+
+    doc.recompute()
 
 
 def apply_configs_to_array(config=None):
@@ -64,6 +313,9 @@ def apply_configs_to_array(config=None):
 
     spreadsheet_label = config.get("spreadsheet_label", "VariantData")
     array_label = config.get("array_label", "VariantTestArray")
+    cleanup_before_assign = config.get("cleanup_before_assign", True)
+    cleanup_untagged_copy_groups = config.get("cleanup_untagged_copy_groups", True)
+    enable_link_copy_on_change = config.get("enable_link_copy_on_change", False)
 
     # Retrieve objects by User Label
     spreadsheet = get_object_by_user_label(doc, spreadsheet_label)
@@ -114,48 +366,20 @@ def apply_configs_to_array(config=None):
     grid_size_x = math.ceil(math.sqrt(num_configs))
     grid_size_y = math.ceil(num_configs / grid_size_x)
 
-    # Apply to Draft Ortho Arrays or Link Arrays
-    # It tries the standard properties FreeCAD uses for X/Y counts
-    if hasattr(array, "NumberX"):
-        array.NumberX = grid_size_x
-        array.NumberY = grid_size_y
-        if hasattr(array, "NumberZ"):
-            array.NumberZ = 1
-    elif hasattr(array, "CountX"):  # Common in Link Branch
-        array.CountX = grid_size_x
-        array.CountY = grid_size_y
-        if hasattr(array, "CountZ"):
-            array.CountZ = 1
-    elif hasattr(array, "XQuantity"):
-        array.XQuantity = grid_size_x
-        array.YQuantity = grid_size_y
-        if hasattr(array, "ZQuantity"):
-            array.ZQuantity = 1
+    if cleanup_before_assign:
+        cleanup_array_before_assignment(doc, array, remove_untagged_copy_groups=cleanup_untagged_copy_groups)
+
+    # Apply to Draft Ortho Arrays or Link Arrays.
+    if not set_array_dimensions(array, grid_size_x, grid_size_y, 1):
+        print("Error: Unsupported array type. Could not set array dimensions.")
+        return
 
     # Recompute to ensure the array generates/updates the children Link objects
     # based on the new dimension numbers before we try assigning things to them.
     doc.recompute()
 
     # --- 4. FIND ARRAY ELEMENTS AND APPLY CONFIGS ---
-    base_object = getattr(array, "Base", getattr(array, "Source", None))
-
-    # Collect the individual link elements generated by the array
-    array_elements = []
-
-    # Check if elements are standard children/group items (Most common for LinkArrays / LinkGroups)
-    if hasattr(array, "OutList"):
-        for child in array.OutList:
-            # We want to grab the array children but NOT the base original object
-            if base_object and child.Name == base_object.Name:
-                continue
-            array_elements.append(child)
-
-    # Fallback if the elements are stored in a Group property
-    elif hasattr(array, "Group"):
-        for child in array.Group:
-            if base_object and child.Name == base_object.Name:
-                continue
-            array_elements.append(child)
+    array_elements = get_array_elements(array)
 
     if len(array_elements) < num_configs:
         print(f"Warning: Found {len(array_elements)} array elements, but have {num_configs} configurations.")
@@ -173,6 +397,8 @@ def apply_configs_to_array(config=None):
     # Recompute the document so FreeCAD rebuilds the valid Enum list internally
     doc.recompute()
 
+    before_copy_group_names = {getattr(obj, "Name", None) for obj in get_document_objects(doc)}
+
     # Assign each found element a config string
     for i, config_name in enumerate(configs):
         if i >= len(array_elements):
@@ -181,7 +407,7 @@ def apply_configs_to_array(config=None):
         element = array_elements[i]
 
         # 4a. Enable Copy-on-Write so properties can be overridden without modifying the base
-        if hasattr(element, "LinkCopyOnChange"):
+        if enable_link_copy_on_change and hasattr(element, "LinkCopyOnChange"):
             element.LinkCopyOnChange = "Enabled"  # standard value in Link branch/FeaturePython links
 
         # An alternative way copy-on-write is sometimes handled in properties:
@@ -199,6 +425,7 @@ def apply_configs_to_array(config=None):
 
     # Final recompute to apply the configuration visual/structural changes
     doc.recompute()
+    tag_new_copy_on_change_groups(doc, array, before_copy_group_names)
     print("Array update complete.")
 
 
@@ -231,6 +458,27 @@ def main():
             "label": "Array Name:",
             "default": "VariantTestArray",
             "help": "Name of the array to configure",
+        },
+        {
+            "name": "cleanup_before_assign",
+            "type": "checkbox",
+            "label": "Clean array before assigning:",
+            "default": True,
+            "help": "Shrink the array and remove stale generated elements before assigning configurations",
+        },
+        {
+            "name": "enable_link_copy_on_change",
+            "type": "checkbox",
+            "label": "Enable link copy-on-change:",
+            "default": False,
+            "help": "Enable broad LinkCopyOnChange mode if property-level CopyOnChange is not enough",
+        },
+        {
+            "name": "cleanup_untagged_copy_groups",
+            "type": "checkbox",
+            "label": "Clean untagged CopyOnChangeGroup objects:",
+            "default": True,
+            "help": "Clean old untagged hidden auto-delete CopyOnChangeGroup objects from earlier macro runs",
         },
     ]
 
