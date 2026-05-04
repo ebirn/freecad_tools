@@ -14,6 +14,7 @@ Usage:
 
 import itertools
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 import FreeCAD
@@ -33,10 +34,102 @@ except ImportError as e:
     print("Make sure macro_helper.py is in the same directory as this macro.")
     sys.exit(1)
 
+try:
+    import yaml
 
-def get_object_by_user_label(doc, user_label):
-    """Legacy helper function - use get_object_by_identifier instead."""
-    return get_object_by_identifier(doc, user_label)
+    YAML_AVAILABLE = True
+except ImportError:
+    YAML_AVAILABLE = False
+
+
+def parse_scalar(value):
+    """Parse numeric strings as floats while preserving non-numeric strings."""
+    if isinstance(value, int | float):
+        return value
+
+    value_str = str(value).strip()
+    try:
+        return float(value_str)
+    except ValueError:
+        return value_str
+
+
+def decimal_places(value):
+    """Return the number of decimal places in a configured numeric value."""
+    decimal_value = Decimal(str(value))
+    return max(0, -decimal_value.as_tuple().exponent)
+
+
+def generate_range_values(start, stop, step):
+    """Generate inclusive range values from start/stop/step without floating point drift."""
+    start_decimal = Decimal(str(start))
+    stop_decimal = Decimal(str(stop))
+    step_decimal = Decimal(str(step))
+
+    if step_decimal == 0:
+        raise ValueError("Range step cannot be zero")
+
+    increasing = step_decimal > 0
+    precision = max(decimal_places(start), decimal_places(stop), decimal_places(step))
+    values = []
+    current = start_decimal
+
+    while (increasing and current <= stop_decimal) or (not increasing and current >= stop_decimal):
+        values.append(float(round(current, precision)))
+        current += step_decimal
+
+    return values
+
+
+def parse_values(value):
+    """Parse list or comma-separated scalar values."""
+    if isinstance(value, list | tuple):
+        return [parse_scalar(item) for item in value]
+
+    if value is None:
+        return []
+
+    return [parse_scalar(item) for item in str(value).split(",") if str(item).strip()]
+
+
+def build_parameter_lists(config):
+    """Build ordered parameter lists from the configured parameter definitions."""
+    parameter_lists = {}
+
+    for parameter in config.get("parameters", []):
+        name = parameter.get("name")
+        if not name:
+            continue
+
+        if "values" in parameter:
+            parameter_lists[name] = parse_values(parameter["values"])
+        elif {"start", "stop", "step"}.issubset(parameter):
+            parameter_lists[name] = generate_range_values(parameter["start"], parameter["stop"], parameter["step"])
+
+    return parameter_lists
+
+
+def build_config_name(combo):
+    """Build a config name for any number of parameter values."""
+    return "v_" + "_".join(str(value).replace(" ", "") for value in combo)
+
+
+def parse_parameters_text(parameters_text):
+    """Parse dialog YAML text containing the modern parameters list."""
+    if not parameters_text:
+        return []
+
+    if not YAML_AVAILABLE:
+        print("PyYAML is required to parse parameters from dialog text.")
+        return []
+
+    parsed = yaml.safe_load(parameters_text)
+    if parsed is None:
+        return []
+    if not isinstance(parsed, list):
+        raise ValueError("Parameters must be a YAML list")
+
+    return parsed
 
 
 def generate_variant_combinations(config=None):
@@ -46,8 +139,7 @@ def generate_variant_combinations(config=None):
     Args:
         config: Optional configuration dictionary with keys:
             - spreadsheet_label: Name of spreadsheet to create/use
-            - parameter_lists: Dict of parameter names to value lists
-            - column_headers: List of column headers (optional)
+            - parameters: List of parameter definitions with values or start/stop/step
     """
     doc = FreeCAD.ActiveDocument
     if not doc:
@@ -58,21 +150,20 @@ def generate_variant_combinations(config=None):
     if config is None:
         config = {
             "spreadsheet_label": "VariantData",
-            "column_headers": ["ConfigName", "PipeDiameter", "HexIndent", "HexLength"],
-            "parameter_lists": {
-                "PipeDiameter": [10.1, 10.2],
-                "HexIndent": [0.3, 0.5, 0.7, 0.9],
-                "HexLength": [10],
-            },
+            "parameters": [
+                {"name": "PipeDiameter", "values": [10.1, 10.2]},
+                {"name": "HexIndent", "values": [0.3, 0.5, 0.7, 0.9]},
+                {"name": "HexLength", "values": [10]},
+            ],
         }
 
     spreadsheet_label = config.get("spreadsheet_label", "VariantData")
-    column_headers = config.get("column_headers")
-    parameter_lists = config.get("parameter_lists", {})
+    parameter_lists = build_parameter_lists(config)
+    column_headers = ["ConfigName"] + list(parameter_lists.keys())
 
-    # Auto-generate column headers from parameter_lists if not provided
-    if not column_headers:
-        column_headers = ["ConfigName"] + list(parameter_lists.keys())
+    if not parameter_lists:
+        print("No parameters configured. Add a 'parameters' list to macro_config.yml.")
+        return
 
     sheet = get_object_by_identifier(doc, spreadsheet_label)
 
@@ -104,9 +195,7 @@ def generate_variant_combinations(config=None):
     # --- 4. WRITE DATA TO SPREADSHEET ---
     current_row = 2
     for combo in combinations:
-        # Create a unique config name, e.g., "v_10_5.5_3mm"
-        # We strip spaces from the generated name to keep it clean
-        config_name = f"v_{combo[0]}_{combo[1]}_{combo[2]}".replace(" ", "")
+        config_name = build_config_name(combo)
 
         # Write ConfigName to column A
         sheet.set(f"A{current_row}", f"'{config_name}")  # The ' prefix forces string
@@ -150,46 +239,11 @@ def main():
             "help": "Name of the spreadsheet to create/populate",
         },
         {
-            "name": "param1_name",
+            "name": "parameters_yaml",
             "type": "text",
-            "label": "First Parameter Name:",
-            "default": "PipeDiameter",
-            "help": "Name of the first parameter",
-        },
-        {
-            "name": "param1_values",
-            "type": "text",
-            "label": "First Parameter Values (comma-separated):",
-            "default": "10.1, 10.2",
-            "help": "e.g., 10.1, 10.2, 10.3",
-        },
-        {
-            "name": "param2_name",
-            "type": "text",
-            "label": "Second Parameter Name:",
-            "default": "HexIndent",
-            "help": "Name of the second parameter",
-        },
-        {
-            "name": "param2_values",
-            "type": "text",
-            "label": "Second Parameter Values (comma-separated):",
-            "default": "0.3, 0.5, 0.7, 0.9",
-            "help": "e.g., 0.3, 0.5, 0.7, 0.9",
-        },
-        {
-            "name": "param3_name",
-            "type": "text",
-            "label": "Third Parameter Name:",
-            "default": "HexLength",
-            "help": "Name of the third parameter",
-        },
-        {
-            "name": "param3_values",
-            "type": "text",
-            "label": "Third Parameter Values (comma-separated):",
-            "default": "10",
-            "help": "e.g., 10, 15, 20",
+            "label": "Parameters YAML:",
+            "default": "- name: PipeDiameter\n  start: 10.1\n  stop: 10.3\n  step: 0.1\n- name: HexLength\n  values: [10]",
+            "help": "Prefer editing .freecad_tools/macro_config.yml for multiple parameters",
         },
     ]
 
@@ -201,30 +255,10 @@ def main():
     )
 
     if config:
-        # Convert comma-separated strings to lists
-        param_lists = {}
-        for i in range(1, 4):
-            param_name = config.get(f"param{i}_name")
-            param_values_str = config.get(f"param{i}_values", "")
-            if param_name and param_values_str:
-                # Parse comma-separated values, trying to convert to float
-                values = []
-                for val_str in param_values_str.split(","):
-                    val_str = val_str.strip()
-                    try:
-                        values.append(float(val_str))
-                    except ValueError:
-                        values.append(val_str)
-                param_lists[param_name] = values
+        if "parameters" not in config and "parameters_yaml" in config:
+            config["parameters"] = parse_parameters_text(config["parameters_yaml"])
 
-        # Call the variant generator with configuration
-        config_dict = {
-            "spreadsheet_label": config.get("spreadsheet_label", "VariantData"),
-            "column_headers": ["ConfigName"]
-            + [config.get(f"param{i}_name") for i in range(1, 4) if config.get(f"param{i}_name")],
-            "parameter_lists": param_lists,
-        }
-        generate_variant_combinations(config=config_dict)
+        generate_variant_combinations(config=config)
 
 
 # Run the macro

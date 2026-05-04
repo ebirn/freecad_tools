@@ -912,15 +912,36 @@ Use FreeCAD macros to create multiple versions:
 Create `.freecad_tools/macro_config.yml` manually:
 ```yaml
 spreadsheet_label: VariantData
-param1_name: PipeDiameter
-param1_values: "10.1, 10.2, 10.3"
-param2_name: HexIndent
-param2_values: "0.3, 0.5, 0.7, 0.9"
-param3_name: HexLength
-param3_values: "10"
+parameters:
+  - name: PipeDiameter
+    start: 10.1
+    stop: 10.3
+    step: 0.1
+  - name: HexIndent
+    values: [0.3, 0.5, 0.7, 0.9]
+  - name: HexLength
+    values: [10]
 ```
 
 When the macro runs, it will load this config automatically (or show the dialog if not found).
+The old `param1_name` / `param1_values` dialog-style keys are not supported; keep all variant parameters in the
+`parameters` list.
+
+For `variant_array_assignment.py`, the config can also define the array target and whether to clean stale generated
+array links and hidden auto-delete `CopyOnChangeGroup` objects before assigning variants:
+
+```yaml
+spreadsheet_label: VariantData
+array_label: VariantTestArray
+cleanup_before_assign: true
+cleanup_untagged_copy_groups: true
+enable_link_copy_on_change: false
+```
+
+The macro uses property-level `CopyOnChange` for the `config` property by default. Set
+`enable_link_copy_on_change: true` only if your FreeCAD array requires broad link copy-on-change mode for
+per-element variants to persist. Newly-created managed `CopyOnChangeGroup` objects are tagged with the array name;
+`cleanup_untagged_copy_groups` keeps one-time cleanup behavior for old untagged hidden groups from previous macro runs.
 
 ### 4. Template Metadata Merging
 
