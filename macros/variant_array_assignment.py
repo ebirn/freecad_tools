@@ -45,6 +45,11 @@ def get_object_by_user_label(doc, user_label):
     return get_object_by_identifier(doc, user_label)
 
 
+def normalize_config_name(config_name):
+    """Normalize spreadsheet string values to FreeCAD configuration names."""
+    return str(config_name).strip().lstrip("'")
+
+
 def get_array_base_object(array):
     """Return the source/base object used by common FreeCAD array types."""
     return getattr(array, "Base", getattr(array, "Source", None))
@@ -315,7 +320,7 @@ def apply_configs_to_array(config=None):
     array_label = config.get("array_label", "VariantTestArray")
     cleanup_before_assign = config.get("cleanup_before_assign", True)
     cleanup_untagged_copy_groups = config.get("cleanup_untagged_copy_groups", True)
-    enable_link_copy_on_change = config.get("enable_link_copy_on_change", False)
+    enable_link_copy_on_change = config.get("enable_link_copy_on_change", True)
 
     # Retrieve objects by User Label
     spreadsheet = get_object_by_user_label(doc, spreadsheet_label)
@@ -350,7 +355,7 @@ def apply_configs_to_array(config=None):
         if cell_value is None or str(cell_value).strip() == "":
             break
 
-        configs.append(str(cell_value).strip())
+        configs.append(normalize_config_name(cell_value))
         current_row += 1
 
     num_configs = len(configs)
@@ -470,8 +475,8 @@ def main():
             "name": "enable_link_copy_on_change",
             "type": "checkbox",
             "label": "Enable link copy-on-change:",
-            "default": False,
-            "help": "Enable broad LinkCopyOnChange mode if property-level CopyOnChange is not enough",
+            "default": True,
+            "help": "Required for each array element to keep an independent configuration",
         },
         {
             "name": "cleanup_untagged_copy_groups",

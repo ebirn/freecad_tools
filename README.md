@@ -935,13 +935,12 @@ spreadsheet_label: VariantData
 array_label: VariantTestArray
 cleanup_before_assign: true
 cleanup_untagged_copy_groups: true
-enable_link_copy_on_change: false
+enable_link_copy_on_change: true
 ```
 
-The macro uses property-level `CopyOnChange` for the `config` property by default. Set
-`enable_link_copy_on_change: true` only if your FreeCAD array requires broad link copy-on-change mode for
-per-element variants to persist. Newly-created managed `CopyOnChangeGroup` objects are tagged with the array name;
-`cleanup_untagged_copy_groups` keeps one-time cleanup behavior for old untagged hidden groups from previous macro runs.
+The macro enables link copy-on-change by default so each array element can keep an independent selected configuration.
+Newly-created managed `CopyOnChangeGroup` objects are tagged with the array name; `cleanup_untagged_copy_groups` keeps
+one-time cleanup behavior for old untagged hidden groups from previous macro runs.
 
 ### 4. Template Metadata Merging
 

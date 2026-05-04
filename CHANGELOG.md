@@ -9,8 +9,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 - `variant_array_assignment.py` now cleans stale generated array elements and hidden auto-delete `CopyOnChangeGroup`
   objects before assigning variant configurations.
-- `variant_array_assignment.py` now tags newly-created managed `CopyOnChangeGroup` objects and defaults broad
-  `LinkCopyOnChange` mode off unless `enable_link_copy_on_change: true` is configured.
+- `variant_array_assignment.py` now tags newly-created managed `CopyOnChangeGroup` objects and defaults
+  `LinkCopyOnChange` on so array elements keep independent configuration selections.
+- `variant_array_assignment.py` strips FreeCAD spreadsheet forced-string prefixes from config names before assignment.
 - Added `cleanup_untagged_copy_groups` for one-time cleanup of old untagged hidden Copy-on-Change groups.
 - `generate_variant_configs.py` now supports a `parameters` config list with explicit `values` or inclusive
   `start`/`stop`/`step` ranges, and config names now work with any number of parameters.

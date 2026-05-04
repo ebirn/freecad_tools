@@ -65,6 +65,16 @@ class FakeDocument:
             self.array.OutList = self.array.OutList[:2]
 
 
+class FakeSpreadsheet:
+    def __init__(self, values):
+        self.values = values
+
+    def get(self, cell):
+        if cell not in self.values:
+            raise ValueError(cell)
+        return self.values[cell]
+
+
 def import_variant_array_assignment(monkeypatch):
     macros_dir = Path(__file__).parent.parent / "macros"
     monkeypatch.syspath_prepend(str(macros_dir))
@@ -170,3 +180,36 @@ def test_cleanup_removes_tagged_copy_group_for_matching_array(monkeypatch):
 
     assert "CopyOnChangeGroup001" in doc.removed
     assert "CopyOnChangeGroup002" not in doc.removed
+
+
+def test_normalize_config_name_strips_forced_string_prefix(monkeypatch):
+    module = import_variant_array_assignment(monkeypatch)
+
+    assert module.normalize_config_name("'v_10.1") == "v_10.1"
+
+
+def test_apply_configs_enables_link_copy_on_change_by_default(monkeypatch):
+    module = import_variant_array_assignment(monkeypatch)
+    base = FakeObject("Base")
+    element = FakeObject("Element001")
+    element.LinkCopyOnChange = "Disabled"
+    array = FakeArray(base, [element])
+    spreadsheet = FakeSpreadsheet({"A2": "'v_10.1"})
+    doc = FakeDocument(array, [base, element])
+
+    import FreeCAD
+
+    monkeypatch.setattr(FreeCAD, "ActiveDocument", doc, raising=False)
+    monkeypatch.setattr(
+        module,
+        "get_object_by_user_label",
+        lambda _doc, identifier: spreadsheet if identifier == "VariantData" else array,
+    )
+
+    module.apply_configs_to_array(
+        {"spreadsheet_label": "VariantData", "array_label": "Array", "cleanup_before_assign": False}
+    )
+
+    assert element.LinkCopyOnChange == "Enabled"
+    assert element.config == "v_10.1"
+    assert ("config", "CopyOnChange") in element.property_status_changes
