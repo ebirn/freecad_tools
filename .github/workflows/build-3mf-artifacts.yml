@@ -43,11 +43,6 @@ on:
         required: false
         default: "ubuntu-latest"
         type: string
-      freecad_gui_binary:
-        description: Optional FreeCAD GUI binary path inside container
-        required: false
-        default: ""
-        type: string
       output_root:
         description: Optional output root override passed to export CLI
         required: false
@@ -103,11 +98,6 @@ on:
         required: false
         default: "ubuntu-latest"
         type: string
-      freecad_gui_binary:
-        description: Optional FreeCAD GUI binary path inside container
-        required: false
-        default: ""
-        type: string
       output_root:
         description: Optional output root override passed to export CLI
         required: false
@@ -162,10 +152,6 @@ jobs:
             -e UV_LINK_MODE=copy
             -v "$GITHUB_WORKSPACE:/project"
           )
-          freecad_gui_binary="${{ inputs.freecad_gui_binary || github.event.inputs.freecad_gui_binary }}"
-          if [[ -n "$freecad_gui_binary" ]]; then
-            docker_args+=( -e "FREECAD_GUI_BINARY=$freecad_gui_binary" )
-          fi
           docker run "${docker_args[@]}" "$image"
 
       - name: Run export
@@ -180,7 +166,9 @@ jobs:
             dry_run="${{ github.event.inputs.dry_run || 'true' }}"
           fi
           project_root="${{ inputs.project_root || github.event.inputs.project_root || '.' }}"
-          freecad_gui_binary="${{ inputs.freecad_gui_binary || github.event.inputs.freecad_gui_binary }}"
+          output_root="${{ inputs.output_root || github.event.inputs.output_root }}"
+          techdraw_timeout="${{ inputs.techdraw_timeout || github.event.inputs.techdraw_timeout }}"
+          project_root="${{ inputs.project_root || github.event.inputs.project_root || '.' }}"
           output_root="${{ inputs.output_root || github.event.inputs.output_root }}"
           techdraw_timeout="${{ inputs.techdraw_timeout || github.event.inputs.techdraw_timeout }}"
           project_root_clean="${project_root#./}"
@@ -240,9 +228,6 @@ jobs:
             -e VIRTUAL_ENV=
             -e UV_LINK_MODE=copy
           )
-          if [[ -n "$freecad_gui_binary" ]]; then
-            exec_args+=( -e "FREECAD_GUI_BINARY=$freecad_gui_binary" )
-          fi
           if [[ -n "$techdraw_timeout" ]]; then
             exec_args+=( -e "FREECAD_TOOLS_TECHDRAW_TIMEOUT=$techdraw_timeout" )
           fi

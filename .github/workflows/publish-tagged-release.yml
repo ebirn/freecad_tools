@@ -33,11 +33,6 @@ on:
         required: false
         default: "ghcr.io/ebirn/freecad_tools:freecad-latest"
         type: string
-      freecad_gui_binary:
-        description: Optional FreeCAD GUI binary path inside container
-        required: false
-        default: ""
-        type: string
       output_root:
         description: Output root override passed to export workflow
         required: false
@@ -81,7 +76,6 @@ jobs:
       techdraw_timeout: ${{ inputs.techdraw_timeout }}
       artifact_glob: ${{ inputs.output_root }}/**
       container_image: ${{ inputs.container_image }}
-      freecad_gui_binary: ${{ inputs.freecad_gui_binary }}
       runner: ${{ inputs.runner }}
 
   publish-tagged-release:

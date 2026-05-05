@@ -9,7 +9,7 @@ if [[ ! -x "${VIRTUAL_ENV}/bin/python" ]]; then
   uv sync --frozen --extra dev
 fi
 
-export FREECAD_GUI_BINARY=${FREECAD_GUI_BINARY:-/opt/freecad/AppRun}
+export FREECAD_GUI_BINARY=${FREECAD_GUI_BINARY:-/opt/freecad/usr/bin/freecad}
 
 if [[ -d /config/.XDG ]]; then
   export XDG_RUNTIME_DIR=/config/.XDG
