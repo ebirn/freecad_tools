@@ -1,0 +1,58 @@
+name: Publish to PyPI
+
+on:
+  workflow_call:
+    inputs:
+      dry_run:
+        description: Build packages without uploading
+        required: false
+        default: true
+        type: boolean
+      runner:
+        description: Runner label
+        required: false
+        default: "ubuntu-latest"
+        type: string
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tools
+        run: pip install build
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: pypi-distributions
+          path: dist/
+
+  publish:
+    runs-on: ${{ inputs.runner }}
+    needs: build
+    if: ${{ inputs.dry_run != true }}
+    environment:
+      name: pypi
+      url: https://pypi.org/p/freecad-tools
+    permissions:
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: pypi-distributions
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

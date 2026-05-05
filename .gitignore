@@ -1,5 +1,5 @@
 __pycache__
-*/__pycache__
+**/__pycache__
 examples/*.FCBak
 *.log
 .DS_Store
@@ -9,3 +9,4 @@ test_output/
 .coverage
 htmlcov/
 tests/docs
+build/

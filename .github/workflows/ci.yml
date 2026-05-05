@@ -25,10 +25,13 @@ jobs:
           tests/test_export_config.py
           tests/test_techdraw_pdf.py
           tests/test_bom_utils.py
+          tests/test_pypi_package.py
           --cov=tools
           --cov-report=xml
           --cov-report=term-missing
           -v
+      - name: Validate package build
+        run: uv build --sdist --wheel -o dist/
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
         with:

@@ -1,7 +1,9 @@
 [project]
 name = "freecad-tools"
 version = "0.4.0"
-description = ""
+description = "Export FreeCAD designs to 3MF format for 3D printing"
+readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.10"
 dependencies = [
     "PyYAML",
@@ -9,6 +11,13 @@ dependencies = [
     "reportlab>=4.0",
     "pypdf>=5.0",
 ]
+
+[project.scripts]
+freecad-export = "tools.export:main"
+
+[project.urls]
+Homepage = "https://github.com/ebirn/freecad_tools"
+Repository = "https://github.com/ebirn/freecad_tools"
 
 [project.optional-dependencies]
 dev = [
