@@ -65,8 +65,39 @@ on:
         type: string
 
 jobs:
+  validate-release-readiness:
+    runs-on: ${{ inputs.runner }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install PyYAML
+
+      - name: Validate release readiness
+        run: |
+          python tools/release_validator.py --project-root . --summary
+
+      - name: Generate checksums for bundle paths
+        run: |
+          bundle_paths="${{ inputs.bundle_paths }}"
+          mkdir -p dist
+          python tools/release_validator.py --checksums $bundle_paths --checksum-output dist/checksums.sha256
+
+      - name: Upload release summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-summary
+          path: dist/checksums.sha256
+
   validate-export-config:
     uses: ./.github/workflows/build-3mf-artifacts.yml
+    needs: validate-release-readiness
     with:
       config_path: ${{ inputs.config_path }}
       project_root: ${{ inputs.project_root }}
@@ -90,7 +121,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Build release bundle and notes
+      - name: Download release summary
+        uses: actions/download-artifact@v4
+        with:
+          name: release-summary
+          path: dist
+
+      - name: Build release metadata
         shell: bash
         run: |
           set -euo pipefail
@@ -161,6 +198,7 @@ jobs:
             fi
           done
           include_paths+=("dist/release-metadata.txt")
+          include_paths+=("dist/checksums.sha256")
           printf 'Including bundle paths:\n%s\n' "${include_paths[*]}"
           tar -czf "dist/${bundle_base}.tar.gz" "${include_paths[@]}"
           zip -r "dist/${bundle_base}.zip" "${include_paths[@]}"
@@ -173,6 +211,11 @@ jobs:
             echo "## Assets"
             echo "- ${bundle_base}.tar.gz"
             echo "- ${bundle_base}.zip"
+            echo
+            echo "## Checksums"
+            echo '```'
+            cat dist/checksums.sha256
+            echo '```'
             echo
             echo "## Validation"
             echo "- export workflow completed (dry_run=${{ inputs.dry_run }})"
