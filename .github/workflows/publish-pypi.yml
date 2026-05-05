@@ -1,17 +1,22 @@
 # Publish freecad-tools to PyPI.
 #
 # Audience: freecad_tools maintainers only (not for consumer repos).
-# Trigger: pushed version tags (v*).
-# Publishes sdist + wheel to PyPI via trusted publishing (OIDC).
+# Trigger: workflow_call from this repo's release orchestrator, or manual dispatch.
+# Builds sdist + wheel and optionally publishes to PyPI via trusted publishing (OIDC).
+# GitHub Release asset upload is intentionally handled by release.yml to avoid races.
 #
 # To dry-run locally: uv build && twine check dist/*
 
 name: Publish to PyPI
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_call:
+    inputs:
+      dry_run:
+        description: Build packages without uploading
+        required: false
+        default: true
+        type: boolean
   workflow_dispatch:
     inputs:
       dry_run:
@@ -52,7 +57,6 @@ jobs:
       name: pypi
       url: https://pypi.org/p/freecad-tools
     permissions:
-      contents: write
       id-token: write
     steps:
       - name: Download distributions
@@ -61,27 +65,8 @@ jobs:
           name: pypi-distributions
           path: dist/
 
+      - name: Install publish tool
+        run: pip install uv
+
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
-
-      - name: Attach distributions to release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          release_tag="${GITHUB_REF_NAME}"
-          if [[ -z "$release_tag" ]]; then
-            echo "No tag found; skipping release upload"
-            exit 0
-          fi
-          gh release upload "$release_tag" dist/* --clobber
-
-      - name: Attach distributions to release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          release_tag="${GITHUB_REF_NAME}"
-          if [[ -z "$release_tag" ]]; then
-            echo "No tag found; skipping release upload"
-            exit 0
-          fi
-          gh release upload "$release_tag" dist/* --clobber
+        run: uv publish --trusted-publishing automatic dist/*
