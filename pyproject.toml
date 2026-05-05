@@ -3,7 +3,7 @@ name = "freecad-tools"
 version = "0.4.0"
 description = "Export FreeCAD designs to 3MF format for 3D printing"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 requires-python = ">=3.10"
 dependencies = [
     "PyYAML",
@@ -51,6 +51,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
+include = ["tools*"]
 exclude = ["hooks*", "macros*", "templates*", "tests*", "examples*"]
 
 # Ruff configuration - fast Python linting and formatting

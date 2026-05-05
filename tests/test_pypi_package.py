@@ -81,6 +81,11 @@ class TestPackageBuild:
     @pytest.fixture
     def build_dir(self, tmp_path):
         """Create a build directory with sdist and wheel."""
+        subprocess.run(
+            ["rm", "-rf", "build", "dist", "freecad_tools.egg-info"],
+            cwd=str(_test_dir.parent),
+            check=True,
+        )
         result = subprocess.run(
             ["uv", "build", "--sdist", "--wheel", "-o", str(tmp_path)],
             cwd=str(_test_dir.parent),
@@ -115,6 +120,13 @@ class TestPackageBuild:
         with zipfile.ZipFile(wheel) as zf:
             names = zf.namelist()
         assert any("tools/__init__.py" in n or "tools/export.py" in n for n in names)
+
+    def test_wheel_does_not_contain_build_artifacts(self, build_dir):
+        """Wheel should not recursively include local build output."""
+        wheel = list(build_dir.glob("*.whl"))[0]
+        with zipfile.ZipFile(wheel) as zf:
+            names = zf.namelist()
+        assert not any(name.startswith("build/") for name in names)
 
     def test_wheel_has_metadata(self, build_dir):
         """Wheel should have METADATA with project info."""
