@@ -10,3 +10,5 @@ test_output/
 htmlcov/
 tests/docs
 build/
+.pytest_cache
+.ruff_cache

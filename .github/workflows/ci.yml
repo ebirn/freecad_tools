@@ -1,3 +1,15 @@
+# CI — lint, format, and unit tests on every push/PR.
+#
+# Audience: freecad_tools contributors and maintainers.
+# Trigger: push to any branch, pull_request, or manual dispatch.
+# This is the fastest feedback loop — no FreeCAD or container required.
+
+# CI — lint, format, and unit tests on every push/PR.
+#
+# Audience: freecad_tools contributors and maintainers.
+# Trigger: push to any branch, pull_request, or manual dispatch.
+# This is the fastest feedback loop — no FreeCAD or container required.
+
 name: CI
 on:
   push:

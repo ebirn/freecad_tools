@@ -1,3 +1,15 @@
+# Publish Nightly Release — rolling release on a schedule (default: daily).
+#
+# Audience: consumer repos (FreeCAD projects using freecad_tools) AND freecad_tools itself.
+# Trigger: workflow_call (from consumer scheduled workflows) or manual dispatch.
+# Runs release readiness gates, 3MF export validation, then updates a "nightly" GitHub Release tag.
+
+# Publish Nightly Release — rolling release on a schedule (default: daily).
+#
+# Audience: consumer repos (FreeCAD projects using freecad_tools) AND freecad_tools itself.
+# Trigger: workflow_call (from consumer scheduled workflows) or manual dispatch.
+# Runs release readiness gates, 3MF export validation, then updates a "nightly" GitHub Release tag.
+
 name: Publish Nightly Release
 
 on:

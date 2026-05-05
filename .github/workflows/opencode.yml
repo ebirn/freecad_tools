@@ -1,3 +1,15 @@
+# OpenCode — AI coding agent triggered by GitHub issue/PR comments.
+#
+# Audience: freecad_tools maintainers only (not for consumer repos).
+# Trigger: issue_comment or pull_request_review_comment containing /oc or /opencode.
+# Runs the opencode AI agent to work on issues or PRs.
+
+# OpenCode — AI coding agent triggered by GitHub issue/PR comments.
+#
+# Audience: freecad_tools maintainers only (not for consumer repos).
+# Trigger: issue_comment or pull_request_review_comment containing /oc or /opencode.
+# Runs the opencode AI agent to work on issues or PRs.
+
 name: opencode
 
 on:

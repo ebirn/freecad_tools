@@ -1,3 +1,15 @@
+# Build 3MF Artifacts — reusable workflow for containerized 3MF export.
+#
+# Audience: consumer repos (FreeCAD projects using freecad_tools) AND freecad_tools itself.
+# Trigger: workflow_call (from publish-tagged-release, publish-nightly-release) or manual dispatch.
+# Runs export inside a Docker container with FreeCAD, producing 3MF/PDF/BOM/screenshot artifacts.
+
+# Build 3MF Artifacts — reusable workflow for containerized 3MF export.
+#
+# Audience: consumer repos (FreeCAD projects using freecad_tools) AND freecad_tools itself.
+# Trigger: workflow_call (from publish-tagged-release, publish-nightly-release) or manual dispatch.
+# Runs export inside a Docker container with FreeCAD, producing 3MF/PDF/BOM/screenshot artifacts.
+
 name: Build 3MF Artifacts
 
 on:

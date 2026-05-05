@@ -1,3 +1,15 @@
+# Cleanup Container Images — delete old, unused GHCR image versions.
+#
+# Audience: freecad_tools maintainers only (not for consumer repos).
+# Trigger: daily schedule (cron) or manual dispatch.
+# Keeps versions tagged by active branches, Git tags, and releases; deletes the rest.
+
+# Cleanup Container Images — delete old, unused GHCR image versions.
+#
+# Audience: freecad_tools maintainers only (not for consumer repos).
+# Trigger: daily schedule (cron) or manual dispatch.
+# Keeps versions tagged by active branches, Git tags, and releases; deletes the rest.
+
 name: Cleanup Container Images
 
 on:

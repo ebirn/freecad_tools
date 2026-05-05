@@ -1,3 +1,15 @@
+# Build Container Image — build and push Docker images to GHCR.
+#
+# Audience: freecad_tools maintainers only (not for consumer repos).
+# Trigger: push to any branch or tag, or manual dispatch.
+# Builds two variants: tools (slim, no FreeCAD) and freecad (with FreeCAD runtime).
+
+# Build Container Image — build and push Docker images to GHCR.
+#
+# Audience: freecad_tools maintainers only (not for consumer repos).
+# Trigger: push to any branch or tag, or manual dispatch.
+# Builds two variants: tools (slim, no FreeCAD) and freecad (with FreeCAD runtime).
+
 name: Build Container Image
 
 on:
