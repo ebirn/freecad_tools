@@ -27,6 +27,8 @@ on:
 jobs:
   publish-pypi:
     uses: ./.github/workflows/publish-pypi.yml
+    permissions:
+      id-token: write
     with:
       dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
 
