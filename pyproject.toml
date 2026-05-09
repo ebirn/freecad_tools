@@ -26,6 +26,7 @@ dev = [
     "pylint==4.0.5",
     "pytest>=7.0",
     "pytest-cov>=5.0",
+    "lxml>=4.9",
 ]
 
 [tool.pytest.ini_options]

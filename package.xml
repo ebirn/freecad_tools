@@ -1,0 +1,71 @@
+<?xml
+    version = '1.0'
+    encoding = 'UTF-8'
+    standalone = 'no'
+?>
+<package
+
+    Manifest:schemaLocation = 'HTTPS://Addons.FreeCAD.Org/Manifest https://Addons.FreeCAD.Org/Manifest.xsd'
+    xmlns:Manifest = 'http://www.w3.org/2001/XMLSchema-instance'
+    xmlns = 'HTTPS://Addons.FreeCAD.Org/Manifest'
+
+    format = '2'
+>
+
+    <description>FreeCAD tools for 3MF export, variant generation, and printing workflows. Includes macros for generating variant configs, managing array-based variants, and setting export properties.</description>
+    <icon>Resources/Icons/freecad_tools.svg</icon>
+    <name>freecad_tools</name>
+
+    <version>0.4.0</version>
+    <date>2026-05-05</date>
+
+    <maintainer
+        email = 'ebirn@example.com'
+    >ebirn</maintainer>
+
+    <author
+        email = 'ebirn@example.com'
+    >ebirn</author>
+
+    <license file = 'LICENSE' >MIT</license>
+
+    <freecadmin>0.21.0</freecadmin>
+    <pythonmin>3.10.0</pythonmin>
+
+    <url
+        branch = 'main'
+        type = 'repository'
+    >https://github.com/ebirn/freecad_tools</url>
+
+    <url
+        type = 'documentation'
+    >https://github.com/ebirn/freecad_tools/blob/main/README.md</url>
+
+    <url
+        type = 'bugtracker'
+    >https://github.com/ebirn/freecad_tools/issues</url>
+
+    <url
+        type = 'discussion'
+    >https://github.com/ebirn/freecad_tools/discussions</url>
+
+    <tag>export</tag>
+    <tag>3mf</tag>
+    <tag>variant</tag>
+    <tag>printing</tag>
+
+    <depend
+        optional = 'false'
+        type = 'python'
+        version_gte = '3.10.0'
+    >python</depend>
+
+    <content>
+
+        <macro>
+            <subdirectory>macros</subdirectory>
+        </macro>
+
+    </content>
+
+</package>

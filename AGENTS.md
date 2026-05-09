@@ -960,9 +960,38 @@ This project uses exactly **four** markdown files. Do NOT create additional `.md
 Use GitHub Issues + Development project as the source of truth:
 
 - Keep issue status current in the project board (Backlog/Ready/In Progress/Blocked/Done).
+- When starting work on an issue, move it to **In Progress** in the Development project.
+- When implementation is complete, add a comment referencing the commit SHA and move the issue to **Done**.
 - Use structured issue templates for new tasks.
 - When a task is finished, document shipped user-facing changes in **CHANGELOG.md** and **README.md** as needed.
 - Keep `TODO.md` minimal as a pointer; do not duplicate issue-level task details there.
+
+### Issue Update Workflow
+
+When working on an issue, update it via GitHub comments (not AGENTS.md):
+
+1. **When starting**: Comment with plan/scope, move to "In Progress"
+2. **During work**: Comment on significant milestones, blockers, or scope changes
+3. **When complete**: Comment with commit SHA, move to "Done", close if acceptance criteria met
+
+Example commit message format:
+```
+feat(addon): implement FreeCAD Addon Manager macro collection support (#19)
+
+- Created package.xml with XSD-compliant macro entries
+- Added FreeCAD metadata headers to 3 macro files
+- Added xmllint pre-commit hooks for XML validation
+- Created tests/test_addon_package.py with 20 tests
+```
+
+The commit SHA should be referenced in the final issue comment.
+
+### Ready vs In-Progress
+
+When selecting work from the Development project:
+- **Ready** issues should be worked on first (highest priority)
+- **In Progress** issues are already being worked on (check if stuck/blocked)
+- Only move an issue to "In Progress" when you actually start coding on it
 
 ### Release Process
 

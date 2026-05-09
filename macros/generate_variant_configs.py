@@ -12,6 +12,21 @@ Usage:
     4. The macro will create/populate a spreadsheet with all combinations
 """
 
+__Name__ = "Generate Variant Configs"
+__Comment__ = "Generate parameter combinations for variant/configuration spreadsheets"
+__Author__ = "ebirn"
+__Date__ = "2026-05-05"
+__Version__ = "0.4.0"
+__License__ = "MIT"
+__Web__ = "https://github.com/ebirn/freecad_tools"
+__Wiki__ = "https://github.com/ebirn/freecad_tools/blob/main/README.md"
+__Icon__ = ""
+__Help__ = "Creates all combinations of parameters defined in a config. Results are stored in a FreeCAD spreadsheet."
+__Status__ = "Stable"
+__Requires__ = "yaml"
+__Communication__ = "https://github.com/ebirn/freecad_tools/issues"
+__Files__ = "macro_helper.py"
+
 import itertools
 import sys
 from decimal import Decimal

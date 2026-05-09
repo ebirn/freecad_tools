@@ -60,6 +60,15 @@ clean:
         echo "No test_output directory found"; \
     fi
 
+# Remove all files listed in .gitignore (clean untracked)
+clean-all:
+    git clean -Xdf
+    echo "Cleaned all files in .gitignore"
+
+# Validate release readiness (version/license sync)
+release-check:
+    bash scripts/release_validator.sh
+
 # Build slim runtime image (Python-only)
 build-image-slim:
     {{container_engine}} build \

@@ -41,6 +41,21 @@ Examples:
     python3 set_export_properties.py MyDocument.FCStd --list
 """
 
+__Name__ = "Set Export Properties"
+__Comment__ = "Set export properties on bodies for 3MF export"
+__Author__ = "ebirn"
+__Date__ = "2026-05-05"
+__Version__ = "0.4.0"
+__License__ = "MIT"
+__Web__ = "https://github.com/ebirn/freecad_tools"
+__Wiki__ = "https://github.com/ebirn/freecad_tools/blob/main/README.md"
+__Icon__ = ""
+__Help__ = "Adds export properties (ExportTo3MF, ExportCount, ExportRotation) to selected bodies."
+__Status__ = "Stable"
+__Requires__ = ""
+__Communication__ = "https://github.com/ebirn/freecad_tools/issues"
+__Files__ = ""
+
 import argparse
 import sys
 
