@@ -213,3 +213,31 @@ def test_apply_configs_enables_link_copy_on_change_by_default(monkeypatch):
     assert element.LinkCopyOnChange == "Enabled"
     assert element.config == "v_10.1"
     assert ("config", "CopyOnChange") in element.property_status_changes
+
+
+def test_main_uses_unified_config_section(monkeypatch):
+    module = import_variant_array_assignment(monkeypatch)
+    doc = type("Doc", (), {"FileName": "/tmp/example.FCStd"})()
+
+    import FreeCAD
+
+    monkeypatch.setattr(FreeCAD, "ActiveDocument", doc, raising=False)
+
+    called = {}
+
+    def fake_load_or_prompt_config(config_path, dialog_fields=None, dialog_title=None, section=None, doc=None):
+        called["config_path"] = config_path
+        called["dialog_title"] = dialog_title
+        called["section"] = section
+        called["doc"] = doc
+        return {"spreadsheet_label": "VariantData", "array_label": "Array"}
+
+    monkeypatch.setattr(module, "load_or_prompt_config", fake_load_or_prompt_config)
+    monkeypatch.setattr(module, "apply_configs_to_array", lambda config=None: called.setdefault("applied", config))
+
+    module.main()
+
+    assert called["config_path"].endswith(".freecad_tools/config.yml")
+    assert called["section"] == "macros.variant_array_assignment"
+    assert called["doc"] is doc
+    assert called["applied"]["array_label"] == "Array"

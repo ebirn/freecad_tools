@@ -26,7 +26,7 @@ A comprehensive collection of Python utilities for converting FreeCAD designs to
 1. **Copy the example config** to your FreeCAD project:
    ```bash
    mkdir -p MyProject/.freecad_tools
-   cp /path/to/freecad_tools/examples/export_config.yml.example.yml MyProject/.freecad_tools/export.yml
+   cp /path/to/freecad_tools/examples/config.yml MyProject/.freecad_tools/config.yml
    ```
 
 2. **Edit the config** to specify your FreeCAD file and bodies:
@@ -183,7 +183,7 @@ jobs:
   publish:
     uses: ebirn/freecad_tools/.github/workflows/reusable-publish-nightly-release.yml@main
     with:
-      config_path: .freecad_tools/export.yml
+      config_path: .freecad_tools/config.yml
       project_root: .
       gui_session: run
       dry_run: false
@@ -317,7 +317,7 @@ Suggested wiki pages for operator-facing publishing docs:
    - Pinning policy for stable consumer repos (tag/SHA)
 
 **Config File Discovery** (when not specified):
-1. `.freecad_tools/export.yml` (per-project config)
+1. `.freecad_tools/config.yml` (per-project unified config)
 2. `export_config.yml` (legacy config in current directory)
 
 ### Output Root Override
@@ -942,9 +942,11 @@ export:
 ```
 MyProject/
 ├── .freecad_tools/
-│   └── export.yml          # ← Your config goes here
+│   └── config.yml          # ← Your config goes here
 └── MyProject.FCStd
 ```
+
+Use `examples/config.yml` as the starter template.
 
 Or legacy location:
 ```
@@ -1054,40 +1056,38 @@ Use FreeCAD macros to create multiple versions:
    - Parameter names and values
    - Number of variations
 
-3. Macro generates `.freecad_tools/macro_config.yml`
+3. Macro generates/updates `.freecad_tools/config.yml` under `macros.generate_variant_configs`
 
 4. Config is reused for consistent variations
 
 **Using Configuration Files** (skip the dialog):
 
-Create `.freecad_tools/macro_config.yml` manually:
+Create `.freecad_tools/config.yml` manually:
 ```yaml
-spreadsheet_label: VariantData
-parameters:
-  - name: PipeDiameter
-    start: 10.1
-    stop: 10.3
-    step: 0.1
-  - name: HexIndent
-    values: [0.3, 0.5, 0.7, 0.9]
-  - name: HexLength
-    values: [10]
+macros:
+  generate_variant_configs:
+    spreadsheet_label: VariantData
+    parameters:
+      - name: PipeDiameter
+        start: 10.1
+        stop: 10.3
+        step: 0.1
+      - name: HexIndent
+        values: [0.3, 0.5, 0.7, 0.9]
+      - name: HexLength
+        values: [10]
+
+  variant_array_assignment:
+    spreadsheet_label: VariantData
+    array_label: VariantTestArray
+    cleanup_before_assign: true
+    cleanup_untagged_copy_groups: true
+    enable_link_copy_on_change: true
 ```
 
-When the macro runs, it will load this config automatically (or show the dialog if not found).
+When the macro runs, it will load its section from this config automatically (or show the dialog if not found).
 The old `param1_name` / `param1_values` dialog-style keys are not supported; keep all variant parameters in the
 `parameters` list.
-
-For `variant_array_assignment.py`, the config can also define the array target and whether to clean stale generated
-array links and hidden auto-delete `CopyOnChangeGroup` objects before assigning variants:
-
-```yaml
-spreadsheet_label: VariantData
-array_label: VariantTestArray
-cleanup_before_assign: true
-cleanup_untagged_copy_groups: true
-enable_link_copy_on_change: true
-```
 
 The macro enables link copy-on-change by default so each array element can keep an independent selected configuration.
 Newly-created managed `CopyOnChangeGroup` objects are tagged with the array name; `cleanup_untagged_copy_groups` keeps
@@ -1148,12 +1148,12 @@ freecad_tools/
 │
 ├── templates/                          # Example configurations
 │   ├── pre-commit-config.yaml.example  # Hook setup template
-│   └── export_config.yml.example.yml   # Config template
+│   └── export.yml.example              # Legacy export config template
 │
 ├── examples/                           # Sample files
 │   ├── example.FCStd                   # Sample FreeCAD document
 │   ├── example.3mf                     # Sample output
-│   └── export_config.yml.example.yml   # Example config
+│   └── config.yml                      # Unified example config
 │
 ├── .pre-commit-hooks.yaml              # Hook definitions for projects
 ├── pyproject.toml                      # Python dependencies

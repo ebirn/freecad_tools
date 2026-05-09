@@ -94,3 +94,29 @@ def test_parse_parameters_text_returns_parameter_definitions(monkeypatch):
     parameters = module.parse_parameters_text("- name: PipeDiameter\n  start: 10.1\n  stop: 10.3\n  step: 0.1")
 
     assert parameters == [{"name": "PipeDiameter", "start": 10.1, "stop": 10.3, "step": 0.1}]
+
+
+def test_main_uses_unified_config_section(monkeypatch):
+    doc = type("Doc", (), {"FileName": "/tmp/example.FCStd"})()
+    module = import_generate_variant_configs(monkeypatch, doc=doc)
+
+    called = {}
+
+    def fake_load_or_prompt_config(config_path, dialog_fields=None, dialog_title=None, section=None, doc=None):
+        called["config_path"] = config_path
+        called["dialog_title"] = dialog_title
+        called["section"] = section
+        called["doc"] = doc
+        return {"spreadsheet_label": "VariantData", "parameters": [{"name": "PipeDiameter", "values": [10.1]}]}
+
+    monkeypatch.setattr(module, "load_or_prompt_config", fake_load_or_prompt_config)
+    monkeypatch.setattr(
+        module, "generate_variant_combinations", lambda config=None: called.setdefault("generated", config)
+    )
+
+    module.main()
+
+    assert called["config_path"].endswith(".freecad_tools/config.yml")
+    assert called["section"] == "macros.generate_variant_configs"
+    assert called["doc"] is doc
+    assert called["generated"]["spreadsheet_label"] == "VariantData"

@@ -41,6 +41,7 @@ if str(macro_dir) not in sys.path:
 
 try:
     from macro_helper import (
+        UNIFIED_CONFIG_RELATIVE_PATH,
         get_object_by_identifier,
         load_or_prompt_config,
     )
@@ -177,7 +178,9 @@ def generate_variant_combinations(config=None):
     column_headers = ["ConfigName"] + list(parameter_lists.keys())
 
     if not parameter_lists:
-        print("No parameters configured. Add a 'parameters' list to macro_config.yml.")
+        print(
+            "No parameters configured. Add a 'parameters' list to macros.generate_variant_configs in .freecad_tools/config.yml."
+        )
         return
 
     sheet = get_object_by_identifier(doc, spreadsheet_label)
@@ -237,13 +240,6 @@ def main():
         print("No active document.")
         return
 
-    # Check if a config file exists in the document's directory
-    doc_path = Path(doc.FileName) if hasattr(doc, "FileName") and doc.FileName else None
-    config_path = None
-    if doc_path:
-        config_dir = doc_path.parent
-        config_path = config_dir / ".freecad_tools" / "macro_config.yml"
-
     # Define dialog fields for user configuration
     dialog_fields = [
         {
@@ -258,15 +254,17 @@ def main():
             "type": "text",
             "label": "Parameters YAML:",
             "default": "- name: PipeDiameter\n  start: 10.1\n  stop: 10.3\n  step: 0.1\n- name: HexLength\n  values: [10]",
-            "help": "Prefer editing .freecad_tools/macro_config.yml for multiple parameters",
+            "help": "Prefer editing .freecad_tools/config.yml (macros.generate_variant_configs) for multiple parameters",
         },
     ]
 
     # Load or prompt for configuration
     config = load_or_prompt_config(
-        str(config_path) if config_path else ".freecad_tools/macro_config.yml",
+        str(UNIFIED_CONFIG_RELATIVE_PATH),
         dialog_fields=dialog_fields,
         dialog_title="Generate Variant Configurations",
+        section="macros.generate_variant_configs",
+        doc=doc,
     )
 
     if config:

@@ -137,6 +137,8 @@ def main():
         # Keep project root anchored to current working directory.
         # Config location should not redefine project root.
 
+    elif os.path.exists(".freecad_tools/config.yml"):
+        CONFIG_FILE = Path(".freecad_tools/config.yml").resolve()  # noqa: N806
     elif os.path.exists("export_config.yml"):
         CONFIG_FILE = Path("export_config.yml").resolve()  # noqa: N806
 

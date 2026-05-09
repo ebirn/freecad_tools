@@ -111,6 +111,32 @@ class TestConfigFileLoading:
         assert len(export_list) == 3
         assert [item["name"] for item in export_list] == ["Project1", "Project2", "Project3"]
 
+    def test_load_config_uses_unified_path_priority(self, monkeypatch, tmp_path):
+        unified_dir = tmp_path / ".freecad_tools"
+        unified_dir.mkdir(parents=True)
+        unified_path = unified_dir / "config.yml"
+        unified_path.write_text(
+            yaml.safe_dump(
+                {
+                    "export": [
+                        {
+                            "name": "UnifiedExport",
+                            "source": "example.FCStd",
+                            "bodies": ["Body"],
+                        }
+                    ]
+                }
+            )
+        )
+
+        monkeypatch.chdir(tmp_path)
+        fc_export.CONFIG_FILE = None
+        fc_export.PROJECT_ROOT = None
+
+        exports = fc_export.load_config()
+
+        assert exports[0]["name"] == "UnifiedExport"
+
 
 class TestConfigSchemaValidation:
     """Tests for validating export config structure and required fields."""

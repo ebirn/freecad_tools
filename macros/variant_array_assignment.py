@@ -46,6 +46,7 @@ if str(macro_dir) not in sys.path:
 
 try:
     from macro_helper import (
+        UNIFIED_CONFIG_RELATIVE_PATH,
         get_object_by_identifier,
         load_or_prompt_config,
     )
@@ -456,13 +457,6 @@ def main():
         print("No active document.")
         return
 
-    # Check if a config file exists in the document's directory
-    doc_path = Path(doc.FileName) if hasattr(doc, "FileName") and doc.FileName else None
-    config_path = None
-    if doc_path:
-        config_dir = doc_path.parent
-        config_path = config_dir / ".freecad_tools" / "macro_config.yml"
-
     # Define dialog fields for user configuration
     dialog_fields = [
         {
@@ -504,9 +498,11 @@ def main():
 
     # Load or prompt for configuration
     config = load_or_prompt_config(
-        str(config_path) if config_path else ".freecad_tools/macro_config.yml",
+        str(UNIFIED_CONFIG_RELATIVE_PATH),
         dialog_fields=dialog_fields,
         dialog_title="Apply Variant Configurations to Array",
+        section="macros.variant_array_assignment",
+        doc=doc,
     )
 
     if config:
