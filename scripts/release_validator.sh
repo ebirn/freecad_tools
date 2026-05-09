@@ -16,7 +16,7 @@ echo "Checking version consistency..."
 
 PACKAGE_VERSION=$(grep -o '<version>[^<]*</version>' package.xml 2>/dev/null | sed 's/.*>\([^<]*\)<.*/\1/')
 PYPROJECT_VERSION=$(grep '^version' pyproject.toml | sed 's/.*"\([^"]*\)".*/\1/')
-MACRO_VERSION=$(grep '__Version__' macros/*.py | head -1 | sed 's/.*"\([^"]*\)".*/\1/')
+MACRO_VERSIONS=$(grep '__Version__' macros/*.py | sed 's/.*"\([^"]*\)".*/\1/' | sort -u)
 
 if [ -n "$PACKAGE_VERSION" ] && [ -n "$PYPROJECT_VERSION" ]; then
     if [ "$PACKAGE_VERSION" != "$PYPROJECT_VERSION" ]; then
@@ -28,11 +28,15 @@ if [ -n "$PACKAGE_VERSION" ] && [ -n "$PYPROJECT_VERSION" ]; then
     echo "  package.xml = pyproject.toml = $PACKAGE_VERSION ✓"
 fi
 
-if [ -n "$MACRO_VERSION" ] && [ -n "$PYPROJECT_VERSION" ]; then
-    if [ "$MACRO_VERSION" != "$PYPROJECT_VERSION" ]; then
-        echo "ERROR: Macro version mismatch!"
-        echo "  macros: $MACRO_VERSION"
-        echo "  pyproject.toml: $PYPROJECT_VERSION"
+if [ -n "$MACRO_VERSIONS" ] && [ -n "$PYPROJECT_VERSION" ]; then
+    version_mismatch=0
+    for ver in $MACRO_VERSIONS; do
+        if [ "$ver" != "$PYPROJECT_VERSION" ]; then
+            echo "ERROR: Macro version mismatch: $ver (expected $PYPROJECT_VERSION)"
+            version_mismatch=1
+        fi;
+    done;
+    if [ $version_mismatch -eq 1 ]; then
         exit 1
     fi
     echo "  macros = pyproject.toml ✓"

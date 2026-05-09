@@ -2,7 +2,7 @@
 # Wrapper script for xmllint XSD validation
 # Non-blocking: always returns 0
 
-SCHEMA_URL="https://Addons.FreeCAD.Org/Manifest"
+SCHEMA_URL="https://Addons.FreeCAD.Org/Manifest.xsd"
 FILE="$1"
 
 if [ -z "$FILE" ]; then
