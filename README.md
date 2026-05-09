@@ -275,6 +275,47 @@ Use this to validate docs/workflows from a clean operator perspective:
 5. Confirm release assets and notes without using local tribal knowledge.
 6. Record any ambiguous step and update README immediately.
 
+#### Fresh-User Trial Report (Latest)
+
+Most recent trial date: `2026-05-09`
+
+Trial target repository:
+- `ebirn/freecad_release_demo`
+
+Executed workflow runs:
+- Nightly (candidate branch): `https://github.com/ebirn/freecad_release_demo/actions/runs/25598613599`
+- Tagged (candidate branch): `https://github.com/ebirn/freecad_release_demo/actions/runs/25598663410`
+- Nightly (post-merge `@main` baseline): `https://github.com/ebirn/freecad_release_demo/actions/runs/25599105399`
+- Tagged (post-merge `@main` baseline): `https://github.com/ebirn/freecad_release_demo/actions/runs/25599105988`
+
+Observed result:
+- All workflow jobs completed successfully.
+- Release assets and notes were generated as expected.
+- No internal `freecad_tools` script dependency was required in caller repositories.
+
+#### Wiki Runbook Outline (Copy to Wiki)
+
+Suggested wiki pages for operator-facing publishing docs:
+
+1. **Nightly Publishing Runbook**
+   - Purpose and when to use nightly
+   - Required repo files and workflow inputs
+   - Manual dispatch steps
+   - Verification checklist (assets/checksums)
+   - Common failures and quick fixes
+
+2. **Tagged Release Runbook**
+   - Version/tag naming guidance
+   - Trigger methods (tag push vs manual `release_tag`)
+   - Verification checklist (release page assets/notes)
+   - Rollback/update procedure for incorrect tags
+
+3. **Reusable Workflow Upgrade Playbook**
+   - How to test candidate `freecad_tools` branches in demo harness
+   - Required validation runs before merge
+   - Post-merge switch back to `@main`
+   - Pinning policy for stable consumer repos (tag/SHA)
+
 **Config File Discovery** (when not specified):
 1. `.freecad_tools/export.yml` (per-project config)
 2. `export_config.yml` (legacy config in current directory)
