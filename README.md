@@ -198,6 +198,83 @@ Notes:
 - Checksums are generated from `bundle_paths` and published in release notes.
 - For stable pipelines, pin reusable workflow usage to a tag or commit SHA instead of `@main`.
 
+### Publishing Runbooks (Operator Guide)
+
+This section is a practical checklist for operators maintaining consumer repos that use
+the reusable workflows.
+
+#### Who Does What
+
+- **Contributor**: updates CAD/docs/config and opens PRs.
+- **Operator**: runs publishing workflows, reviews run output, and manages releases/tags.
+
+#### Nightly Release Runbook
+
+Use this when you want a rolling, latest bundle for testing/download.
+
+1. Ensure workflow reference is current in your consumer repo:
+   - `ebirn/freecad_tools/.github/workflows/reusable-publish-nightly-release.yml@<ref>`
+2. Confirm required bundle inputs exist in your repo:
+   - every path listed in `bundle_paths`
+3. Trigger workflow manually (`workflow_dispatch`) once after config changes.
+4. Verify jobs complete:
+   - `validate-release-readiness`
+   - `validate-export-config / build-3mf-artifacts`
+   - `publish-nightly-release`
+5. Open the `nightly` release and confirm assets:
+   - `<bundle>.tar.gz`, `<bundle>.zip`
+   - notes include checksum block
+
+#### Tagged Release Runbook
+
+Use this for versioned, reproducible releases.
+
+1. Ensure workflow reference is current:
+   - `ebirn/freecad_tools/.github/workflows/reusable-publish-tagged-release.yml@<ref>`
+2. Verify `bundle_paths` and expected generated directories.
+3. Trigger by tag push (`v*`) or manual dispatch with `release_tag`.
+4. Verify jobs complete:
+   - `validate-release-readiness`
+   - `validate-export-config / build-3mf-artifacts`
+   - `publish-tagged-release`
+5. Confirm GitHub release exists for the intended tag with:
+   - release notes
+   - `.tar.gz` and `.zip` assets
+   - checksum section in notes
+
+#### Troubleshooting Quick Guide
+
+- **Missing required bundle path**
+  - Symptom: readiness job fails before export.
+  - Fix: correct `bundle_paths` or commit the missing files.
+
+- **Artifact download failure in publish job**
+  - Symptom: `gh run download` fails for `freecad-tools-artifacts`.
+  - Fix: inspect `validate-export-config` job and resolve export/container errors first.
+
+- **Container/export failures**
+  - Symptom: failure in `build-3mf-artifacts` during container run.
+  - Fix: verify `config_path`, `project_root`, and FreeCAD export config validity; rerun in dry-run first.
+
+- **Unexpected release contents**
+  - Symptom: missing docs/prints in final archive.
+  - Fix: ensure `generated_paths` matches actual generated output directories.
+
+- **Reference drift**
+  - Symptom: behavior changed unexpectedly after upstream workflow updates.
+  - Fix: pin reusable workflow references to a tag or commit SHA instead of `@main`.
+
+#### Fresh-User Trial Checklist
+
+Use this to validate docs/workflows from a clean operator perspective:
+
+1. Start from a fresh clone of consumer repo.
+2. Follow only README runbook instructions.
+3. Run nightly workflow manually.
+4. Run tagged workflow manually with a test tag name.
+5. Confirm release assets and notes without using local tribal knowledge.
+6. Record any ambiguous step and update README immediately.
+
 **Config File Discovery** (when not specified):
 1. `.freecad_tools/export.yml` (per-project config)
 2. `export_config.yml` (legacy config in current directory)
