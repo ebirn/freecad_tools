@@ -4,18 +4,13 @@
 # Trigger: push to any branch, pull_request, or manual dispatch.
 # This is the fastest feedback loop — no FreeCAD or container required.
 
-# CI — lint, format, and unit tests on every push/PR.
-#
-# Audience: freecad_tools contributors and maintainers.
-# Trigger: push to any branch, pull_request, or manual dispatch.
-# This is the fastest feedback loop — no FreeCAD or container required.
-
 name: CI
 on:
   push:
     branches: [main, "copilot/**"]
   pull_request:
   workflow_dispatch:
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -30,18 +25,20 @@ jobs:
       - run: uv run yamllint -c .yamllint .pre-commit-hooks.yaml .pre-commit-config.yaml
       - run: uv run pylint --disable=all --enable=E,F tools/*.py
       - run: uv run pylint --disable=all --enable=E,F --disable=E0401,E1101 macros/*.py
-      - run: >-
-          uv run pytest
-          tests/test_git_utils.py
-          tests/test_lib3mf_utils.py
-          tests/test_export_config.py
-          tests/test_techdraw_pdf.py
-          tests/test_bom_utils.py
-          tests/test_pypi_package.py
-          --cov=tools
-          --cov-report=xml
-          --cov-report=term-missing
-          -v
+      - name: Run unit tests
+        run: |
+          uv run pytest \
+            tests/test_git_utils.py \
+            tests/test_lib3mf_utils.py \
+            tests/test_export_config.py \
+            tests/test_techdraw_pdf.py \
+            tests/test_bom_utils.py \
+            tests/test_pypi_package.py \
+            tests/test_addon_package.py \
+            --cov=tools \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            -v
       - name: Validate package build
         run: |
           rm -rf build dist *.egg-info
