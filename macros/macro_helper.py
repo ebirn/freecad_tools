@@ -58,6 +58,50 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format="macro_helper - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+UNIFIED_CONFIG_RELATIVE_PATH = Path(".freecad_tools") / "config.yml"
+LEGACY_MACRO_CONFIG_RELATIVE_PATH = Path(".freecad_tools") / "macro_config.yml"
+
+
+def _resolve_section(config: dict[str, Any], section: str) -> dict[str, Any] | None:
+    """Resolve a dotted section path from a config mapping."""
+    current: Any = config
+    for key in section.split("."):
+        if not isinstance(current, dict) or key not in current:
+            return None
+        current = current[key]
+    return current if isinstance(current, dict) else None
+
+
+def get_macro_config_candidates(doc=None, preferred_path: str | None = None) -> list[Path]:
+    """Return candidate config files in lookup order."""
+    candidates: list[Path] = []
+    doc_root: Path | None = None
+    if doc is not None and getattr(doc, "FileName", None):
+        doc_root = Path(str(doc.FileName)).parent
+
+    if preferred_path:
+        preferred = Path(preferred_path)
+        if doc_root is not None and not preferred.is_absolute():
+            candidates.append(doc_root / preferred)
+        candidates.append(preferred)
+    else:
+        if doc_root is not None:
+            candidates.append(doc_root / UNIFIED_CONFIG_RELATIVE_PATH)
+            candidates.append(doc_root / LEGACY_MACRO_CONFIG_RELATIVE_PATH)
+
+        candidates.append(UNIFIED_CONFIG_RELATIVE_PATH)
+        candidates.append(LEGACY_MACRO_CONFIG_RELATIVE_PATH)
+
+    unique_candidates: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in candidates:
+        resolved = candidate.expanduser().resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique_candidates.append(candidate)
+    return unique_candidates
+
 
 if QT_AVAILABLE:
 
@@ -293,7 +337,7 @@ def show_config_dialog(title: str = "Configuration", fields: list[dict[str, Any]
     return None
 
 
-def load_macro_config(config_path: str) -> dict[str, Any] | None:
+def load_macro_config(config_path: str, section: str | None = None) -> dict[str, Any] | None:
     """
     Load macro configuration from a YAML file.
 
@@ -315,6 +359,23 @@ def load_macro_config(config_path: str) -> dict[str, Any] | None:
     try:
         with open(config_path) as f:
             config = yaml.safe_load(f)
+        if not isinstance(config, dict):
+            logger.error(f"Config root must be a mapping: {config_path}")
+            return None
+
+        if section:
+            section_config = _resolve_section(config, section)
+            if section_config is not None:
+                logger.info(f"Loaded macro config section '{section}' from {config_path}")
+                return section_config
+
+            if section.startswith("macros.") and "macros" not in config:
+                logger.info(f"Using legacy flat macro config from {config_path}")
+                return config
+
+            logger.error(f"Config section '{section}' not found in {config_path}")
+            return None
+
         logger.info(f"Loaded macro config from {config_path}")
         return config
     except Exception as e:
@@ -322,7 +383,7 @@ def load_macro_config(config_path: str) -> dict[str, Any] | None:
         return None
 
 
-def save_macro_config(config: dict[str, Any], config_path: str) -> bool:
+def save_macro_config(config: dict[str, Any], config_path: str, section: str | None = None) -> bool:
     """
     Save macro configuration to a YAML file.
 
@@ -340,8 +401,29 @@ def save_macro_config(config: dict[str, Any], config_path: str) -> bool:
     config_path = Path(config_path)
     try:
         config_path.parent.mkdir(parents=True, exist_ok=True)
+        to_write: dict[str, Any] = config
+
+        if section:
+            existing: dict[str, Any] = {}
+            if config_path.exists():
+                with open(config_path) as existing_file:
+                    loaded = yaml.safe_load(existing_file)
+                if isinstance(loaded, dict):
+                    existing = loaded
+
+            cursor = existing
+            keys = section.split(".")
+            for key in keys[:-1]:
+                next_value = cursor.get(key)
+                if not isinstance(next_value, dict):
+                    next_value = {}
+                    cursor[key] = next_value
+                cursor = next_value
+            cursor[keys[-1]] = config
+            to_write = existing
+
         with open(config_path, "w") as f:
-            yaml.dump(config, f, default_flow_style=False)
+            yaml.dump(to_write, f, default_flow_style=False)
         logger.info(f"Saved macro config to {config_path}")
         return True
     except Exception as e:
@@ -350,9 +432,11 @@ def save_macro_config(config: dict[str, Any], config_path: str) -> bool:
 
 
 def load_or_prompt_config(
-    config_path: str,
+    config_path: str | None = None,
     dialog_fields: list[dict[str, Any]] = None,
     dialog_title: str = "Configuration",
+    section: str | None = None,
+    doc=None,
 ) -> dict[str, Any] | None:
     """
     Load configuration from file, or prompt user with dialog if file doesn't exist.
@@ -365,23 +449,25 @@ def load_or_prompt_config(
     Returns:
         Configuration dictionary or None if user cancelled
     """
-    config_path = Path(config_path)
+    candidates = get_macro_config_candidates(doc=doc, preferred_path=config_path)
 
-    # Try to load existing config
-    if config_path.exists():
-        config = load_macro_config(str(config_path))
-        if config:
-            logger.info(f"Loaded existing config from {config_path}")
-            return config
+    for candidate in candidates:
+        if candidate.exists():
+            config = load_macro_config(str(candidate), section=section)
+            if config:
+                logger.info(f"Loaded existing config from {candidate}")
+                return config
 
     # Prompt user for configuration
     logger.info("No config found, prompting user...")
     config = show_config_dialog(title=dialog_title, fields=dialog_fields)
 
     if config:
-        # Optionally save for future use
+        save_target = (
+            candidates[0] if candidates else (Path(config_path) if config_path else UNIFIED_CONFIG_RELATIVE_PATH)
+        )
         if YAML_AVAILABLE:
-            save_macro_config(config, str(config_path))
+            save_macro_config(config, str(save_target), section=section)
         return config
 
     logger.warning("User cancelled configuration")

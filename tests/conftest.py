@@ -85,7 +85,7 @@ def example_3mf_file():
 @pytest.fixture
 def example_config_file():
     """Fixture providing path to example export config."""
-    config_file = EXAMPLES_DIR / "export_config.yml.example.yml"
+    config_file = EXAMPLES_DIR / "config.yml"
     if not config_file.exists():
         pytest.skip(f"Example config file not found at {config_file}")
     return config_file

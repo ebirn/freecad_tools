@@ -1109,12 +1109,12 @@ if not CONFIG_FILE:
         logger.debug(f"CONFIG_FILE from legacy command-line argument: {CONFIG_FILE}")
     else:
         # Auto-discover config file
-        project_config = ".freecad_tools/export.yml"
+        unified_config = ".freecad_tools/config.yml"
         legacy_config = "export_config.yml"
 
-        if os.path.exists(project_config):
-            CONFIG_FILE = project_config
-            logger.info(f"Auto-discovered per-project config: {CONFIG_FILE}")
+        if os.path.exists(unified_config):
+            CONFIG_FILE = unified_config
+            logger.info(f"Auto-discovered unified config: {CONFIG_FILE}")
         elif os.path.exists(legacy_config):
             CONFIG_FILE = legacy_config
             logger.info(f"Auto-discovered legacy config: {CONFIG_FILE}")
@@ -1723,17 +1723,17 @@ def load_config():
 
     # If CONFIG_FILE not set by command-line, determine default
     if not CONFIG_FILE:
-        # Try .freecad_tools/export.yml first (per-project config)
-        project_config = ".freecad_tools/export.yml"
-        if os.path.exists(project_config):
-            CONFIG_FILE = project_config
-            logger.info(f"Using per-project config: {CONFIG_FILE}")
+        # Try .freecad_tools/config.yml first (unified config)
+        unified_config = ".freecad_tools/config.yml"
+        if os.path.exists(unified_config):
+            CONFIG_FILE = unified_config
+            logger.info(f"Using unified config: {CONFIG_FILE}")
         # Fall back to export_config.yml in current directory
         elif os.path.exists("export_config.yml"):
             CONFIG_FILE = "export_config.yml"
             logger.info(f"Using legacy config: {CONFIG_FILE}")
         else:
-            logger.error("Config file not found. Tried '.freecad_tools/export.yml' and 'export_config.yml'")
+            logger.error("Config file not found. Tried '.freecad_tools/config.yml' and 'export_config.yml'")
             sys.exit(1)
 
     logger.debug(f"Loading config from: {CONFIG_FILE}")

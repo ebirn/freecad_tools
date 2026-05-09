@@ -68,7 +68,7 @@ export:
 
   # NEW! Example: Property-based body selection
   - name: PropertyExport
-    source: AnotherDesign.FcsTd
+    source: AnotherDesign.FCStd
     body_source: properties   # Use FreeCAD properties instead of config list
     # When body_source is 'properties', bodies list is not used
     # Bodies with ExportTo3MF=True custom property will be exported
@@ -144,3 +144,24 @@ export:
       - Body
     screenshots: true                 # Short form: enabled with all defaults
     output: prints/Simple.3mf
+
+# Macro configuration sections (used by FreeCAD macros)
+macros:
+  generate_variant_configs:
+    spreadsheet_label: VariantData
+    parameters:
+      - name: PipeDiameter
+        start: 10.1
+        stop: 10.3
+        step: 0.1
+      - name: HexIndent
+        values: [0.3, 0.5, 0.7, 0.9]
+      - name: HexLength
+        values: [10]
+
+  variant_array_assignment:
+    spreadsheet_label: VariantData
+    array_label: VariantTestArray
+    cleanup_before_assign: true
+    cleanup_untagged_copy_groups: true
+    enable_link_copy_on_change: true
