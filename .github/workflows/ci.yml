@@ -1,15 +1,11 @@
 # CI — lint, format, and unit tests on every push/PR.
-#
 # Audience: freecad_tools contributors and maintainers.
 # Trigger: push to any branch, pull_request, or manual dispatch.
 # This is the fastest feedback loop — no FreeCAD or container required.
 
 name: CI
-on:
-  push:
-    branches: [main, "copilot/**"]
-  pull_request:
-  workflow_dispatch:
+
+on: [push, workflow_dispatch]
 
 jobs:
   ci:
@@ -28,13 +24,9 @@ jobs:
       - name: Run unit tests
         run: |
           uv run pytest \
-            tests/test_git_utils.py \
-            tests/test_lib3mf_utils.py \
-            tests/test_export_config.py \
-            tests/test_techdraw_pdf.py \
-            tests/test_bom_utils.py \
-            tests/test_pypi_package.py \
-            tests/test_addon_package.py \
+            tests/ \
+            --ignore=tests/test_fc_export_integration.py \
+            --ignore=tests/test_export.py \
             --cov=tools \
             --cov-report=xml \
             --cov-report=term-missing \
@@ -44,7 +36,7 @@ jobs:
           rm -rf build dist *.egg-info
           uv build --sdist --wheel -o dist/
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
+        uses: codecov/codecov-action@3f20e214133d0983f9a10f3d63b0faf9241a3daa # v6.0.0
         with:
           files: ./coverage.xml
           fail_ci_if_error: false

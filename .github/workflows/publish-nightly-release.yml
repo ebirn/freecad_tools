@@ -83,6 +83,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Checkout freecad_tools workflow sources
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ebirn/freecad_tools
+          ref: ${{ github.workflow_sha }}
+          path: _freecad_tools
+
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
@@ -93,13 +100,15 @@ jobs:
 
       - name: Validate release readiness
         run: |
-          python tools/release_validator.py --project-root . --summary
+          python _freecad_tools/tools/release_validator.py --project-root . --summary
 
       - name: Generate checksums for bundle paths
         run: |
           bundle_paths="${{ inputs.bundle_paths }}"
           mkdir -p dist
-          python tools/release_validator.py --checksums $bundle_paths --checksum-output dist/checksums.sha256
+          python _freecad_tools/tools/release_validator.py \
+            --checksums $bundle_paths \
+            --checksum-output dist/checksums.sha256
 
       - name: Upload release summary
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

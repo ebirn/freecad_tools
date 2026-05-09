@@ -1,19 +1,22 @@
 # Build Container Image — build and push Docker images to GHCR.
 #
 # Audience: freecad_tools maintainers only (not for consumer repos).
-# Trigger: push to any branch or tag, or manual dispatch.
+# Trigger: after CI passes on push to any branch or tag, or manual dispatch.
 # Builds two variants: tools (slim, no FreeCAD) and freecad (with FreeCAD runtime).
 
 # Build Container Image — build and push Docker images to GHCR.
 #
 # Audience: freecad_tools maintainers only (not for consumer repos).
-# Trigger: push to any branch or tag, or manual dispatch.
+# Trigger: after CI passes on push to any branch or tag, or manual dispatch.
 # Builds two variants: tools (slim, no FreeCAD) and freecad (with FreeCAD runtime).
 
 name: Build Container Image
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
     branches:
       - main
       - "**"
@@ -24,6 +27,9 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     permissions:
       contents: read
       packages: write
