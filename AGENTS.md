@@ -378,6 +378,28 @@ export:
 
 ## For Agents: Branching Strategy & PR Management
 
+## For Agents: Reusable Workflow Inputs/Outputs
+
+Consumer-facing reusable workflows in this repository:
+
+- `.github/workflows/build-3mf-artifacts.yml`
+- `.github/workflows/publish-nightly-release.yml`
+- `.github/workflows/publish-tagged-release.yml`
+
+Agent guidance when editing these workflows:
+
+- Treat them as consumer API surfaces.
+- Do not depend on `tools/` scripts from `freecad_tools` during `workflow_call` runs.
+- Validate only caller-repo inputs and outputs (for example `bundle_paths`, `generated_paths`, exported artifacts).
+- Keep failure messages actionable for consumer repository maintainers.
+- Keep backward compatibility for existing caller inputs unless a breaking change is explicitly requested.
+
+Consumer workflow validation sandbox:
+
+- Test repository: `https://github.com/ebirn/freecad_release_demo`
+- Local checkout path: `~/projects/freecad_release_demo`
+- Use this repo to validate reusable workflow behavior changes end-to-end.
+
 ### Feature Branch Naming Convention
 
 All feature branches created by agents must follow this naming pattern:

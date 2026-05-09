@@ -165,6 +165,39 @@ docker run --rm -v "$PWD:/workspace" ghcr.io/ebirn/freecad_tools:freecad-latest 
 
 Use `:latest` for lightweight tooling tasks and `:freecad-latest` for full export runs requiring FreeCAD.
 
+### Reusable GitHub Workflows (for Consumer Repos)
+
+`freecad_tools` publishes reusable workflows that consumer repositories can call directly:
+
+- `.github/workflows/build-3mf-artifacts.yml`
+- `.github/workflows/publish-nightly-release.yml`
+- `.github/workflows/publish-tagged-release.yml`
+
+These workflows are designed for FreeCAD project repositories (for example `Moxon_OE1EBG`) and only validate files available in the caller repository.
+They do **not** depend on internal `freecad_tools` Python scripts during consumer runs.
+
+Suggested usage:
+
+```yaml
+jobs:
+  publish:
+    uses: ebirn/freecad_tools/.github/workflows/publish-nightly-release.yml@main
+    with:
+      config_path: .freecad_tools/export.yml
+      project_root: .
+      gui_session: run
+      dry_run: false
+      bundle_paths: README.md INSTRUCTIONS.md Moxon_OE1EBG.FCStd
+      generated_paths: docs prints
+```
+
+Notes:
+
+- `bundle_paths` are required repository files; workflow fails if any path is missing.
+- `generated_paths` are optional generated directories/files included when present.
+- Checksums are generated from `bundle_paths` and published in release notes.
+- For stable pipelines, pin reusable workflow usage to a tag or commit SHA instead of `@main`.
+
 **Config File Discovery** (when not specified):
 1. `.freecad_tools/export.yml` (per-project config)
 2. `export_config.yml` (legacy config in current directory)
