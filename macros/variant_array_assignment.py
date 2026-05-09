@@ -14,6 +14,21 @@ Usage:
     4. Enter configuration when prompted
 """
 
+__Name__ = "Variant Array Assignment"
+__Comment__ = "Assign configuration variants to array elements"
+__Author__ = "ebirn"
+__Date__ = "2026-05-05"
+__Version__ = "0.4.0"
+__License__ = "MIT"
+__Web__ = "https://github.com/ebirn/freecad_tools"
+__Wiki__ = "https://github.com/ebirn/freecad_tools/blob/main/README.md"
+__Icon__ = ""
+__Help__ = "Assigns variant configurations from a spreadsheet to array elements for batch processing."
+__Status__ = "Stable"
+__Requires__ = ""
+__Communication__ = "https://github.com/ebirn/freecad_tools/issues"
+__Files__ = "macro_helper.py"
+
 import math
 import sys
 from pathlib import Path

@@ -68,6 +68,27 @@ repos:
         args: [--maxkb=1000]
         stages: [pre-commit]
 
+  # XML validation (xmllint)
+  - repo: local
+    hooks:
+      - id: xmllint-well-formed
+        name: Check XML well-formedness (xmllint)
+        description: Validate XML files are well-formed (fast check)
+        entry: xmllint
+        args: [--noout]
+        language: system
+        files: ^package\.xml$
+        stages: [pre-commit]
+
+      - id: xmllint-xsd-validation
+        name: Validate XML against XSD (xmllint)
+        description: Validate package.xml against XSD (non-blocking)
+        entry: bash scripts/validate-xsd.sh
+        language: system
+        files: ^package\.xml$
+        stages: [pre-commit]
+        verbose: true
+
   # Deeper Python error checks (run before push)
   - repo: local
     hooks:
