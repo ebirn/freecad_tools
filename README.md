@@ -169,9 +169,9 @@ Use `:latest` for lightweight tooling tasks and `:freecad-latest` for full expor
 
 `freecad_tools` publishes reusable workflows that consumer repositories can call directly:
 
-- `.github/workflows/build-3mf-artifacts.yml`
-- `.github/workflows/publish-nightly-release.yml`
-- `.github/workflows/publish-tagged-release.yml`
+- `.github/workflows/reusable-build-3mf-artifacts.yml`
+- `.github/workflows/reusable-publish-nightly-release.yml`
+- `.github/workflows/reusable-publish-tagged-release.yml`
 
 These workflows are designed for FreeCAD project repositories (for example `Moxon_OE1EBG`) and only validate files available in the caller repository.
 They do **not** depend on internal `freecad_tools` Python scripts during consumer runs.
@@ -181,7 +181,7 @@ Suggested usage:
 ```yaml
 jobs:
   publish:
-    uses: ebirn/freecad_tools/.github/workflows/publish-nightly-release.yml@main
+    uses: ebirn/freecad_tools/.github/workflows/reusable-publish-nightly-release.yml@main
     with:
       config_path: .freecad_tools/export.yml
       project_root: .

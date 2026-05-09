@@ -382,9 +382,9 @@ export:
 
 Consumer-facing reusable workflows in this repository:
 
-- `.github/workflows/build-3mf-artifacts.yml`
-- `.github/workflows/publish-nightly-release.yml`
-- `.github/workflows/publish-tagged-release.yml`
+- `.github/workflows/reusable-build-3mf-artifacts.yml`
+- `.github/workflows/reusable-publish-nightly-release.yml`
+- `.github/workflows/reusable-publish-tagged-release.yml`
 
 Agent guidance when editing these workflows:
 
