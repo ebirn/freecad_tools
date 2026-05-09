@@ -1,10 +1,10 @@
-# Publish Nightly Release — rolling release on a schedule (default: daily).
+# Publish Tagged Release — validates and publishes a version-tagged release bundle.
 #
 # Audience: consumer repos (FreeCAD projects using freecad_tools) AND freecad_tools itself.
-# Trigger: workflow_call (from consumer scheduled workflows) or manual dispatch.
-# Validates consumer release inputs, runs export validation, then updates a "nightly" GitHub Release tag.
+# Trigger: workflow_call (from consumer tag-push workflows) or manual dispatch.
+# Validates consumer release inputs, runs export validation, then creates a GitHub Release with bundled artifacts.
 
-name: Publish Nightly Release
+name: Publish Tagged Release
 
 on:
   workflow_call:
@@ -49,15 +49,15 @@ on:
         required: false
         default: "300"
         type: string
-      nightly_tag:
-        description: Rolling release tag to maintain
+      release_tag:
+        description: Optional explicit release tag
         required: false
-        default: "nightly"
+        default: ""
         type: string
       bundle_name:
-        description: Base release bundle file name (without extension)
+        description: Prefix for generated release bundle base name
         required: false
-        default: "demo-artifacts-nightly"
+        default: "demo-artifacts"
         type: string
       bundle_paths:
         description: Space-separated repository paths to include in bundle
@@ -99,11 +99,11 @@ jobs:
       - name: Upload release summary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: release-summary-nightly
+          name: release-summary
           path: dist/checksums.sha256
 
   validate-export-config:
-    uses: ./.github/workflows/build-3mf-artifacts.yml
+    uses: ./.github/workflows/reusable-build-3mf-artifacts.yml
     needs: validate-release-readiness
     with:
       config_path: ${{ inputs.config_path }}
@@ -116,7 +116,7 @@ jobs:
       container_image: ${{ inputs.container_image }}
       runner: ${{ inputs.runner }}
 
-  publish-nightly-release:
+  publish-tagged-release:
     runs-on: ${{ inputs.runner }}
     needs: validate-export-config
     permissions:
@@ -131,8 +131,32 @@ jobs:
       - name: Download release summary
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: release-summary-nightly
+          name: release-summary
           path: dist
+
+      - name: Build release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_tag="${{ inputs.release_tag }}"
+          if [[ -z "$release_tag" ]]; then
+            if [[ "${GITHUB_REF_TYPE:-}" != "tag" ]]; then
+              echo "release_tag input is required for non-tag triggers" >&2
+              exit 1
+            fi
+            release_tag="${GITHUB_REF_NAME:-}"
+          fi
+          if [[ -z "$release_tag" ]]; then
+            echo "Unable to determine release tag" >&2
+            exit 1
+          fi
+
+          mkdir -p dist
+          {
+            echo "release_tag=${release_tag}"
+            echo "commit=${GITHUB_SHA}"
+            echo "generated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > dist/release-metadata.txt
 
       - name: Download generated export artifacts
         shell: bash
@@ -143,22 +167,21 @@ jobs:
             --name freecad-tools-artifacts \
             --dir generated
 
-      - name: Build nightly bundle and notes
+      - name: Build release bundle and notes
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p dist
-          {
-            echo "release_tag=${{ inputs.nightly_tag }}"
-            echo "commit=${GITHUB_SHA}"
-            echo "generated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          } > dist/nightly-metadata.txt
+          release_tag="${RELEASE_TAG:-${{ inputs.release_tag }}}"
+          if [[ -z "$release_tag" ]]; then
+            release_tag="${GITHUB_REF_NAME:-}"
+          fi
 
-          bundle_paths="${{ inputs.bundle_paths }}"
-          generated_paths="${{ inputs.generated_paths }}"
-          bundle_base="${{ inputs.bundle_name }}"
+          bundle_base="${{ inputs.bundle_name }}-${release_tag}"
           bundle_base="${bundle_base%.tar.gz}"
           bundle_base="${bundle_base%.zip}"
+          bundle_paths="${{ inputs.bundle_paths }}"
+          generated_paths="${{ inputs.generated_paths }}"
+
           include_paths=()
           missing_bundle_paths=()
           for p in $bundle_paths; do
@@ -181,16 +204,16 @@ jobs:
               include_paths+=("$p")
             fi
           done
-          include_paths+=("dist/nightly-metadata.txt")
+          include_paths+=("dist/release-metadata.txt")
           include_paths+=("dist/checksums.sha256")
           printf 'Including bundle paths:\n%s\n' "${include_paths[*]}"
           tar -czf "dist/${bundle_base}.tar.gz" "${include_paths[@]}"
           zip -r "dist/${bundle_base}.zip" "${include_paths[@]}"
 
           {
-            echo "# Nightly Release"
+            echo "# Release ${release_tag}"
             echo
-            echo "Rolling release generated by reusable workflow in ebirn/freecad_tools."
+            echo "Generated by reusable workflow in ebirn/freecad_tools."
             echo
             echo "## Assets"
             echo "- ${bundle_base}.tar.gz"
@@ -203,31 +226,28 @@ jobs:
             echo
             echo "## Validation"
             echo "- export workflow completed (dry_run=${{ inputs.dry_run }})"
-          } > dist/nightly-release-notes.md
+          } > dist/release-notes.md
 
-      - name: Create or update nightly release
+          echo "RELEASE_TAG=${release_tag}" >> "$GITHUB_ENV"
+          echo "BUNDLE_BASE=${bundle_base}" >> "$GITHUB_ENV"
+
+      - name: Create or update release
         shell: bash
         run: |
           set -euo pipefail
-          nightly_tag="${{ inputs.nightly_tag }}"
-          if gh release view "$nightly_tag" >/dev/null 2>&1; then
-            gh release edit "$nightly_tag" \
-              --title "$nightly_tag" \
-              --notes-file dist/nightly-release-notes.md
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --notes-file dist/release-notes.md
           else
-            gh release create "$nightly_tag" \
-              --title "$nightly_tag" \
-              --notes-file dist/nightly-release-notes.md
+            gh release create "$RELEASE_TAG" \
+              --title "$RELEASE_TAG" \
+              --notes-file dist/release-notes.md
           fi
 
-      - name: Upload nightly release asset
+      - name: Upload release asset
         shell: bash
         run: |
           set -euo pipefail
-          bundle_base="${{ inputs.bundle_name }}"
-          bundle_base="${bundle_base%.tar.gz}"
-          bundle_base="${bundle_base%.zip}"
-          gh release upload "${{ inputs.nightly_tag }}" \
-            "dist/${bundle_base}.tar.gz" \
-            "dist/${bundle_base}.zip" \
+          gh release upload "$RELEASE_TAG" \
+            "dist/$BUNDLE_BASE.tar.gz" \
+            "dist/$BUNDLE_BASE.zip" \
             --clobber
