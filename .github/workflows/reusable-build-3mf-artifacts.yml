@@ -1,13 +1,7 @@
 # Build 3MF Artifacts — reusable workflow for containerized 3MF export.
 #
 # Audience: consumer repos (FreeCAD projects using freecad_tools) AND freecad_tools itself.
-# Trigger: workflow_call (from publish-tagged-release, publish-nightly-release) or manual dispatch.
-# Runs export inside a Docker container with FreeCAD, producing 3MF/PDF/BOM/screenshot artifacts.
-
-# Build 3MF Artifacts — reusable workflow for containerized 3MF export.
-#
-# Audience: consumer repos (FreeCAD projects using freecad_tools) AND freecad_tools itself.
-# Trigger: workflow_call (from publish-tagged-release, publish-nightly-release) or manual dispatch.
+# Trigger: workflow_call (from reusable-publish-release or consumer CI) or manual dispatch.
 # Runs export inside a Docker container with FreeCAD, producing 3MF/PDF/BOM/screenshot artifacts.
 
 name: Build 3MF Artifacts
@@ -19,7 +13,7 @@ on:
         description: Path to export YAML config file
         required: false
         type: string
-        default: "export_config.yml"
+        default: ".freecad_tools/config.yml"
       export_name:
         description: Optional single export item name
         required: false
@@ -70,7 +64,7 @@ on:
       config_path:
         description: Path to export YAML config file
         required: true
-        default: "export_config.yml"
+        default: ".freecad_tools/config.yml"
         type: string
       export_name:
         description: Optional single export item name
