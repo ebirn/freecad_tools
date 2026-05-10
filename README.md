@@ -1093,6 +1093,33 @@ The macro enables link copy-on-change by default so each array element can keep 
 Newly-created managed `CopyOnChangeGroup` objects are tagged with the array name; `cleanup_untagged_copy_groups` keeps
 one-time cleanup behavior for old untagged hidden groups from previous macro runs.
 
+#### Zero-Setup Macro Workflow
+
+All FreeCAD macros in this project work **standalone** from the FreeCAD GUI without requiring:
+- Virtual environment activation
+- External pip packages
+- Setup beyond copying files
+
+**How it works**:
+1. Copy macro file (e.g., `generate_variant_configs.py`) to your FreeCAD project
+2. Open FreeCAD and load your document
+3. Go to **Macros > Execute macro...** (or Macro menu > your macro)
+4. Select the macro and click Execute
+5. Dialog appears (or config is auto-loaded from `.freecad_tools/config.yml`)
+6. Your design is updated with variants/configurations
+
+**Why it works**:
+- Macros use only FreeCAD's built-in Python packages (PyYAML, PySide, stdlib)
+- No venv required - FreeCAD's Python includes everything needed
+- Config system auto-detects your project structure
+- Tested to work with FreeCAD 1.1.1 bundled Python
+
+**For power users** (batch automation):
+If you're processing multiple documents via scripts, you can invoke macros programmatically:
+```bash
+freecadcmd -c "exec(open('generate_variant_configs.py').read())"
+```
+
 ### 4. Template Metadata Merging
 
 When you specify both a template and metadata in your config, they are merged:

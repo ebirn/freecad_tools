@@ -245,6 +245,63 @@ export:
 
 **Note**: These run *inside* FreeCAD (either via GUI macro menu or programmatically)
 
+#### Macro Standalone Requirements
+
+**CRITICAL CONSTRAINT**: All macros MUST work standalone with FreeCAD's bundled Python only.
+
+This means:
+- Macros work from FreeCAD GUI (Macro menu) without requiring venv activation
+- Macros only depend on FreeCAD's bundled packages (no external pip dependencies)
+- Users get zero-setup: copy macro file, run from Macro menu, done
+
+**Why this matters**: FreeCAD includes all necessary packages for macro execution. This enables a **hybrid approach**:
+- End-users run macros from GUI (zero setup, zero dependencies)
+- Power users use CLI with venv for batch/3MF generation (full tooling)
+
+**Verified bundled packages** (FreeCAD 1.1.1):
+- `PyYAML` 6.0.3 - Config file parsing (critical for config sections)
+- `PySide6` or `PySide2` - Qt widgets for dialogs
+- `FreeCAD`, `Part`, `Mesh`, `Draft` - FreeCAD native modules
+- `numpy`, `scipy`, `PIL` - Scientific/imaging support
+- Full stdlib (`itertools`, `decimal`, `math`, `pathlib`, etc.)
+- NOT bundled: `lib3mf` (only needed for 3MF creation via venv)
+
+**Testing macro dependencies**:
+All macros are validated against FreeCAD's bundled Python via:
+```bash
+/Applications/FreeCAD.app/Contents/Resources/bin/python tests/test_macros_bundled_python.py
+```
+
+Test suite verifies:
+- PyYAML is available and detected
+- Qt modules are available and detected
+- macro_helper.py imports without venv
+- macro_helper functions are all available
+- Config section resolution works correctly
+- All macros can be imported without external dependencies
+
+**Macro development rules**:
+1. Never import from venv-only packages (e.g., lib3mf, pytest, ruff)
+2. Only use stdlib + FreeCAD bundled packages (yaml, PySide, itertools, etc.)
+3. Gracefully handle missing optional packages (Qt not available in headless)
+4. Add new imports to test_macros_bundled_python.py to verify they're bundled
+5. Test macros with: `/Applications/FreeCAD.app/Contents/Resources/bin/python tests/test_macros_bundled_python.py`
+
+**Example: checking if a new import is bundled**:
+```python
+# Add to test_macros_bundled_python.py
+def test_new_package():
+    try:
+        import new_package  # Check if bundled
+        print("[PASS] new_package available")
+        return True
+    except ImportError:
+        print("[FAIL] new_package NOT bundled in FreeCAD")
+        return False
+```
+
+If test fails, the package is not bundled - do not use it in macros.
+Get feedback from the operator before continuing.
 ---
 
 ## Technology Stack
