@@ -1101,25 +1101,19 @@ if not CONFIG_FILE and config_from_cli:
         PROJECT_ROOT = os.path.dirname(os.path.abspath(CONFIG_FILE))
         logger.debug(f"Derived PROJECT_ROOT from config file: {PROJECT_ROOT}")
 
-# If still no config, try command-line argument (legacy support) or auto-discovery
+# If still no config, auto-discover
 if not CONFIG_FILE:
-    if len(sys.argv) > 1 and not config_from_cli:
-        # Legacy: sys.argv[1] might be config file (when not using argparse)
-        CONFIG_FILE = sys.argv[1]
-        logger.debug(f"CONFIG_FILE from legacy command-line argument: {CONFIG_FILE}")
-    else:
-        # Auto-discover config file
-        unified_config = ".freecad_tools/config.yml"
-        legacy_config = "export_config.yml"
+    unified_config = ".freecad_tools/config.yml"
+    legacy_config = "export_config.yml"
 
-        if os.path.exists(unified_config):
-            CONFIG_FILE = unified_config
-            logger.info(f"Auto-discovered unified config: {CONFIG_FILE}")
-        elif os.path.exists(legacy_config):
-            CONFIG_FILE = legacy_config
-            logger.info(f"Auto-discovered legacy config: {CONFIG_FILE}")
-        else:
-            logger.warning("Config not found. Will try to auto-discover in subprocess.")
+    if os.path.exists(unified_config):
+        CONFIG_FILE = unified_config
+        logger.info(f"Auto-discovered unified config: {CONFIG_FILE}")
+    elif os.path.exists(legacy_config):
+        CONFIG_FILE = legacy_config
+        logger.info(f"Auto-discovered legacy config: {CONFIG_FILE}")
+    else:
+        logger.warning("Config not found. Will try to auto-discover in subprocess.")
 
 # Check for test mode - skip FreeCAD detection and subprocess re-execution
 _test_mode = os.environ.get("FREECAD_TOOLS_TEST_MODE", "").lower() in ("1", "true", "yes")
@@ -1186,8 +1180,8 @@ except ImportError as e:
         # Pass CONFIG_FILE, PROJECT_ROOT, and mode flags to subprocess via environment variables
         env = os.environ.copy()
         if CONFIG_FILE:
-            env["FREECAD_TOOLS_CONFIG"] = CONFIG_FILE
-            logger.debug(f"Passing CONFIG_FILE via environment: {CONFIG_FILE}")
+            env["FREECAD_TOOLS_CONFIG"] = os.path.abspath(CONFIG_FILE)
+            logger.debug(f"Passing CONFIG_FILE via environment: {env['FREECAD_TOOLS_CONFIG']}")
         if PROJECT_ROOT:
             env["FREECAD_TOOLS_PROJECT_ROOT"] = PROJECT_ROOT
             logger.debug(f"Passing PROJECT_ROOT via environment: {PROJECT_ROOT}")
@@ -1720,6 +1714,17 @@ def get_export_metadata(config_item, base_dir):
 
 def load_config():
     global CONFIG_FILE, PROJECT_ROOT
+
+    # Guard: reject non-YAML values that the legacy argv fallback may have set.
+    # When freecadcmd runs fc_export.py it puts the script path in sys.argv[1];
+    # the module-level legacy heuristic can mistakenly pick that up as CONFIG_FILE.
+    # Reset it here so auto-discovery runs instead.
+    if CONFIG_FILE and not CONFIG_FILE.endswith((".yml", ".yaml")):
+        logger.warning(
+            f"CONFIG_FILE '{CONFIG_FILE}' is not a YAML file (freecadcmd argv artifact?); "
+            "ignoring and falling back to auto-discovery"
+        )
+        CONFIG_FILE = None
 
     # If CONFIG_FILE not set by command-line, determine default
     if not CONFIG_FILE:

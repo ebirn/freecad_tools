@@ -137,6 +137,44 @@ class TestConfigFileLoading:
 
         assert exports[0]["name"] == "UnifiedExport"
 
+    def test_load_config_ignores_python_script_as_config_file(self, monkeypatch, tmp_path):
+        """load_config must not treat a .py file as the YAML config.
+
+        When freecadcmd runs fc_export.py, it places the script path in
+        sys.argv[1].  The module-level legacy fallback can mistakenly pick
+        that up as CONFIG_FILE.  load_config() must detect and discard any
+        CONFIG_FILE that is not a .yml/.yaml file and fall back to
+        auto-discovery instead.
+        """
+        # Given: a valid config exists in the project tree
+        config_dir = tmp_path / ".freecad_tools"
+        config_dir.mkdir()
+        (config_dir / "config.yml").write_text(
+            yaml.safe_dump(
+                {
+                    "export": [
+                        {
+                            "name": "RealProject",
+                            "source": "design.FCStd",
+                            "bodies": ["Body"],
+                        }
+                    ]
+                }
+            )
+        )
+        monkeypatch.chdir(tmp_path)
+
+        # Simulate freecadcmd putting the script path in CONFIG_FILE
+        fc_export.CONFIG_FILE = "/Users/ebirn/.cache/pre-commit/repofccpuwes/tools/fc_export.py"
+        fc_export.PROJECT_ROOT = None
+
+        # When
+        exports = fc_export.load_config()
+
+        # Then: the real config was found; the .py file was NOT parsed as YAML
+        assert exports[0]["name"] == "RealProject"
+        assert fc_export.CONFIG_FILE.endswith(".yml")
+
 
 class TestConfigSchemaValidation:
     """Tests for validating export config structure and required fields."""

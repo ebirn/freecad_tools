@@ -14,6 +14,7 @@ if [ -z "$PROJECT_ROOT" ]; then
     exit 1
 fi
 
-# Change to project root and run export (fc_export.py will auto-discover config)
+# Change to project root and run export.
+# $@ forwards any args from the caller (e.g. --config .freecad_tools/export.yml)
 cd "$PROJECT_ROOT"
-python3 "$TOOLS_ROOT/tools/fc_export.py"
+python3 "$TOOLS_ROOT/tools/fc_export.py" "$@"
