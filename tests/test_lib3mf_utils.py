@@ -448,7 +448,12 @@ class TestSTLCreation:
 
 
 class TestAxisAngleTransform:
-    """Tests for axis+angle rotation transform creation."""
+    """Tests for axis+angle rotation transform creation (mock-based).
+
+    NOTE: lib3mf Transform.Fields is column-major 4x3: Fields[col][row].
+    Mock shape must be [[0]*3 for _ in range(4)] to match real lib3mf.
+    Translation lives at Fields[3][0..2], NOT Fields[row][3].
+    """
 
     def test_create_euler_transform_with_axis_angle_dict(self):
         """Should create transform from axis+angle dict format."""
@@ -459,7 +464,7 @@ class TestAxisAngleTransform:
 
         with patch.object(lib3mf_utils, "lib3mf") as mock_lib3mf:
             mock_transform = MagicMock()
-            mock_transform.Fields = [[0] * 4 for _ in range(3)]
+            mock_transform.Fields = [[0] * 3 for _ in range(4)]  # 4 cols x 3 rows
             mock_lib3mf.Transform.return_value = mock_transform
 
             # When
@@ -467,10 +472,6 @@ class TestAxisAngleTransform:
 
             # Then
             assert result is not None
-            # For 90 deg around Z: R = [[cos90, -sin90, 0, 0], [sin90, cos90, 0, 0], [0, 0, 1, 0]]
-            # cos(90) ≈ 0, sin(90) = 1
-            # So R ≈ [[0, -1, 0, 0], [1, 0, 0, 0], [0, 0, 1, 0]]
-            # Verify the rotation matrix was calculated (identity with position 0)
             assert mock_lib3mf.Transform.called
 
     def test_create_euler_transform_with_euler_list(self):
@@ -482,7 +483,7 @@ class TestAxisAngleTransform:
 
         with patch.object(lib3mf_utils, "lib3mf") as mock_lib3mf:
             mock_transform = MagicMock()
-            mock_transform.Fields = [[0] * 4 for _ in range(3)]
+            mock_transform.Fields = [[0] * 3 for _ in range(4)]
             mock_lib3mf.Transform.return_value = mock_transform
 
             # When
@@ -498,7 +499,7 @@ class TestAxisAngleTransform:
 
         with patch.object(lib3mf_utils, "lib3mf") as mock_lib3mf:
             mock_transform = MagicMock()
-            mock_transform.Fields = [[0] * 4 for _ in range(3)]
+            mock_transform.Fields = [[0] * 3 for _ in range(4)]
             mock_lib3mf.Transform.return_value = mock_transform
 
             # When
@@ -506,13 +507,14 @@ class TestAxisAngleTransform:
 
             # Then
             assert result is not None
-            # Identity matrix with position
+            # Identity rotation columns (diagonal)
             assert mock_transform.Fields[0][0] == 1
             assert mock_transform.Fields[1][1] == 1
             assert mock_transform.Fields[2][2] == 1
-            assert mock_transform.Fields[0][3] == 10
-            assert mock_transform.Fields[1][3] == 20
-            assert mock_transform.Fields[2][3] == 30
+            # Translation in Fields[3] (column-major)
+            assert mock_transform.Fields[3][0] == 10
+            assert mock_transform.Fields[3][1] == 20
+            assert mock_transform.Fields[3][2] == 30
 
     def test_axis_angle_zero_axis_uses_default(self):
         """Should use default Z-axis when axis is zero length."""
@@ -523,7 +525,7 @@ class TestAxisAngleTransform:
 
         with patch.object(lib3mf_utils, "lib3mf") as mock_lib3mf:
             mock_transform = MagicMock()
-            mock_transform.Fields = [[0] * 4 for _ in range(3)]
+            mock_transform.Fields = [[0] * 3 for _ in range(4)]
             mock_lib3mf.Transform.return_value = mock_transform
 
             # When - should not crash, use default axis
@@ -542,7 +544,7 @@ class TestAxisAngleTransform:
 
         with patch.object(lib3mf_utils, "lib3mf") as mock_lib3mf:
             mock_transform = MagicMock()
-            mock_transform.Fields = [[0] * 4 for _ in range(3)]
+            mock_transform.Fields = [[0] * 3 for _ in range(4)]
             mock_lib3mf.Transform.return_value = mock_transform
 
             # When
@@ -560,7 +562,7 @@ class TestAxisAngleTransform:
 
         with patch.object(lib3mf_utils, "lib3mf") as mock_lib3mf:
             mock_transform = MagicMock()
-            mock_transform.Fields = [[0] * 4 for _ in range(3)]
+            mock_transform.Fields = [[0] * 3 for _ in range(4)]
             mock_lib3mf.Transform.return_value = mock_transform
 
             # When - should not crash
@@ -763,6 +765,105 @@ class TestQualityMetrics:
 
             assert success is True
             mock_model.AddBuildItem.assert_called_once()
+
+
+class TestTransformFieldsLayout:
+    """Tests verifying lib3mf Transform Fields use correct column-major layout.
+
+    lib3mf Transform.Fields is a 4x3 matrix (column-major):
+      Fields[0][0..2] = X-axis column (rotation col 0)
+      Fields[1][0..2] = Y-axis column (rotation col 1)
+      Fields[2][0..2] = Z-axis column (rotation col 2)
+      Fields[3][0..2] = Translation (x, y, z)
+
+    Fields[i] has exactly 3 elements (j = 0, 1, 2 only).
+    Translation MUST be written to Fields[3], NOT Fields[*][3].
+    """
+
+    def test_identity_with_position_uses_fields3_for_translation(self):
+        """Translation must be written to Fields[3][0..2], not Fields[*][3]."""
+        import lib3mf_utils
+
+        # When: identity rotation with explicit position
+        result = lib3mf_utils.create_euler_transform(None, position=[10.0, 20.0, 30.0])
+
+        # Then: translation in Fields[3]
+        assert result.Fields[3][0] == pytest.approx(10.0), "X translation must be in Fields[3][0]"
+        assert result.Fields[3][1] == pytest.approx(20.0), "Y translation must be in Fields[3][1]"
+        assert result.Fields[3][2] == pytest.approx(30.0), "Z translation must be in Fields[3][2]"
+
+    def test_identity_rotation_produces_correct_basis_columns(self):
+        """Identity rotation must produce unit basis columns in Fields[0..2]."""
+        import lib3mf_utils
+
+        result = lib3mf_utils.create_euler_transform(None, position=[0.0, 0.0, 0.0])
+
+        # Fields[0] = X-axis column = (1, 0, 0)
+        assert result.Fields[0][0] == pytest.approx(1.0)
+        assert result.Fields[0][1] == pytest.approx(0.0)
+        assert result.Fields[0][2] == pytest.approx(0.0)
+        # Fields[1] = Y-axis column = (0, 1, 0)
+        assert result.Fields[1][0] == pytest.approx(0.0)
+        assert result.Fields[1][1] == pytest.approx(1.0)
+        assert result.Fields[1][2] == pytest.approx(0.0)
+        # Fields[2] = Z-axis column = (0, 0, 1)
+        assert result.Fields[2][0] == pytest.approx(0.0)
+        assert result.Fields[2][1] == pytest.approx(0.0)
+        assert result.Fields[2][2] == pytest.approx(1.0)
+
+    def test_euler_rotation_x90_produces_correct_columns(self):
+        """90° rotation around X: Y→Z, Z→-Y. Verify column-major matrix."""
+
+        import lib3mf_utils
+
+        result = lib3mf_utils.create_euler_transform([90.0, 0.0, 0.0], position=[0.0, 0.0, 0.0])
+
+        # Rx(90): col0=(1,0,0), col1=(0,0,1), col2=(0,-1,0)
+        assert result.Fields[0][0] == pytest.approx(1.0, abs=1e-6)
+        assert result.Fields[0][1] == pytest.approx(0.0, abs=1e-6)
+        assert result.Fields[0][2] == pytest.approx(0.0, abs=1e-6)
+
+        assert result.Fields[1][0] == pytest.approx(0.0, abs=1e-6)
+        assert result.Fields[1][1] == pytest.approx(0.0, abs=1e-6)
+        assert result.Fields[1][2] == pytest.approx(1.0, abs=1e-6)
+
+        assert result.Fields[2][0] == pytest.approx(0.0, abs=1e-6)
+        assert result.Fields[2][1] == pytest.approx(-1.0, abs=1e-6)
+        assert result.Fields[2][2] == pytest.approx(0.0, abs=1e-6)
+
+    def test_euler_rotation_with_position_sets_both(self):
+        """Rotation + position must set rotation columns AND Fields[3] translation."""
+        import lib3mf_utils
+
+        result = lib3mf_utils.create_euler_transform([0.0, 0.0, 0.0], position=[5.0, 6.0, 7.0])
+
+        # Identity rotation columns
+        assert result.Fields[0][0] == pytest.approx(1.0, abs=1e-6)
+        assert result.Fields[1][1] == pytest.approx(1.0, abs=1e-6)
+        assert result.Fields[2][2] == pytest.approx(1.0, abs=1e-6)
+        # Translation in Fields[3]
+        assert result.Fields[3][0] == pytest.approx(5.0)
+        assert result.Fields[3][1] == pytest.approx(6.0)
+        assert result.Fields[3][2] == pytest.approx(7.0)
+
+    def test_axis_angle_z90_with_position_sets_translation(self):
+        """Axis+angle rotation with position must write translation to Fields[3]."""
+        import lib3mf_utils
+
+        rotation = {"axis": [0, 0, 1], "angle": 90}
+        result = lib3mf_utils.create_euler_transform(rotation, position=[1.0, 2.0, 3.0])
+
+        # Translation in Fields[3]
+        assert result.Fields[3][0] == pytest.approx(1.0), "X translation must be in Fields[3][0]"
+        assert result.Fields[3][1] == pytest.approx(2.0), "Y translation must be in Fields[3][1]"
+        assert result.Fields[3][2] == pytest.approx(3.0), "Z translation must be in Fields[3][2]"
+
+        # 90° around Z: col0=(0,1,0), col1=(-1,0,0), col2=(0,0,1)
+        assert result.Fields[0][0] == pytest.approx(0.0, abs=1e-6)
+        assert result.Fields[0][1] == pytest.approx(1.0, abs=1e-6)
+        assert result.Fields[1][0] == pytest.approx(-1.0, abs=1e-6)
+        assert result.Fields[1][1] == pytest.approx(0.0, abs=1e-6)
+        assert result.Fields[2][2] == pytest.approx(1.0, abs=1e-6)
 
 
 if __name__ == "__main__":

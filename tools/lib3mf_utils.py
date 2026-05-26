@@ -78,23 +78,29 @@ def _axis_angle_to_matrix(axis, angle_deg, position=None):
 
     transform = lib3mf.Transform()
 
-    # Row 0 (X-axis output)
+    # lib3mf Transform.Fields is column-major: Fields[col][row], with Fields[3] = translation.
+    # Each Fields[i] has exactly 3 elements (row indices 0,1,2).
+    #
+    # Column 0: [R00, R10, R20]
     transform.Fields[0][0] = t * ux * ux + c
-    transform.Fields[0][1] = t * ux * uy - s * uz
-    transform.Fields[0][2] = t * ux * uz + s * uy
-    transform.Fields[0][3] = position[0] if position else 0
+    transform.Fields[0][1] = t * uy * ux + s * uz
+    transform.Fields[0][2] = t * uz * ux - s * uy
 
-    # Row 1 (Y-axis output)
-    transform.Fields[1][0] = t * uy * ux + s * uz
+    # Column 1: [R01, R11, R21]
+    transform.Fields[1][0] = t * ux * uy - s * uz
     transform.Fields[1][1] = t * uy * uy + c
-    transform.Fields[1][2] = t * uy * uz - s * ux
-    transform.Fields[1][3] = position[1] if position else 0
+    transform.Fields[1][2] = t * uz * uy + s * ux
 
-    # Row 2 (Z-axis output)
-    transform.Fields[2][0] = t * uz * ux - s * uy
-    transform.Fields[2][1] = t * uz * uy + s * ux
+    # Column 2: [R02, R12, R22]
+    transform.Fields[2][0] = t * ux * uz + s * uy
+    transform.Fields[2][1] = t * uy * uz - s * ux
     transform.Fields[2][2] = t * uz * uz + c
-    transform.Fields[2][3] = position[2] if position else 0
+
+    # Column 3: translation
+    tx, ty, tz = (position[0], position[1], position[2]) if position else (0, 0, 0)
+    transform.Fields[3][0] = tx
+    transform.Fields[3][1] = ty
+    transform.Fields[3][2] = tz
 
     return transform
 
@@ -131,18 +137,19 @@ def create_euler_transform(
     if rotation_deg is None:
         # No rotation - return identity with position
         transform = lib3mf.Transform()
+        # lib3mf Transform.Fields is column-major: Fields[col][row], Fields[3] = translation.
         transform.Fields[0][0] = 1
         transform.Fields[0][1] = 0
         transform.Fields[0][2] = 0
-        transform.Fields[0][3] = position[0]
         transform.Fields[1][0] = 0
         transform.Fields[1][1] = 1
         transform.Fields[1][2] = 0
-        transform.Fields[1][3] = position[1]
         transform.Fields[2][0] = 0
         transform.Fields[2][1] = 0
         transform.Fields[2][2] = 1
-        transform.Fields[2][3] = position[2]
+        transform.Fields[3][0] = position[0]
+        transform.Fields[3][1] = position[1]
+        transform.Fields[3][2] = position[2]
         return transform
 
     if isinstance(rotation_deg, dict):
@@ -159,15 +166,15 @@ def create_euler_transform(
         transform.Fields[0][0] = 1
         transform.Fields[0][1] = 0
         transform.Fields[0][2] = 0
-        transform.Fields[0][3] = position[0]
         transform.Fields[1][0] = 0
         transform.Fields[1][1] = 1
         transform.Fields[1][2] = 0
-        transform.Fields[1][3] = position[1]
         transform.Fields[2][0] = 0
         transform.Fields[2][1] = 0
         transform.Fields[2][2] = 1
-        transform.Fields[2][3] = position[2]
+        transform.Fields[3][0] = position[0]
+        transform.Fields[3][1] = position[1]
+        transform.Fields[3][2] = position[2]
         return transform
 
     # Convert degrees to radians
@@ -187,23 +194,32 @@ def create_euler_transform(
     # Using intrinsic rotation order: Rz(Ry(Rx))
     transform = lib3mf.Transform()
 
-    # Row 0 (X-axis output)
+    # lib3mf Transform.Fields is column-major: Fields[col][row], Fields[3] = translation.
+    # R = Rz * Ry * Rx:
+    #   Column 0: [cy*cz,          cy*sz,          -sy    ]
+    #   Column 1: [sx*sy*cz-cx*sz, sx*sy*sz+cx*cz, sx*cy  ]
+    #   Column 2: [cx*sy*cz+sx*sz, cx*sy*sz-sx*cz, cx*cy  ]
+    #   Column 3: translation
+
+    # Column 0
     transform.Fields[0][0] = cy * cz
-    transform.Fields[0][1] = sx * sy * cz - cx * sz
-    transform.Fields[0][2] = cx * sy * cz + sx * sz
-    transform.Fields[0][3] = position[0]
+    transform.Fields[0][1] = cy * sz
+    transform.Fields[0][2] = -sy
 
-    # Row 1 (Y-axis output)
-    transform.Fields[1][0] = cy * sz
+    # Column 1
+    transform.Fields[1][0] = sx * sy * cz - cx * sz
     transform.Fields[1][1] = sx * sy * sz + cx * cz
-    transform.Fields[1][2] = cx * sy * sz - sx * cz
-    transform.Fields[1][3] = position[1]
+    transform.Fields[1][2] = sx * cy
 
-    # Row 2 (Z-axis output)
-    transform.Fields[2][0] = -sy
-    transform.Fields[2][1] = sx * cy
+    # Column 2
+    transform.Fields[2][0] = cx * sy * cz + sx * sz
+    transform.Fields[2][1] = cx * sy * sz - sx * cz
     transform.Fields[2][2] = cx * cy
-    transform.Fields[2][3] = position[2]
+
+    # Column 3: translation
+    transform.Fields[3][0] = position[0]
+    transform.Fields[3][1] = position[1]
+    transform.Fields[3][2] = position[2]
 
     return transform
 
