@@ -1209,6 +1209,13 @@ except ImportError as e:
             env["FREECAD_TOOLS_LOG_LEVEL"] = log_level_pass
             logger.debug(f"Passing FREECAD_TOOLS_LOG_LEVEL={log_level_pass} to subprocess")
 
+        # Ensure the FreeCAD pass always has a usable Python for lib3mf.
+        # sys.executable here is the *current* Python (venv/system Python, NOT freecadcmd),
+        # so forward it so the FreeCAD pass never has to fall back to freecadcmd itself.
+        if "FREECAD_TOOLS_LIB3MF_PYTHON" not in env:
+            env["FREECAD_TOOLS_LIB3MF_PYTHON"] = sys.executable
+            logger.debug(f"Passing FREECAD_TOOLS_LIB3MF_PYTHON={sys.executable} to subprocess")
+
         # Run the script with the found interpreter
         # Note: Do NOT pass command-line arguments, as freecadcmd will try to parse them
         # and fail on unrecognized options like --dry-run.
@@ -2108,11 +2115,21 @@ def export_bodies_to_3mf_with_template(
             python_executable = lib3mf_python
             logger.debug(f"Using lib3mf Python from environment: {python_executable}")
         else:
-            # Fallback: try venv or sys.executable
+            # Fallback: try venv Python relative to this script, then sys.executable as last resort.
+            # WARNING: if running inside freecadcmd, sys.executable IS freecadcmd and cannot run
+            # Python scripts with arguments — the 3MF step will silently produce no output.
             venv_python = os.path.join(os.path.dirname(script_dir), ".venv", "bin", "python3")
             venv_python = os.path.abspath(venv_python)
-            python_executable = venv_python if os.path.exists(venv_python) else sys.executable
-            logger.debug(f"Using fallback Python: {python_executable}")
+            if os.path.exists(venv_python):
+                python_executable = venv_python
+                logger.debug(f"Using fallback venv Python: {python_executable}")
+            else:
+                python_executable = sys.executable
+                logger.warning(
+                    f"FREECAD_TOOLS_LIB3MF_PYTHON not set and venv not found; "
+                    f"falling back to sys.executable={python_executable!r}. "
+                    "If running inside freecadcmd this will fail to create the 3MF file."
+                )
 
         logger.debug(f"Calling lib3mf: {python_executable} {lib3mf_script} create-from-json {config_file}")
 
@@ -2157,7 +2174,13 @@ def export_bodies_to_3mf_with_template(
 
 
 def _find_venv_python():
-    """Find the venv Python executable for subprocess calls."""
+    """Find the venv Python executable for subprocess calls.
+
+    Preference order:
+    1. FREECAD_TOOLS_LIB3MF_PYTHON env var (set by Python-pass before launching freecadcmd)
+    2. .venv/bin/python3 relative to this script's parent directory
+    3. sys.executable as last resort (may be freecadcmd when running in FreeCAD pass)
+    """
     lib3mf_python = os.environ.get("FREECAD_TOOLS_LIB3MF_PYTHON")
     if lib3mf_python:
         return lib3mf_python
@@ -2166,6 +2189,11 @@ def _find_venv_python():
     venv_python = os.path.abspath(venv_python)
     if os.path.exists(venv_python):
         return venv_python
+    logger.warning(
+        f"_find_venv_python: FREECAD_TOOLS_LIB3MF_PYTHON not set and venv not found; "
+        f"returning sys.executable={sys.executable!r}. "
+        "If running inside freecadcmd this will fail for lib3mf operations."
+    )
     return sys.executable
 
 
