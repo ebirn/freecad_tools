@@ -128,6 +128,7 @@ jobs:
     needs: validate-export-config
     permissions:
       contents: write
+      actions: read
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
       GH_TOKEN: ${{ github.token }}
