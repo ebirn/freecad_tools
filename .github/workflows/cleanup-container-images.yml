@@ -4,12 +4,6 @@
 # Trigger: daily schedule (cron) or manual dispatch.
 # Keeps versions tagged by active branches, Git tags, and releases; deletes the rest.
 
-# Cleanup Container Images — delete old, unused GHCR image versions.
-#
-# Audience: freecad_tools maintainers only (not for consumer repos).
-# Trigger: daily schedule (cron) or manual dispatch.
-# Keeps versions tagged by active branches, Git tags, and releases; deletes the rest.
-
 name: Cleanup Container Images
 
 on:
@@ -27,6 +21,16 @@ on:
         required: false
         default: "7"
         type: string
+      extra_keep_tags:
+        description: >
+          Additional image tags (or tag prefixes) to keep, one per line.
+          Each entry is matched as an exact tag against every container version.
+          Entries are added on top of the tags derived from active branches,
+          Git tags, and releases.
+          Default keeps main-branch images: tools-main, freecad-main.
+        required: false
+        default: "tools-main\nfreecad-main"
+        type: string
 
 jobs:
   cleanup-ghcr:
@@ -41,6 +45,7 @@ jobs:
       PACKAGE_NAME: freecad_tools
       DEFAULT_DRY_RUN: "false"
       DEFAULT_MAX_AGE_DAYS: "7"
+      DEFAULT_EXTRA_KEEP_TAGS: "tools-main\nfreecad-main"
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -60,6 +65,11 @@ jobs:
             max_age_days="$DEFAULT_MAX_AGE_DAYS"
           fi
 
+          extra_keep_tags="${{ inputs.extra_keep_tags }}"
+          if [[ -z "${extra_keep_tags}" ]]; then
+            extra_keep_tags="$DEFAULT_EXTRA_KEEP_TAGS"
+          fi
+
           cutoff_epoch=$(date -u -d "-${max_age_days} days" +%s)
           now_epoch=$(date -u +%s)
 
@@ -76,31 +86,38 @@ jobs:
           # Always keep canonical latest tags.
           printf '%s\n' "tools-latest" "freecad-latest" "latest" > "$keep_tags_file"
 
+          # Keep caller-supplied extra tags (workflow input or env default).
+          # Input may contain literal '\n' (from YAML multiline default flattened
+          # by Actions) or real newlines — normalise both.
+          printf '%s' "$extra_keep_tags" \
+            | tr '\\n' '\n' \
+            | sed 's/[[:space:]]*$//' \
+            | grep -v '^$' \
+            >> "$keep_tags_file" || true
+
           # Keep branch-derived tags for active branches.
-          gh api --paginate "repos/${OWNER}/${REPO}/branches?per_page=100" \
-            --jq '.[].name' | while IFS= read -r branch; do
-              printf '%s\n' "tools-${branch}" "freecad-${branch}" >> "$keep_tags_file"
-            done
+          # NOTE: use process substitution (< <(...)) not a pipe, so the while
+          # loop runs in the current shell and writes to keep_tags_file survive.
+          while IFS= read -r branch; do
+            printf '%s\n' "tools-${branch}" "freecad-${branch}" >> "$keep_tags_file"
+          done < <(gh api --paginate "repos/${OWNER}/${REPO}/branches?per_page=100" --jq '.[].name')
 
           # Keep tag-derived tags for existing Git tags.
-          gh api --paginate "repos/${OWNER}/${REPO}/tags?per_page=100" \
-            --jq '.[].name' | while IFS= read -r tag; do
-              printf '%s\n' "tools-${tag}" "freecad-${tag}" >> "$keep_tags_file"
-            done
+          while IFS= read -r tag; do
+            printf '%s\n' "tools-${tag}" "freecad-${tag}" >> "$keep_tags_file"
+          done < <(gh api --paginate "repos/${OWNER}/${REPO}/tags?per_page=100" --jq '.[].name')
 
           # Keep release-derived tags (explicit release refs).
-          gh api --paginate "repos/${OWNER}/${REPO}/releases?per_page=100" \
-            --jq '.[].tag_name' | while IFS= read -r rel_tag; do
-              [[ -z "$rel_tag" || "$rel_tag" == "null" ]] && continue
-              printf '%s\n' "tools-${rel_tag}" "freecad-${rel_tag}" >> "$keep_tags_file"
-            done
+          while IFS= read -r rel_tag; do
+            [[ -z "$rel_tag" || "$rel_tag" == "null" ]] && continue
+            printf '%s\n' "tools-${rel_tag}" "freecad-${rel_tag}" >> "$keep_tags_file"
+          done < <(gh api --paginate "repos/${OWNER}/${REPO}/releases?per_page=100" --jq '.[].tag_name')
 
           # Keep tags for open PR head branches (extra safety).
-          gh api --paginate "repos/${OWNER}/${REPO}/pulls?state=open&per_page=100" \
-            --jq '.[].head.ref' | while IFS= read -r pr_branch; do
-              [[ -z "$pr_branch" || "$pr_branch" == "null" ]] && continue
-              printf '%s\n' "tools-${pr_branch}" "freecad-${pr_branch}" >> "$keep_tags_file"
-            done
+          while IFS= read -r pr_branch; do
+            [[ -z "$pr_branch" || "$pr_branch" == "null" ]] && continue
+            printf '%s\n' "tools-${pr_branch}" "freecad-${pr_branch}" >> "$keep_tags_file"
+          done < <(gh api --paginate "repos/${OWNER}/${REPO}/pulls?state=open&per_page=100" --jq '.[].head.ref')
 
           sort -u "$keep_tags_file" -o "$keep_tags_file"
           keep_count=$(wc -l < "$keep_tags_file" | tr -d ' ')
