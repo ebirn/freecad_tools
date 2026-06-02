@@ -54,9 +54,18 @@ try:
 except ImportError:
     YAML_AVAILABLE = False
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="macro_helper - %(levelname)s - %(message)s")
+# Configure logging with file output
+log_file = Path.home() / "Documents" / "FreeCAD" / "freecad_tools" / "test_output" / "text_stamp_macro.log"
+log_file.parent.mkdir(parents=True, exist_ok=True)
+
+file_handler = logging.FileHandler(str(log_file), mode="a")
+file_handler.setLevel(logging.DEBUG)
+file_formatter = logging.Formatter("%(asctime)s  %(name)s - %(levelname)s - %(message)s")
+file_handler.setFormatter(file_formatter)
+
+logging.basicConfig(level=logging.DEBUG, format="macro_helper - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+logger.addHandler(file_handler)
 
 UNIFIED_CONFIG_RELATIVE_PATH = Path(".freecad_tools") / "config.yml"
 LEGACY_MACRO_CONFIG_RELATIVE_PATH = Path(".freecad_tools") / "macro_config.yml"
@@ -130,36 +139,87 @@ if QT_AVAILABLE:
                 label = QtWidgets.QLabel(label_text)
                 layout.addWidget(label)
 
+                # value_widget  → stored in input_widgets for get_values()
+                # display_widget → added to the layout (may be a container)
+                value_widget: Any = None
+                display_widget: Any = None
+
                 if field_type == "text":
                     widget = QtWidgets.QLineEdit()
                     widget.setText(str(default_value))
+                    value_widget = display_widget = widget
                 elif field_type == "number":
                     widget = QtWidgets.QSpinBox()
                     widget.setValue(int(default_value) if default_value else 0)
+                    value_widget = display_widget = widget
                 elif field_type == "float":
                     widget = QtWidgets.QDoubleSpinBox()
                     widget.setValue(float(default_value) if default_value else 0.0)
+                    value_widget = display_widget = widget
                 elif field_type == "list":
                     widget = QtWidgets.QListWidget()
                     for item in field.get("items", []):
                         widget.addItem(str(item))
+                    value_widget = display_widget = widget
+                elif field_type == "combo":
+                    widget = QtWidgets.QComboBox()
+                    options = field.get("options", [])
+                    logger.debug(f"Creating combo field '{field_name}' with {len(options)} options")
+                    for option in options:
+                        widget.addItem(str(option))
+                    # Set default value if it's in the options
+                    if default_value and str(default_value) in [str(o) for o in options]:
+                        widget.setCurrentText(str(default_value))
+                        logger.debug(f"Set combo default to: {default_value}")
+                    value_widget = display_widget = widget
+                elif field_type == "file":
+                    # File chooser: QLineEdit showing the path + Browse button.
+                    # Matches the FreeCAD-native Gui::FileChooser pattern used by
+                    # the Draft ShapeString task panel for font file selection.
+                    container = QtWidgets.QWidget()
+                    h_layout = QtWidgets.QHBoxLayout(container)
+                    h_layout.setContentsMargins(0, 0, 0, 0)
+                    line_edit = QtWidgets.QLineEdit()
+                    line_edit.setText(str(default_value))
+                    file_filter = field.get("filter", "All Files (*)")
+                    browse_btn = QtWidgets.QPushButton("Browse…")
+                    # Prevent Browse from stealing the dialog default (Enter key)
+                    browse_btn.setAutoDefault(False)
+                    browse_btn.setDefault(False)
+
+                    def _make_browse(le: Any = line_edit, filt: str = file_filter) -> Any:
+                        def _browse() -> None:
+                            path, _ = QtWidgets.QFileDialog.getOpenFileName(None, "Select File", le.text(), filt)
+                            if path:
+                                le.setText(path)
+
+                        return _browse
+
+                    browse_btn.clicked.connect(_make_browse())
+                    h_layout.addWidget(line_edit)
+                    h_layout.addWidget(browse_btn)
+                    value_widget = line_edit
+                    display_widget = container
                 elif field_type == "checkbox":
                     widget = QtWidgets.QCheckBox()
                     widget.setChecked(bool(default_value))
+                    value_widget = display_widget = widget
                 else:
                     widget = QtWidgets.QLineEdit()
                     widget.setText(str(default_value))
+                    value_widget = display_widget = widget
 
                 if help_text:
                     help_label = QtWidgets.QLabel(f"  {help_text}")
                     help_label.setStyleSheet("color: gray; font-size: 10px;")
                     layout.addWidget(help_label)
 
-                layout.addWidget(widget)
-                self.input_widgets[field_name] = (widget, field_type)
+                layout.addWidget(display_widget)
+                self.input_widgets[field_name] = (value_widget, field_type)
 
             button_layout = QtWidgets.QHBoxLayout()
             ok_button = QtWidgets.QPushButton("OK")
+            ok_button.setDefault(True)
             cancel_button = QtWidgets.QPushButton("Cancel")
 
             ok_button.clicked.connect(self.accept)
@@ -176,7 +236,7 @@ if QT_AVAILABLE:
             """Get the values entered by the user."""
             values: dict[str, Any] = {}
             for field_name, (widget, field_type) in self.input_widgets.items():
-                if field_type == "text":
+                if field_type in ("text", "file"):
                     values[field_name] = widget.text()
                 elif field_type == "number":
                     values[field_name] = widget.value()
@@ -184,6 +244,8 @@ if QT_AVAILABLE:
                     values[field_name] = widget.value()
                 elif field_type == "list":
                     values[field_name] = [item.text() for item in widget.selectedItems()]
+                elif field_type == "combo":
+                    values[field_name] = widget.currentText()
                 elif field_type == "checkbox":
                     values[field_name] = widget.isChecked()
             return values
