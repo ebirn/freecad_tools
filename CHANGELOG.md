@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [v0.6.0] - 2026-06-02
+
 ### Changed
 
 - Export config auto-discovery now prefers `.freecad_tools/config.yml`, then `.freecad_tools/export.yml`, then

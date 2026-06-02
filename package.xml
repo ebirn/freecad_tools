@@ -16,7 +16,7 @@
     <icon>Resources/Icons/freecad_tools.svg</icon>
     <name>freecad_tools</name>
 
-    <version>0.4.0</version>
+    <version>0.6.0</version>
     <date>2026-05-05</date>
 
     <maintainer

@@ -1,6 +1,6 @@
 [project]
 name = "freecad-tools"
-version = "0.4.0"
+version = "0.6.0"
 description = "Export FreeCAD designs to 3MF format for 3D printing"
 readme = "README.md"
 license = "MIT"
