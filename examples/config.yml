@@ -165,3 +165,13 @@ macros:
     cleanup_before_assign: true
     cleanup_untagged_copy_groups: true
     enable_link_copy_on_change: true
+
+  # Text Stamp macro configuration
+  # Allows engraving customized text on selected faces of 3D parts
+  text_stamp:
+    # Default font family used to resolve the initial font file path.
+    font: "Arial"
+    # Default font size in millimeters
+    size: 10
+    # Default pocket/engrave depth in millimeters
+    depth: 1.0
