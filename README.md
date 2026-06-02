@@ -13,6 +13,7 @@ A comprehensive collection of Python utilities for converting FreeCAD designs to
 - **📋 Bill of Materials**: Auto-generate BOM CSV from assemblies with custom fields
 - **🏷️ Body Marking**: Mark bodies in FreeCAD for automatic export detection
 - **⚙️ Parametric Variants**: Generate multiple design variations using FreeCAD macros
+- **✍️ Text Engraving**: Personalize parts with custom text stamps and font files
 - **📋 Template Support**: Preserve PrusaSlicer printer settings across exports
 - **🔗 Git Integration**: Automatically capture commit hash, branch, and tags in exports
 - **🚀 Automation**: Use with pre-commit hooks for automatic exports on push
@@ -1120,7 +1121,42 @@ If you're processing multiple documents via scripts, you can invoke macros progr
 freecadcmd -c "exec(open('generate_variant_configs.py').read())"
 ```
 
-### 4. Template Metadata Merging
+### 4. Engrave Custom Text on Parts (Text Stamp Macro)
+
+Add personalized text engraving to your 3D parts with customizable font files, sizes, and pocket depth.
+
+**Features**:
+- **Config-Driven**: All parameters stored in `.freecad_tools/config.yml`
+- **Interactive Dialog**: Choose font, size, depth, and text in a user-friendly dialog
+- **Face Selection**: Select which surface to engrave on
+- **Automatic Pocketing**: Creates pocket feature to engrave text
+
+**Quick Start** (from FreeCAD GUI):
+
+1. Open your FreeCAD document
+2. Select a body and the face where you want to engrave
+3. Go to **Macros > Execute > text_stamp.py**
+4. Dialog appears with options:
+   - **Text to Engrave**: Enter the text to engrave
+   - **Font File**: Choose a `.ttf` or `.otf` font file
+   - **Size**: Font size in mm (default: 10mm)
+   - **Depth**: Pocket depth in mm (default: 1mm)
+5. Click **OK** - text is engraved!
+
+**Configuration** (`.freecad_tools/config.yml`):
+
+```yaml
+macros:
+  text_stamp:
+    # Default settings (can be overridden in dialog)
+    font: "Arial"
+    size: 10
+    depth: 1.0
+```
+
+Text is engraved exactly as entered. Variable substitution is planned as a follow-up enhancement.
+
+### 5. Template Metadata Merging
 
 When you specify both a template and metadata in your config, they are merged:
 
