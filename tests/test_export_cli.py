@@ -34,6 +34,28 @@ class TestExportParseArgs:
         assert args.slicer_dry_run is True
 
 
+class TestExportConfigDiscovery:
+    def test_discover_config_file_prefers_unified_before_legacy(self, tmp_path):
+        config_dir = tmp_path / ".freecad_tools"
+        config_dir.mkdir()
+        unified = config_dir / "config.yml"
+        legacy_nested = config_dir / "export.yml"
+        legacy_root = tmp_path / "export_config.yml"
+        unified.write_text("export: []\n", encoding="utf-8")
+        legacy_nested.write_text("export: []\n", encoding="utf-8")
+        legacy_root.write_text("export: []\n", encoding="utf-8")
+
+        assert export_cli.discover_config_file(tmp_path) == unified.resolve()
+
+    def test_discover_config_file_supports_nested_legacy_export_yml(self, tmp_path):
+        config_dir = tmp_path / ".freecad_tools"
+        config_dir.mkdir()
+        legacy_nested = config_dir / "export.yml"
+        legacy_nested.write_text("export: []\n", encoding="utf-8")
+
+        assert export_cli.discover_config_file(tmp_path) == legacy_nested.resolve()
+
+
 class TestExportMainPassthrough:
     def test_main_passes_new_flags_to_fc_export(self):
         with (

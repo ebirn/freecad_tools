@@ -7,6 +7,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- Export config auto-discovery now prefers `.freecad_tools/config.yml`, then `.freecad_tools/export.yml`, then
+  `export_config.yml` for CLI and hook/manual runs.
+- Named exports now require exactly one matching `export[].name`, producing clear errors for missing or duplicate names.
 - `variant_array_assignment.py` now cleans stale generated array elements and hidden auto-delete `CopyOnChangeGroup`
   objects before assigning variant configurations.
 - `variant_array_assignment.py` now tags newly-created managed `CopyOnChangeGroup` objects and defaults
