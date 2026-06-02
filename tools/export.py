@@ -21,6 +21,24 @@ import sys
 from pathlib import Path
 
 
+def get_config_candidates():
+    """Return config auto-discovery candidates in priority order."""
+    return [
+        Path(".freecad_tools") / "config.yml",
+        Path(".freecad_tools") / "export.yml",
+        Path("export_config.yml"),
+    ]
+
+
+def discover_config_file(project_root: Path):
+    """Return the first existing config file below project_root, or None."""
+    for candidate in get_config_candidates():
+        config_path = project_root / candidate
+        if config_path.exists():
+            return config_path.resolve()
+    return None
+
+
 def parse_args():
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
@@ -137,10 +155,8 @@ def main():
         # Keep project root anchored to current working directory.
         # Config location should not redefine project root.
 
-    elif os.path.exists(".freecad_tools/config.yml"):
-        CONFIG_FILE = Path(".freecad_tools/config.yml").resolve()  # noqa: N806
-    elif os.path.exists("export_config.yml"):
-        CONFIG_FILE = Path("export_config.yml").resolve()  # noqa: N806
+    else:
+        CONFIG_FILE = discover_config_file(PROJECT_ROOT)  # noqa: N806
 
     logger.debug(f"PROJECT_ROOT: {PROJECT_ROOT}")
     logger.debug(f"CONFIG_FILE: {CONFIG_FILE}")

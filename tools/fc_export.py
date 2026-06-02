@@ -226,6 +226,35 @@ def filter_exports_by_name(exports, selected_name):
     return [item for item in exports if item.get("name") == selected_name]
 
 
+def select_export_by_name(exports, selected_name):
+    """Return a single-item list containing the export matching the requested name."""
+    matches = filter_exports_by_name(exports, selected_name)
+    if not matches:
+        raise ValueError(f"No export item found with name '{selected_name}'")
+    if len(matches) > 1:
+        raise ValueError(f"Multiple export items found with name '{selected_name}'; export names must be unique")
+    return matches
+
+
+def get_config_candidates():
+    """Return config auto-discovery candidates in priority order."""
+    return [
+        ".freecad_tools/config.yml",
+        ".freecad_tools/export.yml",
+        "export_config.yml",
+    ]
+
+
+def discover_config_file(base_dir=None):
+    """Return the first existing auto-discovered config file, or None."""
+    root = base_dir or os.getcwd()
+    for candidate in get_config_candidates():
+        candidate_path = os.path.join(root, candidate)
+        if os.path.exists(candidate_path):
+            return candidate_path
+    return None
+
+
 def should_run_3mf_export(gui_only=False, screenshots_only=False):
     """Return True when the core 3MF export pipeline should run."""
     return not (gui_only or screenshots_only)
@@ -1103,15 +1132,10 @@ if not CONFIG_FILE and config_from_cli:
 
 # If still no config, auto-discover
 if not CONFIG_FILE:
-    unified_config = ".freecad_tools/config.yml"
-    legacy_config = "export_config.yml"
-
-    if os.path.exists(unified_config):
-        CONFIG_FILE = unified_config
-        logger.info(f"Auto-discovered unified config: {CONFIG_FILE}")
-    elif os.path.exists(legacy_config):
-        CONFIG_FILE = legacy_config
-        logger.info(f"Auto-discovered legacy config: {CONFIG_FILE}")
+    discovered_config = discover_config_file()
+    if discovered_config:
+        CONFIG_FILE = discovered_config
+        logger.info(f"Auto-discovered config: {CONFIG_FILE}")
     else:
         logger.warning("Config not found. Will try to auto-discover in subprocess.")
 
@@ -1735,17 +1759,12 @@ def load_config():
 
     # If CONFIG_FILE not set by command-line, determine default
     if not CONFIG_FILE:
-        # Try .freecad_tools/config.yml first (unified config)
-        unified_config = ".freecad_tools/config.yml"
-        if os.path.exists(unified_config):
-            CONFIG_FILE = unified_config
-            logger.info(f"Using unified config: {CONFIG_FILE}")
-        # Fall back to export_config.yml in current directory
-        elif os.path.exists("export_config.yml"):
-            CONFIG_FILE = "export_config.yml"
-            logger.info(f"Using legacy config: {CONFIG_FILE}")
+        discovered_config = discover_config_file()
+        if discovered_config:
+            CONFIG_FILE = discovered_config
+            logger.info(f"Using config: {CONFIG_FILE}")
         else:
-            logger.error("Config file not found. Tried '.freecad_tools/config.yml' and 'export_config.yml'")
+            logger.error(f"Config file not found. Tried: {', '.join(get_config_candidates())}")
             sys.exit(1)
 
     logger.debug(f"Loading config from: {CONFIG_FILE}")
@@ -2933,13 +2952,15 @@ def main():
 
             # Filter exports by name if --name flag was provided (for consistency)
             if name_filter:
-                exports = filter_exports_by_name(exports, name_filter)
+                try:
+                    exports = select_export_by_name(exports, name_filter)
+                except ValueError as exc:
+                    logger.warning(str(exc))
+                    logger.info(f"Available export names: {get_export_names(exports)}")
+                    sys.exit(1)
 
             if not exports:
-                if name_filter:
-                    logger.warning(f"No export item found with name '{name_filter}'")
-                else:
-                    logger.warning("No exports defined in config - exports list is empty or None")
+                logger.warning("No exports defined in config - exports list is empty or None")
                 sys.exit(0)
 
             logger.info(f"Found {len(exports)} export(s) in config:")
@@ -2979,12 +3000,12 @@ def main():
 
     # Filter exports by name if --name flag was provided
     if name_filter:
-        filtered_exports = filter_exports_by_name(exports, name_filter)
-        if not filtered_exports:
-            logger.warning(f"No export item found with name '{name_filter}'")
+        try:
+            exports = select_export_by_name(exports, name_filter)
+        except ValueError as exc:
+            logger.warning(str(exc))
             logger.info(f"Available export names: {get_export_names(exports)}")
             sys.exit(1)
-        exports = filtered_exports
         logger.info(f"Filtered to 1 export item: {name_filter}")
 
     if not exports:

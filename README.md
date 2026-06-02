@@ -81,6 +81,9 @@ python3 tools/export.py path/to/config.yml -v
 # List available export item names
 python3 tools/export.py path/to/config.yml --list-exports
 
+# Export only one item by export[].name
+python3 tools/export.py --config .freecad_tools/config.yml --name Moxon_OE1EBG_round
+
 # Run only GUI tasks (screenshots + TechDraw), skip 3MF rebuild
 python3 tools/export.py path/to/config.yml --gui-only
 
@@ -319,7 +322,8 @@ Suggested wiki pages for operator-facing publishing docs:
 
 **Config File Discovery** (when not specified):
 1. `.freecad_tools/config.yml` (per-project unified config)
-2. `export_config.yml` (legacy config in current directory)
+2. `.freecad_tools/export.yml` (legacy per-project export config)
+3. `export_config.yml` (legacy config in current directory)
 
 ### Output Root Override
 
@@ -1013,6 +1017,27 @@ pre-commit install --hook-stage pre-push
 git add .
 git commit -m "Update antenna design"
 git push  # → Auto-exports to prints/
+```
+
+Manual export hooks use the same config discovery order as the CLI, so projects using the unified
+`.freecad_tools/config.yml` do not need a legacy `.freecad_tools/export.yml` symlink:
+
+```bash
+pre-commit run freecad-export-manual --hook-stage manual
+```
+
+For consumer repos with `just`, Make, or shell wrappers, call the installed CLI directly when you need to pass
+an export item name:
+
+```just
+export name:
+    freecad-export --config .freecad_tools/config.yml --name {{name}}
+```
+
+If your `pre-commit` version forwards extra hook args reliably, this form is also supported:
+
+```bash
+pre-commit run freecad-export-manual --hook-stage manual -- --config .freecad_tools/config.yml --name Moxon_OE1EBG_round
 ```
 
 ### 2. Multiple Copies with Different Orientations

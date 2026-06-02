@@ -296,6 +296,80 @@ class TestExportSelectionHelpers:
         filtered = fc_export.filter_exports_by_name(exports, "alpha")
         assert filtered == [{"name": "alpha"}, {"name": "alpha"}]
 
+    def test_select_export_by_name_returns_single_exact_match(self):
+        exports = [{"name": "alpha"}, {"name": "beta"}]
+
+        selected = fc_export.select_export_by_name(exports, "beta")
+
+        assert selected == [{"name": "beta"}]
+
+    def test_select_export_by_name_rejects_missing_name(self):
+        exports = [{"name": "alpha"}, {"name": "beta"}]
+
+        with pytest.raises(ValueError, match="No export item found"):
+            fc_export.select_export_by_name(exports, "gamma")
+
+    def test_select_export_by_name_rejects_duplicate_names(self):
+        exports = [{"name": "alpha"}, {"name": "beta"}, {"name": "alpha"}]
+
+        with pytest.raises(ValueError, match="Multiple export items"):
+            fc_export.select_export_by_name(exports, "alpha")
+
+    def test_get_config_candidates_prefers_unified_before_legacy(self):
+        assert fc_export.get_config_candidates() == [
+            ".freecad_tools/config.yml",
+            ".freecad_tools/export.yml",
+            "export_config.yml",
+        ]
+
+    def test_discover_config_file_prefers_unified_before_legacy(self, tmp_path):
+        config_dir = tmp_path / ".freecad_tools"
+        config_dir.mkdir()
+        unified = config_dir / "config.yml"
+        legacy_nested = config_dir / "export.yml"
+        legacy_root = tmp_path / "export_config.yml"
+        unified.write_text("export: []\n", encoding="utf-8")
+        legacy_nested.write_text("export: []\n", encoding="utf-8")
+        legacy_root.write_text("export: []\n", encoding="utf-8")
+
+        with patch.object(fc_export.os, "getcwd", return_value=str(tmp_path)):
+            discovered = fc_export.discover_config_file()
+
+        assert discovered == str(unified)
+
+    def test_discover_config_file_supports_nested_legacy_export_yml(self, tmp_path):
+        config_dir = tmp_path / ".freecad_tools"
+        config_dir.mkdir()
+        legacy_nested = config_dir / "export.yml"
+        legacy_nested.write_text("export: []\n", encoding="utf-8")
+
+        with patch.object(fc_export.os, "getcwd", return_value=str(tmp_path)):
+            discovered = fc_export.discover_config_file()
+
+        assert discovered == str(legacy_nested)
+
+    def test_main_dry_run_name_error_lists_available_exports(self):
+        exports = [{"name": "alpha"}, {"name": "beta"}]
+
+        with (
+            patch.object(fc_export, "dry_run_mode", True),
+            patch.object(fc_export, "name_filter", "missing"),
+            patch("fc_export.load_config", return_value=exports),
+            patch("fc_export.logger.warning") as mock_warning,
+            patch("fc_export.logger.info") as mock_info,
+            patch("fc_export.sys.exit", side_effect=SystemExit) as mock_exit,
+        ):
+            with pytest.raises(SystemExit):
+                fc_export.main()
+
+        assert any(
+            "No export item found with name 'missing'" in str(call.args[0]) for call in mock_warning.call_args_list
+        )
+        assert any(
+            "Available export names: ['alpha', 'beta']" in str(call.args[0]) for call in mock_info.call_args_list
+        )
+        mock_exit.assert_called_once_with(1)
+
 
 class TestModeHelpers:
     """Tests for pipeline mode helper behavior."""
