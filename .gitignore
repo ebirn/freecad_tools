@@ -13,3 +13,4 @@ build/
 .pytest_cache
 .ruff_cache
 Addon-Schema/
+.claude/settings.local.json
