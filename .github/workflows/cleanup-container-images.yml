@@ -129,13 +129,57 @@ jobs:
           total_versions=$(jq 'length' "$versions_file")
           echo "Total container versions found: $total_versions"
 
+          # Multi-arch images (docker buildx) push an OCI image index as the
+          # tagged manifest, plus per-platform and attestation manifests that
+          # are only referenced BY DIGEST from that index - they carry no tag
+          # of their own and show up here as separate, untagged versions.
+          # Naively deleting all untagged versions breaks the tagged image
+          # even though the tag itself is never touched: the index still
+          # resolves, but the digest it points to for the current platform is
+          # gone, so `docker pull` fails with "manifest unknown". Expand every
+          # tag-kept version's manifest and protect its referenced digests too.
+          registry_token=$(curl -s -u "${OWNER}:${GH_TOKEN}" \
+            "https://ghcr.io/token?scope=repository:${OWNER}/${PACKAGE_NAME}:pull" | jq -r '.token')
+
+          keep_digests_file=$(mktemp)
+
+          while IFS= read -r row; do
+            digest=$(jq -r '.name' <<< "$row")
+            tags_json=$(jq -c '.metadata.container.tags // []' <<< "$row")
+
+            keep_due_to_tag=false
+            while IFS= read -r tag; do
+              [[ -z "$tag" ]] && continue
+              if grep -Fxq "$tag" "$keep_tags_file"; then
+                keep_due_to_tag=true
+                break
+              fi
+            done < <(jq -r '.[]' <<< "$tags_json")
+
+            [[ "$keep_due_to_tag" != "true" ]] && continue
+
+            echo "$digest" >> "$keep_digests_file"
+
+            accept_header="application/vnd.oci.image.index.v1+json"
+            accept_header+=", application/vnd.docker.distribution.manifest.list.v2+json"
+            curl -s -H "Authorization: Bearer ${registry_token}" \
+              -H "Accept: ${accept_header}" \
+              "https://ghcr.io/v2/${OWNER}/${PACKAGE_NAME}/manifests/${digest}" \
+              | jq -r '.manifests[]?.digest // empty' >> "$keep_digests_file"
+          done < <(jq -c '.[]' "$versions_file")
+
+          sort -u "$keep_digests_file" -o "$keep_digests_file"
+          echo "Protected digests (tagged + referenced children): $(wc -l < "$keep_digests_file" | tr -d ' ')"
+
           deleted=0
           skipped_recent=0
           skipped_keep_tag=0
+          skipped_referenced=0
           deleted_ids=()
 
           while IFS= read -r row; do
             version_id=$(jq -r '.id' <<< "$row")
+            digest=$(jq -r '.name' <<< "$row")
             updated_at=$(jq -r '.updated_at' <<< "$row")
             tags_json=$(jq -c '.metadata.container.tags // []' <<< "$row")
 
@@ -161,6 +205,11 @@ jobs:
               continue
             fi
 
+            if grep -Fxq "$digest" "$keep_digests_file"; then
+              skipped_referenced=$((skipped_referenced + 1))
+              continue
+            fi
+
             tags_csv=$(jq -r 'join(",")' <<< "$tags_json")
             if [[ "$dry_run" == "true" ]]; then
               echo "[dry-run] delete version_id=${version_id} age_days=${age_days} tags=${tags_csv}"
@@ -175,6 +224,7 @@ jobs:
           echo "Summary:"
           echo "- recent (kept): $skipped_recent"
           echo "- active-tag (kept): $skipped_keep_tag"
+          echo "- referenced-by-kept-manifest (kept): $skipped_referenced"
           echo "- delete candidates: $deleted"
 
           if [[ "$dry_run" != "true" && ${#deleted_ids[@]} -gt 0 ]]; then
