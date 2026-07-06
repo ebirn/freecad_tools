@@ -1177,9 +1177,19 @@ macros:
     font: "Arial"
     size: 10
     depth: 1.0
+    substitutions:
+      project_name: "MyAntenna"
+      version: "2.1"
 ```
 
-Text is engraved exactly as entered. Variable substitution is planned as a follow-up enhancement.
+**Variable Substitution**: text entered in the dialog supports `{variable}` placeholders, applied before
+engraving. Built-in variables are always available: `{date}` (current date, `YYYY-MM-DD`), `{timestamp}`
+(current ISO timestamp), `{git_branch}`, and `{git_commit}` (short hash), plus any custom keys defined
+under `macros.text_stamp.substitutions` in the config above. The dialog's "Text to Engrave" field shows a
+help hint listing the available variables, and a live preview updates as you type. For example, with the
+config shown above, entering `{project_name} v{version}` engraves `MyAntenna v2.1`, and `Made {date}`
+engraves something like `Made 2026-07-06`. Unknown/undefined `{variable}` tokens are left in the text as
+literal placeholders (e.g. `{typo}` stays `{typo}`) rather than raising an error.
 
 ### 5. Template Metadata Merging
 
