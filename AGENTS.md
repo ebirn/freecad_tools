@@ -330,11 +330,13 @@ Get feedback from the operator before continuing.
 ### Basic Export (Single Command)
 ```bash
 cd Moxon_OE1EBG/
-python3 ../freecad_tools/export/export.py
+python3 ../freecad_tools/tools/export.py
+# or, if installed via pip/uv: freecad-export
 ```
 
 **Steps**:
-1. Reads `export_config.yml` in current directory
+1. Discovers a config file in the current project, in priority order: `.freecad_tools/config.yml` →
+   `.freecad_tools/export.yml` (legacy) → `export_config.yml` (legacy)
 2. Launches FreeCAD headless via `fc_export.py`
 3. Exports bodies to temporary STL files
 4. Calls `lib3mf_utils.py` to create 3MF with embedded meshes
@@ -358,16 +360,20 @@ export:
 ## Known Limitations & Future Enhancements
 
 ### Current Limitations
-1. **Template Metadata**: Placeholder code exists but not fully integrated
-   - Extracts printer settings from template 3MF
-   - Should merge into generated 3MF
-   - Status: Framework in place, implementation pending
+1. **Template Metadata**: Fully implemented, not a limitation. Template 3MF metadata is extracted and
+   merged into the generated 3MF with configurable precedence (`export`/`template`/`merge`); see
+   `tools/lib3mf_utils.py` (`read_metadata_from_3mf`, `merge_metadata`) and README.md's
+   "Template Metadata Merging" section for the merge precedence rules.
 
-2. **Platform Detection**: Hardcoded FreeCAD path for macOS
-   - `/Applications/FreeCAD.app/Contents/Resources/bin/freecadcmd`
-   - Needs fallback for Linux/Windows
+2. **Platform Detection**: Not a limitation. FreeCAD binary discovery already searches multiple
+   platform-specific install locations plus `PATH` (`shutil.which`), not a single hardcoded macOS path;
+   see `tools/fc_export.py` (`_find_freecad_gui_binary` and the interpreter search list around
+   `/opt/freecad/...`, `/usr/bin/freecadcmd`, `/usr/local/bin/freecadcmd`).
 
-3. **Error Recovery**: Limited graceful handling of malformed FCStd files
+3. **Error Recovery**: Malformed/corrupt `.FCStd` files are only caught by a single broad
+   `except Exception` around the whole per-item export body (not a targeted, specific error path), and
+   there is no regression test for this case — see
+   [#54](https://github.com/ebirn/freecad_tools/issues/54).
 
 ### Potential Enhancements
 1. **Multi-Document Support**: Export from multiple FCStd files in one config

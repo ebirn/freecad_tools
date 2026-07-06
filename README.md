@@ -1292,40 +1292,6 @@ freecad-export path/to/config.yml
    python3 tools/export.py --help
    ```
 
-This installs the `freecad-export` command globally:
-
-```bash
-freecad-export --help
-freecad-export path/to/config.yml
-```
-
-### Option 2: Clone and install from source
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/ebirn/freecad_tools.git
-   cd freecad_tools
-   ```
-
-2. **Create virtual environment and install dependencies**:
-   ```bash
-   uv sync
-   ```
-
-   Or without uv:
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   pip install -e .
-   ```
-
-3. **Verify installation**:
-   ```bash
-   freecad-export --help
-   # Or run directly:
-   python3 tools/export.py --help
-   ```
-
 ### System Requirements
 
 - **Python**: 3.10 or higher
@@ -1636,34 +1602,6 @@ The metrics are logged at INFO level after successful exports:
 ```
 Quality Metrics: 15420 vertices, 30840 triangles, 123456 bytes STL input, 98765 bytes 3MF output
 ```
-
----
-
-## Release Validation
-
-Before tagging a release, run the release readiness checker to verify your project is in a consistent state:
-
-```bash
-# Quick summary (JSON)
-python3 tools/release_validator.py --summary
-
-# Individual checks
-python3 tools/release_validator.py --check version
-python3 tools/release_validator.py --check changelog
-python3 tools/release_validator.py --check tests
-python3 tools/release_validator.py --check all
-
-# Generate checksums for release files
-python3 tools/release_validator.py --checksums README.md CHANGELOG.md pyproject.toml
-```
-
-The `--summary` flag validates:
-- **Version** — `pyproject.toml` has a version set
-- **Changelog** — `CHANGELOG.md` has an entry matching the version
-- **Unreleased section** — `CHANGELOG.md` has an `[Unreleased]` section for future changes
-- **Tests** — all unit tests pass
-
-The release workflows use these same checks as gates — a tagged release will fail if any check doesn't pass.
 
 ---
 
