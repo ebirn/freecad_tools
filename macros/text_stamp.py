@@ -640,8 +640,7 @@ if QT_AVAILABLE:
                     "label": "Text to Engrave",
                     "type": "text",
                     "default": "",
-                    # No substitution hints: text is plain, user can edit the
-                    # ShapeString object's String property afterwards if needed.
+                    "help": get_substitutions_help(self.config),
                 },
                 {
                     # Font file chooser — matches FreeCAD's native ShapeString
@@ -670,6 +669,27 @@ if QT_AVAILABLE:
                 },
             ]
             super().__init__(parent=parent, title="Text Stamp Configuration", fields=fields)
+
+            # Live preview: show the text with substitutions applied, updated
+            # as the user types. Kept fully local to this dialog subclass so
+            # the shared MacroConfigDialog (used by other macros) is untouched.
+            self._preview_label = _QtWidgets.QLabel(self._render_preview(""))
+            self._preview_label.setStyleSheet("color: gray; font-style: italic;")
+            self._preview_label.setWordWrap(True)
+            self.layout().addWidget(self._preview_label)
+
+            text_widget = self.input_widgets["text"][0]
+            text_widget.textChanged.connect(self._update_preview)
+            self._update_preview(text_widget.text())
+
+        def _render_preview(self, text: str) -> str:
+            """Return the preview label text for the given raw input text."""
+            substituted = apply_substitutions(text, self.config.get("substitutions", {}))
+            return f"Preview: {substituted}"
+
+        def _update_preview(self, text: str) -> None:
+            """Slot connected to the text field's textChanged signal."""
+            self._preview_label.setText(self._render_preview(text))
 
 
 def main() -> None:
@@ -720,8 +740,9 @@ def main() -> None:
 
         dialog_values = dialog.get_values()
 
-    # Text is used as-is (no substitutions applied at macro run time)
-    text = dialog_values.get("text", "")
+    # Apply variable substitutions (built-in + custom from config) to the
+    # text entered in the dialog before it is used for engraving.
+    text = apply_substitutions(dialog_values.get("text", ""), config.get("substitutions", {}))
     logger.debug(f"Text to engrave: {text!r}")
 
     # Create and engrave text

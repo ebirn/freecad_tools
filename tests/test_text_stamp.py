@@ -187,6 +187,20 @@ class TestVariableSubstitution:
         # (implementation choice - both are acceptable)
         assert "Test" in result
 
+    def test_apply_substitutions_leaves_unknown_token_literal(self, monkeypatch):
+        """Unknown/undefined tokens are left in the text as literal placeholders.
+
+        This is the concrete, exact-match version of the "gracefully" test
+        above: an unrecognized {variable} must not raise and must not be
+        silently dropped -- it stays visible as `{unknown_var}` so the user
+        can see it wasn't substituted.
+        """
+        module = import_text_stamp(monkeypatch)
+
+        result = module.apply_substitutions("Hello {unknown_var}!", {})
+
+        assert result == "Hello {unknown_var}!"
+
     def test_apply_substitutions_handles_nested_braces(self, monkeypatch):
         """Handle edge case of nested or malformed braces."""
         module = import_text_stamp(monkeypatch)
@@ -204,6 +218,39 @@ class TestVariableSubstitution:
 
         assert "Antenna" in result
         assert "20" in result  # Year part of date
+
+
+class TestSubstitutionsHelp:
+    """Tests for the substitutions help text shown in the dialog."""
+
+    def test_get_substitutions_help_lists_builtins(self, monkeypatch):
+        """Help text always lists the built-in variables."""
+        module = import_text_stamp(monkeypatch)
+
+        help_text = module.get_substitutions_help({})
+
+        assert "{date}" in help_text
+        assert "{timestamp}" in help_text
+        assert "{git_branch}" in help_text
+        assert "{git_commit}" in help_text
+
+    def test_get_substitutions_help_lists_custom_vars(self, monkeypatch):
+        """Help text also lists custom substitutions from config."""
+        module = import_text_stamp(monkeypatch)
+        config = {"substitutions": {"project_name": "MyAntenna", "version": "2.1"}}
+
+        help_text = module.get_substitutions_help(config)
+
+        assert "{project_name}" in help_text
+        assert "{version}" in help_text
+
+    def test_get_substitutions_help_no_custom_vars(self, monkeypatch):
+        """Without custom substitutions, only built-ins are listed."""
+        module = import_text_stamp(monkeypatch)
+
+        help_text = module.get_substitutions_help({"substitutions": {}})
+
+        assert "Custom:" not in help_text
 
 
 class TestTextShapeCreation:
@@ -357,6 +404,47 @@ macros:
                         with patch("text_stamp.pocket_text"):
                             # Should not raise
                             module.main()
+
+    def test_main_applies_substitutions_to_dialog_text(self, monkeypatch):
+        """main() must run the dialog-entered text through apply_substitutions()
+        before engraving, using the custom substitutions from config.
+
+        This forces QT_AVAILABLE True (even though PySide isn't installed in
+        this venv) and mocks TextStampDialog directly, so we can exercise the
+        main() wiring path regardless of Qt availability.
+        """
+        doc = FakeDocument()
+        module = import_text_stamp(monkeypatch, doc=doc)
+
+        monkeypatch.setattr(module, "QT_AVAILABLE", True)
+
+        config = {"font": "Arial", "size": 10, "depth": 1.0, "substitutions": {"project": "TestProj"}}
+        monkeypatch.setattr(module, "load_text_stamp_config", lambda doc=None: config)
+
+        with patch("text_stamp.TextStampDialog") as mock_dialog_class:
+            mock_dialog = MagicMock()
+            mock_dialog.exec.return_value = 1  # QDialog.Accepted
+            mock_dialog.get_values.return_value = {
+                "text": "{project} rev {missing}",
+                "font_file": "/fake/Arial.ttf",
+                "size": 10,
+                "depth": 1.0,
+            }
+            mock_dialog_class.return_value = mock_dialog
+
+            with patch("text_stamp.get_selected_faces", return_value=[(MagicMock(), doc.ActiveBody)]):
+                captured = {}
+
+                def _capture_create_text_shape(text, **kwargs):
+                    captured["text"] = text
+                    return MagicMock()
+
+                with patch("text_stamp.create_text_shape", side_effect=_capture_create_text_shape):
+                    with patch("text_stamp.project_text_to_face", return_value=MagicMock()):
+                        with patch("text_stamp.pocket_text"):
+                            module.main()
+
+        assert captured["text"] == "TestProj rev {missing}"
 
     def test_macro_handles_missing_face_selection(self, monkeypatch):
         """When no face is selected, macro prompts or gracefully exits."""

@@ -175,3 +175,9 @@ macros:
     size: 10
     # Default pocket/engrave depth in millimeters
     depth: 1.0
+    # Custom {variable} substitutions available in the "Text to Engrave" field,
+    # alongside the built-ins {date}, {timestamp}, {git_branch}, {git_commit}.
+    # e.g. "{project_name} v{version}" engraves "MyAntenna v2.1".
+    substitutions:
+      project_name: "MyAntenna"
+      version: "2.1"
