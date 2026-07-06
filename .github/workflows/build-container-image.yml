@@ -45,8 +45,41 @@ jobs:
             target: freecad
 
     steps:
+      # For workflow_run events, github.ref/github.sha/context.sha always reflect the
+      # default branch (the ref the workflow FILE runs on), not the branch/tag whose CI
+      # run actually completed. Resolve the real commit and ref name explicitly so the
+      # checkout and image tags below reflect what was actually built, not always "main".
+      - name: Resolve build ref
+        id: ref
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          WORKFLOW_RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            sha="$WORKFLOW_RUN_HEAD_SHA"
+            name="$WORKFLOW_RUN_HEAD_BRANCH"
+          else
+            sha="${{ github.sha }}"
+            name="${{ github.ref_name }}"
+          fi
+          sanitized_name=$(echo "$name" | tr '/' '-')
+          short_sha=${sha:0:7}
+          is_default="false"
+          if [[ -n "$DEFAULT_BRANCH" && "$name" == "$DEFAULT_BRANCH" ]]; then
+            is_default="true"
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          echo "name=$sanitized_name" >> "$GITHUB_OUTPUT"
+          echo "is_default=$is_default" >> "$GITHUB_OUTPUT"
+
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ steps.ref.outputs.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
@@ -64,10 +97,9 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=sha,prefix=${{ matrix.variant }}-
-            type=ref,event=branch,prefix=${{ matrix.variant }}-
-            type=ref,event=tag,prefix=${{ matrix.variant }}-
-            type=raw,value=${{ matrix.latest_tag }},enable={{is_default_branch}}
+            type=raw,value=${{ matrix.variant }}-${{ steps.ref.outputs.short_sha }}
+            type=raw,value=${{ matrix.variant }}-${{ steps.ref.outputs.name }}
+            type=raw,value=${{ matrix.latest_tag }},enable=${{ steps.ref.outputs.is_default }}
 
       - name: Build and push image
         uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
