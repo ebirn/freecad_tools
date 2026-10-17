@@ -5,6 +5,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `reusable-publish-release.yml` no longer fails when `bundle_paths` lists a directory: the checksum step hashed
+  the listed paths with `sha256sum` directly, which rejects directories. It now checksums every file inside them.
+
 ## [v0.6.0] - 2026-06-02
 
 ### Changed

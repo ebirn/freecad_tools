@@ -197,9 +197,9 @@ jobs:
 
 Notes:
 
-- `bundle_paths` are required repository files; workflow fails if any path is missing.
+- `bundle_paths` are required repository files or directories; workflow fails if any path is missing.
 - `generated_paths` are optional generated directories/files included when present.
-- Checksums are generated from `bundle_paths` and published in release notes.
+- Checksums are generated from `bundle_paths` (every file inside a listed directory, sorted) and published in release notes.
 - For stable pipelines, pin reusable workflow usage to a tag or commit SHA instead of `@main`.
 
 ### Publishing Runbooks (Operator Guide)
