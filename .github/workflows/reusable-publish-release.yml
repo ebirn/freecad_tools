@@ -101,7 +101,9 @@ jobs:
           fi
 
           mkdir -p dist
-          sha256sum $bundle_paths > dist/checksums.sha256
+          # sha256sum can't hash directories: list the files inside them
+          # (sorted, so the checksum file is stable between runs)
+          find $bundle_paths -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > dist/checksums.sha256
 
       - name: Upload release summary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
